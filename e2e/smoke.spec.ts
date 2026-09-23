@@ -132,7 +132,8 @@ test('02 · SAP connection tests and syncs', async ({ page }) => {
   await page.goto('/settings?tab=sap');
   await expect(page.locator('#baseUrl')).toHaveValue(/^https:\/\//);
   await page.getByRole('button', { name: 'Test connection' }).click();
-  await expect(page.getByText('Connected', { exact: true })).toBeVisible({ timeout: 70_000 });
+  await expect(page.getByText('All SAP services answered')).toBeVisible({ timeout: 90_000 });
+  for (const s of ['Materials', 'Suppliers (all groups)', 'Purchase orders (all types)']) await expect(page.getByText(s, { exact: false }).first()).toBeVisible();
 
   await page.getByRole('tab', { name: 'Materials sync' }).click();
   await page.getByRole('button', { name: 'Sync now' }).click();

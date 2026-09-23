@@ -39,7 +39,7 @@ export async function loadAvailableTypes(db: Kysely<Database>): Promise<Availabl
 
 /** Reads every material's type from SAP (one small column) and stores the counts. */
 export async function refreshAvailableTypes(db: Kysely<Database>, conn: SapConnection): Promise<AvailableTypes> {
-  const rows = await fetchAllRows(conn, { select: 'Material_Type', orderBy: 'MATERAIL' });
+  const rows = await fetchAllRows(conn, { path: conn.materialsPath, version: 'v2' }, { select: 'Material_Type', orderBy: 'MATERAIL' });
   const counts = new Map<string, number>();
   for (const r of rows) {
     const code = String(r.Material_Type ?? '').trim();

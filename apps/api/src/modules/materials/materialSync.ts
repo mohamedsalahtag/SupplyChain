@@ -6,50 +6,9 @@
 import { sql, type Kysely } from 'kysely';
 import type { Database } from '../../db/schema.js';
 import { fetchAllRows } from '../../sap/odata.js';
+import { finishRun } from '../sync/syncRun.js';
 import type { SapConnection } from '../../settings/sapConnection.js';
 import { buildSapFilter, mapSapMaterial, SAP_ORDER_BY, type MaterialRow } from './sapMaterial.js';
-
-export const SOURCE = 'sap.materials';
-const STALE_AFTER_MINUTES = 30;
-
-export class SyncAlreadyRunningError extends Error {
-  constructor(
-    readonly startedBy: string,
-    readonly startedAt: Date,
-  ) {
-    super(`A sync is already running (started by ${startedBy})`);
-  }
-}
-
-/** Creates the Running row. Throws SyncAlreadyRunningError if one is in progress. */
-export async function startRun(db: Kysely<Database>, user: string): Promise<number> {
-  // A run with no finish after 30 minutes means the server stopped mid-sync.
-  await db
-    .updateTable('integ.SyncRun')
-    .set({ Status: 'Failed', FinishedAt: sql<Date>`SYSUTCDATETIME()`, Message: 'Abandoned: no result recorded within 30 minutes (server stopped?)' })
-    .where('Source', '=', SOURCE)
-    .where('Status', '=', 'Running')
-    .where('StartedAt', '<', sql<Date>`DATEADD(minute, ${-STALE_AFTER_MINUTES}, SYSUTCDATETIME())`)
-    .execute();
-
-  try {
-    const row = await db
-      .insertInto('integ.SyncRun')
-      .values({ Source: SOURCE, Status: 'Running', StartedBy: user, FinishedAt: null, RowsRead: null, RowsInserted: null, RowsUpdated: null, RowsMarkedMissing: null, Message: null })
-      .output('inserted.SyncRunId')
-      .executeTakeFirstOrThrow();
-    return Number(row.SyncRunId); // msnodesqlv8 returns IDENTITY values as strings
-  } catch (err) {
-    if (!String(err).includes('UX_SyncRun_OneRunning')) throw err;
-    const running = await db
-      .selectFrom('integ.SyncRun')
-      .select(['StartedBy', 'StartedAt'])
-      .where('Source', '=', SOURCE)
-      .where('Status', '=', 'Running')
-      .executeTakeFirst();
-    throw new SyncAlreadyRunningError(running?.StartedBy ?? 'another user', running?.StartedAt ?? new Date());
-  }
-}
 
 type Counts = { inserted: number; updated: number; missing: number };
 
@@ -105,7 +64,7 @@ export async function runMaterialSync(
 ): Promise<void> {
   let rowsRead: number | null = null;
   try {
-    const sapRows = await fetchAllRows(conn, { filter: buildSapFilter(materialTypes), orderBy: SAP_ORDER_BY });
+    const sapRows = await fetchAllRows(conn, { path: conn.materialsPath, version: 'v2' }, { filter: buildSapFilter(materialTypes), orderBy: SAP_ORDER_BY });
     rowsRead = sapRows.length;
     // One row per material code (last wins), so MERGE never sees a duplicate.
     const byCode = new Map<string, MaterialRow>();
@@ -121,31 +80,8 @@ export async function runMaterialSync(
       otherSkipped > 0 ? `${otherSkipped} skipped as duplicate or outside the include rule` : '',
     ].filter(Boolean);
     const note = notes.length ? `SAP rows: ${notes.join('; ')}.` : null;
-    await finishRun(db, runId, 'Succeeded', rowsRead, counts, note);
+    await finishRun(db, runId, 'Succeeded', { read: rowsRead, ...counts }, note);
   } catch (err) {
-    await finishRun(db, runId, 'Failed', rowsRead, null, err instanceof Error ? err.message : String(err));
+    await finishRun(db, runId, 'Failed', { read: rowsRead }, err instanceof Error ? err.message : String(err));
   }
-}
-
-async function finishRun(
-  db: Kysely<Database>,
-  runId: number,
-  status: 'Succeeded' | 'Failed',
-  rowsRead: number | null,
-  counts: Counts | null,
-  message: string | null,
-): Promise<void> {
-  await db
-    .updateTable('integ.SyncRun')
-    .set({
-      Status: status,
-      FinishedAt: sql<Date>`SYSUTCDATETIME()`,
-      RowsRead: rowsRead,
-      RowsInserted: counts?.inserted ?? null,
-      RowsUpdated: counts?.updated ?? null,
-      RowsMarkedMissing: counts?.missing ?? null,
-      Message: message,
-    })
-    .where('SyncRunId', '=', runId)
-    .execute();
 }

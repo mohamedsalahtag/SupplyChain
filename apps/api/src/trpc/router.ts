@@ -1,7 +1,10 @@
 import { sql } from 'kysely';
 import { authRouter } from '../auth/router.js';
 import { materialsRouter } from '../modules/materials/router.js';
+import { purchaseOrdersRouter } from '../modules/purchaseOrders/router.js';
 import { securityRouter } from '../modules/security/router.js';
+import { suppliersRouter } from '../modules/suppliers/router.js';
+import { syncRouter } from '../modules/sync/router.js';
 import { usersRouter } from '../modules/users/router.js';
 import { adRouter } from '../settings/adRouter.js';
 import { settingsRouter } from '../settings/router.js';
@@ -11,6 +14,9 @@ import { publicProcedure, router } from './trpc.js';
 export const appRouter = router({
   auth: authRouter,
   materials: materialsRouter,
+  suppliers: suppliersRouter,
+  purchaseOrders: purchaseOrdersRouter,
+  sync: syncRouter,
   users: usersRouter,
   security: securityRouter,
   settings: settingsRouter,

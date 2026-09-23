@@ -7,9 +7,18 @@ import { readSetting, writeSetting } from './store.js';
 
 const KEY = 'sap.connection';
 
+/** Service roots on the same SAP gateway (same base URL and login). */
+export const DEFAULT_SUPPLIERS_PATH = '/sap/opu/odata/sap/API_BUSINESS_PARTNER';
+export const DEFAULT_PURCHASE_ORDERS_PATH = '/sap/opu/odata4/sap/api_purchaseorder_2/srvd_a2x/sap/purchaseorder/0001';
+
 export const sapConnectionSchema = z.object({
   baseUrl: z.string().url(),
+  /** Full path to the materials entity set (OData v2). */
   materialsPath: z.string().min(1),
+  /** Service root of API_BUSINESS_PARTNER (OData v2). */
+  suppliersPath: z.string().min(1).default(DEFAULT_SUPPLIERS_PATH),
+  /** Service root of API_PURCHASEORDER_2 (OData v4) — the data root, not its $metadata. */
+  purchaseOrdersPath: z.string().min(1).default(DEFAULT_PURCHASE_ORDERS_PATH),
   sapClient: z.string().default(''),
   user: z.string().min(1),
   password: z.string().min(1),

@@ -23,7 +23,7 @@ A from-scratch rebuild. The previous application failed: unstable workflows, bus
 
 ## Stack
 
-- `apps/api` — Fastify + tRPC + zod + Kysely (MSSQL via tedious) + pino. Port 4300.
+- `apps/api` — Fastify + tRPC + zod + Kysely (MSSQL via ODBC / msnodesqlv8) + pino. Port 4300.
 - `apps/web` — Vite + React + **Ant Design 5** + TanStack Query (tRPC client) + React Router. Port 5300 (proxies `/trpc` to the API).
 - `packages/shared` — types and constants shared by both sides.
 - `db/migrations` — numbered `.sql` files, applied in order by `npm run db:migrate`; `GO` separates batches.
@@ -32,6 +32,8 @@ A from-scratch rebuild. The previous application failed: unstable workflows, bus
 
 - The API connects through ODBC (`msnodesqlv8`) with the Windows login of whoever runs it; see `apps/api/src/db/odbcDialect.ts`.
 - **msnodesqlv8 returns IDENTITY columns as strings.** Wrap them in `Number()` where they are read.
+- **SAP (OData):** `apps/api/src/sap/odata.ts` serves both v2 (materials, business partners: `d.results`) and v4 (purchase orders: `value`). SAP returns at most **5,000 rows per page**, so always page. Every value put into a `$filter` is validated first (codes `^Z[A-Z0-9]{1,9}$`, dates `YYYY-MM-DD`).
+- **Every SAP sync** uses `modules/sync/`: `launchSync` (background start, one run per source), `finishRun` (result row), `sync.status` (UI), `codeList` ("load the list from SAP, then choose"). Writes are keyed upserts (`MERGE` from `OPENJSON`), so pressing Sync again never duplicates. In the UI, use `SyncCard` and `CodeChoiceCard`.
 - Store timestamps with `SYSUTCDATETIME()` on the database side, never `new Date()` from Node. Send them to the UI as ISO strings.
 
 ## UI conventions
@@ -41,7 +43,7 @@ A from-scratch rebuild. The previous application failed: unstable workflows, bus
 - **Every table is an `AppTable`** (`apps/web/src/components/AppTable.tsx`) with `useTablePrefs('<table-key>')`. That gives 25 / 50 / 100 rows per page (default 25) and a Columns chooser. Both are saved **per user in `app.UserPreference`**, so they survive restarts and change only when the user changes them. Every column needs a stable `key`, a text `title` and a numeric `width`.
 - **No table ever scrolls sideways.** `AppTable` turns column widths into shares of the page width (`tableLayout="fixed"`), and long text ends in "…" with the full text on hover. Don't pass `scroll` or `fixed` columns. Columns that should start hidden go in `useTablePrefs('<table>', defaultHidden)`. "Default columns" in the chooser brings them back. API list inputs accept only `TABLE_PAGE_SIZES` from `@supplychain/shared`.
 - **Every filter dropdown is a `MultiFilter`** (`apps/web/src/components/MultiFilter.tsx`): multi-select, searchable, clearable. API filter inputs are arrays, matched with `in`.
-- Configuration is one page with tabs (`?tab=general|appearance|sap|sync`). A new settings area gets its own tab.
+- Configuration is one page with tabs (`?tab=general|appearance|sap|sync|suppliers|po|ad`), each shown only with its permission. A new settings area gets its own tab.
 - Page titles are `Typography.Title level={5}`. Tables are `size="small"` and `bordered`. Record details open in a read-only `Drawer`.
 
 ## Security

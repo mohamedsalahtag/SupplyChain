@@ -1,6 +1,6 @@
 import { P } from '@supplychain/shared';
 import { z } from 'zod';
-import { countRows } from '../sap/odata.js';
+import { countRows, entityPath } from '../sap/odata.js';
 import { buildSapFilter } from '../modules/materials/sapMaterial.js';
 import { includeSchema, loadAvailableTypes, loadInclude, refreshAvailableTypes, saveInclude } from './materialsInclude.js';
 import { procedure, publicProcedure, router } from '../trpc/trpc.js';
@@ -59,14 +59,27 @@ export const settingsRouter = router({
   testSap: edit.mutation(async ({ ctx }) => {
     const conn = await loadSapConnection(ctx.db, ctx.encKey);
     if (!conn) return { ok: false as const, message: 'No connection saved yet. Fill in the form and click Save first.' };
-    const started = Date.now();
-    try {
-      const { materialTypes } = await loadInclude(ctx.db);
-      const count = await countRows(conn, buildSapFilter(materialTypes));
-      return { ok: true as const, ms: Date.now() - started, count, materialTypes };
-    } catch (err) {
-      return { ok: false as const, message: err instanceof Error ? err.message : String(err) };
-    }
+    // Each service is tested on its own, so one broken path doesn't hide the others.
+    const timed = async (name: string, run: () => Promise<number>) => {
+      const t0 = Date.now();
+      try {
+        const count = await run();
+        return { name, ok: true as const, ms: Date.now() - t0, count };
+      } catch (err) {
+        return { name, ok: false as const, message: err instanceof Error ? err.message : String(err) };
+      }
+    };
+    const { materialTypes } = await loadInclude(ctx.db);
+    const services = await Promise.all([
+      timed(`Materials (types ${materialTypes.join(', ')})`, () =>
+        countRows(conn, { path: conn.materialsPath, version: 'v2' }, buildSapFilter(materialTypes)),
+      ),
+      timed('Suppliers (all groups)', () => countRows(conn, { path: entityPath(conn.suppliersPath, 'A_Supplier'), version: 'v2' })),
+      timed('Purchase orders (all types)', () =>
+        countRows(conn, { path: entityPath(conn.purchaseOrdersPath, 'PurchaseOrder'), version: 'v4' }),
+      ),
+    ]);
+    return { ok: services.every((s) => s.ok), services };
   }),
 
   /** Chosen material types and the list SAP offers (from the last check). */

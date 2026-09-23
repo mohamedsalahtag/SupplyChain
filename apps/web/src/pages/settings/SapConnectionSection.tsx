@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Alert, App, Button, Card, Form, Input, Space, Switch, Typography } from 'antd';
+import { Alert, App, Button, Card, Form, Input, List, Space, Switch, Typography } from 'antd';
+import { CheckCircleTwoTone, CloseCircleTwoTone } from '@ant-design/icons';
 import { ApiOutlined, SaveOutlined } from '@ant-design/icons';
 import { trpc } from '../../lib/trpc';
 import { formatNumber } from '../../lib/format';
@@ -7,13 +8,15 @@ import { formatNumber } from '../../lib/format';
 type FormValues = {
   baseUrl: string;
   materialsPath: string;
+  suppliersPath: string;
+  purchaseOrdersPath: string;
   sapClient: string;
   user: string;
   password: string;
   allowSelfSigned: boolean;
 };
 
-type Notice = { type: 'success' | 'error' | 'warning'; message: string; description?: string } | null;
+type Notice = { type: 'success' | 'error' | 'warning'; message: string; description?: React.ReactNode } | null;
 
 /** Configuration → SAP connection: save and test. Spec 02. */
 export function SapConnectionSection() {
@@ -43,11 +46,24 @@ export function SapConnectionSection() {
   const onTest = async () => {
     setTestNotice(null);
     const r = await test.mutateAsync().catch((err: Error) => ({ ok: false as const, message: err.message }));
-    setTestNotice(
-      r.ok
-        ? { type: 'success', message: 'Connected', description: `SAP answered in ${(r.ms / 1000).toFixed(1)} s · ${formatNumber(r.count)} SAP materials of type ${r.materialTypes.join(', ')} in the chosen categories (codes starting with a number are skipped by the sync).` }
-        : { type: 'error', message: 'Connection failed', description: r.message },
-    );
+    if (!('services' in r)) {
+      setTestNotice({ type: 'error', message: 'Connection failed', description: r.message });
+      return;
+    }
+    setTestNotice({
+      type: r.ok ? 'success' : 'warning',
+      message: r.ok ? 'All SAP services answered' : 'Some SAP services did not answer',
+      description: (
+        <List size="small" dataSource={r.services} renderItem={(x) => (
+          <List.Item style={{ paddingInline: 0 }}>
+            <Space align="start">
+              {x.ok ? <CheckCircleTwoTone twoToneColor="#1f6f43" /> : <CloseCircleTwoTone twoToneColor="#c0392b" />}
+              <span><b>{x.name}</b> — {x.ok ? `${formatNumber(x.count)} records, answered in ${(x.ms / 1000).toFixed(1)} s` : x.message}</span>
+            </Space>
+          </List.Item>
+        )} />
+      ),
+    });
   };
 
   /** True when the form differs from what is saved (a typed password always counts). */
@@ -57,7 +73,7 @@ export function SapConnectionSection() {
     const v = form.getFieldsValue();
     return (
       !!v.password ||
-      (['baseUrl', 'materialsPath', 'sapClient', 'user', 'allowSelfSigned'] as const).some((k) => (v[k] ?? '') !== (saved[k] ?? ''))
+      (['baseUrl', 'materialsPath', 'suppliersPath', 'purchaseOrdersPath', 'sapClient', 'user', 'allowSelfSigned'] as const).some((k) => (v[k] ?? '') !== (saved[k] ?? ''))
     );
   };
 
@@ -70,6 +86,13 @@ export function SapConnectionSection() {
           </Form.Item>
           <Form.Item label="Materials service path" name="materialsPath" rules={[{ required: true }]}>
             <Input id="materialsPath" />
+          </Form.Item>
+          <Form.Item label="Suppliers service path" name="suppliersPath" rules={[{ required: true }]} extra="API_BUSINESS_PARTNER (OData v2)">
+            <Input id="suppliersPath" />
+          </Form.Item>
+          <Form.Item label="Purchase orders service path" name="purchaseOrdersPath" rules={[{ required: true }]}
+            extra="API_PURCHASEORDER_2 (OData v4) — the data root …/srvd_a2x/sap/purchaseorder/0001, not its $metadata address">
+            <Input id="purchaseOrdersPath" />
           </Form.Item>
           <Form.Item label="SAP client" name="sapClient">
             <Input id="sapClient" style={{ width: 90 }} />

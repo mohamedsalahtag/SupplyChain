@@ -1,9 +1,9 @@
-import { DEFAULT_TABLE_PAGE_SIZE, MATERIAL_SORT_FIELDS, P, SIGNED_IN, TABLE_PAGE_SIZES } from '@supplychain/shared';
+import { DEFAULT_TABLE_PAGE_SIZE, MATERIAL_SORT_FIELDS, P, TABLE_PAGE_SIZES } from '@supplychain/shared';
 import { z } from 'zod';
 import { loadInclude } from '../../settings/materialsInclude.js';
-import { loadSapConnection } from '../../settings/sapConnection.js';
 import { procedure, router } from '../../trpc/trpc.js';
-import { runMaterialSync, startRun, SyncAlreadyRunningError, SOURCE } from './materialSync.js';
+import { launchSync } from '../sync/launch.js';
+import { runMaterialSync } from './materialSync.js';
 import { filterOptions, listMaterials } from './materialsRepo.js';
 
 const view = procedure.meta({ permission: P.materialsOpen });
@@ -37,37 +37,11 @@ export const materialsRouter = router({
 
   filterOptions: view.query(({ ctx }) => filterOptions(ctx.db)),
 
-  /** The running sync (if any) and the last finished one. */
-  syncStatus: procedure.meta({ permission: SIGNED_IN }).query(async ({ ctx }) => {
-    const runs = await ctx.db
-      .selectFrom('integ.SyncRun')
-      .selectAll()
-      .where('Source', '=', SOURCE)
-      .orderBy('SyncRunId', 'desc')
-      .top(2)
-      .execute();
-    const shape = (r: (typeof runs)[number] | undefined) =>
-      r ? { ...r, SyncRunId: Number(r.SyncRunId), StartedAt: iso(r.StartedAt)!, FinishedAt: iso(r.FinishedAt) } : null;
-    const running = runs.find((r) => r.Status === 'Running');
-    const last = runs.find((r) => r.Status !== 'Running');
-    return { running: shape(running), last: shape(last) };
-  }),
-
-  /** Starts a sync in the background; the UI follows it through syncStatus. */
-  startSync: sync.mutation(async ({ ctx }) => {
-    const conn = await loadSapConnection(ctx.db, ctx.encKey);
-    if (!conn) return { started: false as const, reason: 'No SAP connection saved yet.' };
-    try {
-      const runId = await startRun(ctx.db, ctx.user.displayName);
-      ctx.log.info({ runId, user: ctx.user.displayName }, 'Materials sync started');
+  /** Starts a sync in the background; the UI follows it through sync.status. */
+  startSync: sync.mutation(({ ctx }) =>
+    launchSync(ctx, 'sap.materials', async (conn) => {
       const { materialTypes } = await loadInclude(ctx.db);
-      void runMaterialSync(ctx.db, conn, materialTypes, runId).then(() => ctx.log.info({ runId }, 'Materials sync finished'));
-      return { started: true as const, runId };
-    } catch (err) {
-      if (err instanceof SyncAlreadyRunningError) {
-        return { started: false as const, reason: `A sync is already running — started by ${err.startedBy} at ${iso(err.startedAt)}.` };
-      }
-      throw err;
-    }
-  }),
+      return (runId) => runMaterialSync(ctx.db, conn, materialTypes, runId);
+    }),
+  ),
 });

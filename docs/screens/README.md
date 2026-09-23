@@ -23,3 +23,5 @@ Each spec contains:
 | 05 | Sign-in with Active Directory; Configuration → Active Directory | Built · waiting for acceptance |
 | 06 | Users (register from AD, roles, active) | Built · waiting for acceptance |
 | 07 | Security (roles and permissions) | Built · waiting for acceptance |
+| 08 | Suppliers: Z-group choice, sync, Master data → Suppliers | Built · waiting for acceptance |
+| 09 | Purchase orders: Z-type + start-date choice, incremental sync, Purchasing → Purchase orders | Built · waiting for acceptance |

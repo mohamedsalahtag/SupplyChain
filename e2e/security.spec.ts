@@ -73,6 +73,6 @@ test('12 · Security: Administrator locked on; a new role keeps its permissions'
 test('13 · Configuration has the Active Directory tab with the saved defaults', async ({ page }) => {
   await page.goto('/settings?tab=ad');
   await expect(page.locator('#adUrl')).toHaveValue('ldaps://192.168.2.19:636');
-  await expect(page.locator('#adBaseDn')).toHaveValue('OU=Users,DC=sharbatly,DC=com');
+  await expect(page.locator('#adBaseDn')).toHaveValue('DC=sharbatlyfruit,DC=com');
   await page.screenshot({ path: 'test-results/13-active-directory.png', fullPage: true });
 });

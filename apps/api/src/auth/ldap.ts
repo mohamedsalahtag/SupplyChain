@@ -33,8 +33,9 @@ const ATTRIBUTES = ['sAMAccountName', 'userPrincipalName', 'displayName', 'mail'
 export function normalizeUsername(input: string, upnSuffix: string): string {
   let name = input.trim().toLowerCase();
   if (name.includes('\\')) name = name.slice(name.lastIndexOf('\\') + 1);
-  if (!name.includes('@')) name = `${name}@${upnSuffix.toLowerCase()}`;
-  return name;
+  // One company domain: whatever domain was typed (even mistyped) is replaced by the configured one.
+  if (name.includes('@')) name = name.slice(0, name.indexOf('@'));
+  return `${name.trim()}@${upnSuffix.toLowerCase()}`;
 }
 
 /** RFC 4515: escape a value placed inside an LDAP filter. */
@@ -67,6 +68,18 @@ function toUser(e: Entry): DirectoryUser {
   };
 }
 
+/** A referral (LDAP code 10, "RefErr") means the Base DN is not in this server's directory. */
+export function explainSearchError(err: unknown, baseDn: string): Error {
+  const text = String((err as Error)?.message ?? err);
+  if (/referral|RefErr|0x0*a\b/i.test(text)) {
+    return new Error(`The Base DN "${baseDn}" is not in this directory. Use the domain's own, e.g. DC=sharbatlyfruit,DC=com.`);
+  }
+  if (/0000208D|NO_OBJECT|No Such Object/i.test(text)) {
+    return new Error(`The Base DN "${baseDn}" does not exist in Active Directory.`);
+  }
+  return err instanceof Error ? err : new Error(text);
+}
+
 async function bind(c: Client, dn: string, password: string): Promise<void> {
   // An empty password is an "unauthenticated bind" that AD accepts without checking — never allow it.
   if (!password) throw new WrongCredentialsError('Wrong username or password');
@@ -85,18 +98,23 @@ async function bind(c: Client, dn: string, password: string): Promise<void> {
 /** Checks a username and password by binding as that user, then reads their own entry. */
 export async function signInToDirectory(s: AdSettings, username: string, password: string): Promise<DirectoryUser> {
   const upn = normalizeUsername(username, s.upnSuffix);
+  const fallback: DirectoryUser = { username: upn.split('@')[0], upn, displayName: '', email: '', department: '', title: '' };
   const c = client(s);
   try {
-    await bind(c, upn, password);
-    const { searchEntries } = await c.search(s.baseDn, {
-      scope: 'sub',
-      filter: `(&(objectCategory=person)(objectClass=user)(userPrincipalName=${escapeFilter(upn)}))`,
-      attributes: ATTRIBUTES,
-      sizeLimit: 1,
-    });
-    if (searchEntries[0]) return toUser(searchEntries[0]);
-    // Signed in but not under the Base DN (or a different UPN): keep what we know.
-    return { username: upn.split('@')[0], upn, displayName: '', email: '', department: '', title: '' };
+    await bind(c, upn, password); // the password check — everything after only reads details
+    try {
+      const { searchEntries } = await c.search(s.baseDn, {
+        scope: 'sub',
+        filter: `(&(objectCategory=person)(objectClass=user)(userPrincipalName=${escapeFilter(upn)}))`,
+        attributes: ATTRIBUTES,
+        sizeLimit: 1,
+      });
+      // Not found under the Base DN (or a different UPN): keep what we know.
+      return searchEntries[0] ? toUser(searchEntries[0]) : fallback;
+    } catch {
+      // The password was accepted; a wrong Base DN must not block sign-in (details fill in once it is fixed).
+      return fallback;
+    }
   } finally {
     await c.unbind().catch(() => undefined);
   }
@@ -124,7 +142,7 @@ export async function searchDirectory(
     }).catch((err: Error) => {
       // AD returns "size limit exceeded" with the first results when there are more — keep those.
       if (/size ?limit/i.test(err.message) && 'searchEntries' in err) return err as unknown as { searchEntries: Entry[] };
-      throw err;
+      throw explainSearchError(err, s.baseDn);
     });
     return searchEntries.map(toUser).filter((u) => u.username);
   } finally {
@@ -147,7 +165,7 @@ export async function findDirectoryUser(
       filter: `(&(objectCategory=person)(objectClass=user)(sAMAccountName=${escapeFilter(username.trim())}))`,
       attributes: ATTRIBUTES,
       sizeLimit: 1,
-    });
+    }).catch((err) => { throw explainSearchError(err, s.baseDn); });
     return searchEntries[0] ? toUser(searchEntries[0]) : null;
   } finally {
     await c.unbind().catch(() => undefined);
@@ -165,7 +183,7 @@ export async function testDirectory(s: AdSettings, searchUpn: string, searchPass
       filter: '(&(objectCategory=person)(objectClass=user))',
       attributes: ['sAMAccountName'],
       paged: { pageSize: 500 },
-    });
+    }).catch((err) => { throw explainSearchError(err, s.baseDn); });
     return { ms: Date.now() - started, people: searchEntries.length };
   } finally {
     await c.unbind().catch(() => undefined);

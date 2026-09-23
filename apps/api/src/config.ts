@@ -23,7 +23,7 @@ const schema = z.object({
   BOOTSTRAP_ADMIN: z.string().default(''),
   /** Active Directory defaults, used until Configuration → Active Directory is saved. */
   AD_URL: z.string().default('ldaps://192.168.2.19:636'),
-  AD_BASE_DN: z.string().default('OU=Users,DC=sharbatly,DC=com'),
+  AD_BASE_DN: z.string().default('DC=sharbatlyfruit,DC=com'),
   AD_UPN_SUFFIX: z.string().default('sharbatlyfruit.com'),
   /** Local test runs only: allows signing in as a registered user without a password, from localhost. Never on a server. */
   ALLOW_TEST_LOGIN: bool,

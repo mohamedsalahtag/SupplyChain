@@ -32,7 +32,7 @@ export function MaterialsPage() {
     { placeholderData: (prev) => prev, enabled: prefs.ready },
   );
   const options = trpc.materials.filterOptions.useQuery();
-  const status = trpc.materials.syncStatus.useQuery();
+  const status = trpc.sync.status.useQuery({ source: 'sap.materials' });
 
   // Sub-majors narrow to the chosen majors (all of them when none is chosen).
   const subMajorOptions = useMemo(() => {

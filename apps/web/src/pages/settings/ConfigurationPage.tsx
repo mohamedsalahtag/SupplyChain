@@ -7,7 +7,9 @@ import { AppearanceSection } from './AppearanceSection';
 import { GeneralSection } from './GeneralSection';
 import { MaterialsSyncSection } from './MaterialsSyncSection';
 import { MaterialTypesSection } from './MaterialTypesSection';
+import { PurchaseOrdersSyncTab } from './PurchaseOrdersSyncTab';
 import { SapConnectionSection } from './SapConnectionSection';
+import { SuppliersSyncTab } from './SuppliersSyncTab';
 
 /** Settings → Configuration: one tab per area, shown only with its permission. The open tab is in the URL (?tab=). */
 export function ConfigurationPage() {
@@ -28,6 +30,8 @@ export function ConfigurationPage() {
         </Space>
       ),
     },
+    (can(P.configSuppliersEdit) || can(P.configSuppliersRun)) && { key: 'suppliers', label: 'Suppliers sync', children: <SuppliersSyncTab /> },
+    (can(P.configPoEdit) || can(P.configPoRun)) && { key: 'po', label: 'Purchase orders sync', children: <PurchaseOrdersSyncTab /> },
     can(P.configAdEdit) && { key: 'ad', label: 'Active Directory', children: <ActiveDirectorySection /> },
   ].filter((t): t is { key: string; label: string; children: JSX.Element } => !!t);
 

@@ -68,6 +68,39 @@ export interface Database {
     InSap: boolean;
     SapChangedAt: Date;
   };
+  'md.Supplier': {
+    SupplierCode: string;
+    Name: string;
+    SupplierGroup: string;
+    Country: string;
+    Currency: string;
+    Street: string;
+    HouseNumber: string;
+    City: string;
+    PostalCode: string;
+    Region: string;
+    Email: string;
+    InSap: boolean;
+    SapChangedAt: Date;
+  };
+  'md.PurchaseOrder': {
+    PurchaseOrder: string;
+    OrderType: string;
+    SupplierCode: string;
+    OrderDate: Date;
+    Currency: string;
+    SapLastChangedAt: Date | null;
+    SapChangedAt: Date;
+  };
+  'md.PurchaseOrderLine': {
+    PurchaseOrder: string;
+    ItemNo: number;
+    Material: string;
+    Quantity: number;
+    Unit: string;
+    NetPrice: number;
+    PriceQuantity: number;
+  };
   'integ.SyncRun': {
     SyncRunId: Generated<number>;
     Source: string;

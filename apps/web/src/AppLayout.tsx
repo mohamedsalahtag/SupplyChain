@@ -1,12 +1,14 @@
 import type { ReactNode } from 'react';
 import { Dropdown, Layout, Menu, Result, Spin, Typography } from 'antd';
-import { DatabaseOutlined, DownOutlined, HomeOutlined, LogoutOutlined, SafetyOutlined, UserOutlined } from '@ant-design/icons';
+import { DatabaseOutlined, DownOutlined, HomeOutlined, LogoutOutlined, SafetyOutlined, ShoppingCartOutlined, UserOutlined } from '@ant-design/icons';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { P } from '@supplychain/shared';
 import { trpc } from './lib/trpc';
 import { useCan, useMe } from './lib/auth';
 import { HomePage } from './pages/HomePage';
 import { MaterialsPage } from './pages/materials/MaterialsPage';
+import { PurchaseOrdersPage } from './pages/purchaseOrders/PurchaseOrdersPage';
+import { SuppliersPage } from './pages/suppliers/SuppliersPage';
 import { ConfigurationPage } from './pages/settings/ConfigurationPage';
 import { SecurityPage } from './pages/security/SecurityPage';
 import { UsersPage } from './pages/users/UsersPage';
@@ -17,7 +19,11 @@ type Group = { key: string; label: string; icon: ReactNode; items: Item[] };
 /** Side menu, grouped like the permission catalogue. An entry shows only with its "open" permission. */
 const MENU: Group[] = [
   { key: 'general', label: 'General', icon: <HomeOutlined />, items: [{ key: '/', label: 'Home', perm: P.homeOpen }] },
-  { key: 'md', label: 'Master data', icon: <DatabaseOutlined />, items: [{ key: '/materials', label: 'Materials', perm: P.materialsOpen }] },
+  { key: 'md', label: 'Master data', icon: <DatabaseOutlined />, items: [
+    { key: '/materials', label: 'Materials', perm: P.materialsOpen },
+    { key: '/suppliers', label: 'Suppliers', perm: P.suppliersOpen },
+  ] },
+  { key: 'purchasing', label: 'Purchasing', icon: <ShoppingCartOutlined />, items: [{ key: '/purchase-orders', label: 'Purchase orders', perm: P.purchaseOrdersOpen }] },
   {
     key: 'admin',
     label: 'Administration',
@@ -87,6 +93,8 @@ export function AppLayout() {
           <Routes>
             <Route path="/" element={<Guarded perm={P.homeOpen}><HomePage /></Guarded>} />
             <Route path="/materials" element={<Guarded perm={P.materialsOpen}><MaterialsPage /></Guarded>} />
+            <Route path="/suppliers" element={<Guarded perm={P.suppliersOpen}><SuppliersPage /></Guarded>} />
+            <Route path="/purchase-orders" element={<Guarded perm={P.purchaseOrdersOpen}><PurchaseOrdersPage /></Guarded>} />
             <Route path="/users" element={<Guarded perm={P.usersOpen}><UsersPage /></Guarded>} />
             <Route path="/security" element={<Guarded perm={P.securityOpen}><SecurityPage /></Guarded>} />
             <Route path="/settings" element={<Guarded perm={P.configOpen}><ConfigurationPage /></Guarded>} />

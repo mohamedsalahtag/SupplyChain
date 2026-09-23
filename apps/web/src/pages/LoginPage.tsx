@@ -44,7 +44,7 @@ export function LoginPage() {
         <Typography.Paragraph type="secondary">Sign in with your company (Active Directory) account.</Typography.Paragraph>
         <Form<Values> layout="vertical" onFinish={onFinish} requiredMark={false} disabled={login.isPending}>
           <Form.Item label="Username" name="username" rules={[{ required: true, message: 'Enter your username' }]}
-            extra="e.g. mohamed.tag or mohamed.tag@sharbatlyfruit.com">
+            extra="Your Windows username, e.g. mohamed.tag">
             <Input id="username" prefix={<UserOutlined />} autoComplete="username" autoFocus />
           </Form.Item>
           <Form.Item label="Password" name="password" rules={[{ required: true, message: 'Enter your password' }]}>

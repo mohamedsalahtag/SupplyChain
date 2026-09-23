@@ -10,14 +10,14 @@ export const formatDateTime = (iso: string | null | undefined) => (iso ? dateTim
 
 export const formatNumber = (n: number | null | undefined) => (n == null ? '—' : n.toLocaleString('en-GB'));
 
-type SyncRun = NonNullable<RouterOutputs['materials']['syncStatus']['last']>;
+export type SyncRun = NonNullable<RouterOutputs['sync']['status']['last']>;
 
 /** "15,003 read from SAP · 12 new · 3 updated · 1 marked Not in SAP" */
-export function syncSummary(run: SyncRun): string {
+export function syncSummary(run: SyncRun, missingLabel = 'marked "Not in SAP"'): string {
   return [
     `${formatNumber(run.RowsRead)} read from SAP`,
     `${formatNumber(run.RowsInserted)} new`,
     `${formatNumber(run.RowsUpdated)} updated`,
-    `${formatNumber(run.RowsMarkedMissing)} marked "Not in SAP"`,
+    `${formatNumber(run.RowsMarkedMissing)} ${missingLabel}`,
   ].join(' · ');
 }
