@@ -3,9 +3,16 @@ import { expect, test, type Page } from '@playwright/test';
 const totalOf = async (page: Page) =>
   Number(((await page.getByText(/[\d,]+ materials$/).textContent()) ?? '').replace(/\D/g, ''));
 
+/**
+ * Picks an option in a (multi-)select by typing it first: the list only draws
+ * the options in view, so an option scrolled away is not on the page.
+ */
 const pickOption = async (page: Page, selectId: string, option: string) => {
-  await page.locator(`#${selectId}`).click();
-  await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: new RegExp(`^${option}$`) }).click();
+  const dropdown = page.locator('.ant-select-dropdown:visible');
+  // The search box is read-only until the list is open; clicking an open multi-select would close it.
+  if ((await dropdown.count()) === 0) await page.locator(`#${selectId}`).click();
+  await page.keyboard.type(option);
+  await dropdown.locator('.ant-select-item-option').filter({ hasText: new RegExp(`^${option}$`) }).click();
 };
 
 test('00 · Home shows the database is connected', async ({ page }) => {

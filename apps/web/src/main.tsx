@@ -1,12 +1,13 @@
 import { StrictMode, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { httpBatchLink } from '@trpc/client';
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { httpBatchLink, TRPCClientError } from '@trpc/client';
 import { App as AntApp, ConfigProvider, theme, type ThemeConfig } from 'antd';
 import type { MappingAlgorithm } from 'antd/es/theme/interface';
 import { trpc } from './lib/trpc';
 import { AppLayout } from './AppLayout';
+import { LoginPage } from './pages/LoginPage';
 
 /** Used until the saved appearance loads (and if it cannot). */
 const DEFAULT_FONT_SIZE = 13;
@@ -56,8 +57,22 @@ function Themed({ children }: { children: ReactNode }) {
 }
 
 function Root() {
-  // One retry only, so a real error reaches the screen quickly instead of after ~7 s of retries.
-  const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: 1 } } }));
+  const [queryClient] = useState(() => {
+    const code = (err: unknown) => (err instanceof TRPCClientError ? (err.data as { code?: string } | undefined)?.code : undefined);
+    // Session ended (expired, or user disabled): refresh who is signed in, which sends the app to the login page.
+    const onError = (err: unknown) => {
+      if (code(err) === 'UNAUTHORIZED') void client.invalidateQueries({ queryKey: [['auth', 'me']] });
+    };
+    const client: QueryClient = new QueryClient({
+      queryCache: new QueryCache({ onError }),
+      mutationCache: new MutationCache({ onError }),
+      defaultOptions: {
+        // One retry only, so a real error reaches the screen quickly; never retry sign-in or permission refusals.
+        queries: { retry: (n, err) => n < 1 && !['UNAUTHORIZED', 'FORBIDDEN'].includes(code(err) ?? '') },
+      },
+    });
+    return client;
+  });
   const [trpcClient] = useState(() => trpc.createClient({ links: [httpBatchLink({ url: '/trpc' })] }));
 
   return (
@@ -66,7 +81,10 @@ function Root() {
         <Themed>
           <AntApp>
             <BrowserRouter>
-              <AppLayout />
+              <Routes>
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/*" element={<AppLayout />} />
+              </Routes>
             </BrowserRouter>
           </AntApp>
         </Themed>

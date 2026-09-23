@@ -1,4 +1,4 @@
-import { DEFAULT_TABLE_PAGE_SIZE, MATERIAL_SORT_FIELDS, PERMISSIONS, TABLE_PAGE_SIZES } from '@supplychain/shared';
+import { DEFAULT_TABLE_PAGE_SIZE, MATERIAL_SORT_FIELDS, P, SIGNED_IN, TABLE_PAGE_SIZES } from '@supplychain/shared';
 import { z } from 'zod';
 import { loadInclude } from '../../settings/materialsInclude.js';
 import { loadSapConnection } from '../../settings/sapConnection.js';
@@ -6,8 +6,8 @@ import { procedure, router } from '../../trpc/trpc.js';
 import { runMaterialSync, startRun, SyncAlreadyRunningError, SOURCE } from './materialSync.js';
 import { filterOptions, listMaterials } from './materialsRepo.js';
 
-const view = procedure.meta({ permission: PERMISSIONS.masterdataView });
-const sync = procedure.meta({ permission: PERMISSIONS.masterdataSync });
+const view = procedure.meta({ permission: P.materialsOpen });
+const sync = procedure.meta({ permission: P.configSyncRun });
 
 const listInput = z.object({
   page: z.number().int().min(1).default(1),
@@ -38,7 +38,7 @@ export const materialsRouter = router({
   filterOptions: view.query(({ ctx }) => filterOptions(ctx.db)),
 
   /** The running sync (if any) and the last finished one. */
-  syncStatus: view.query(async ({ ctx }) => {
+  syncStatus: procedure.meta({ permission: SIGNED_IN }).query(async ({ ctx }) => {
     const runs = await ctx.db
       .selectFrom('integ.SyncRun')
       .selectAll()
@@ -58,8 +58,8 @@ export const materialsRouter = router({
     const conn = await loadSapConnection(ctx.db, ctx.encKey);
     if (!conn) return { started: false as const, reason: 'No SAP connection saved yet.' };
     try {
-      const runId = await startRun(ctx.db, ctx.user.name);
-      ctx.log.info({ runId, user: ctx.user.name }, 'Materials sync started');
+      const runId = await startRun(ctx.db, ctx.user.displayName);
+      ctx.log.info({ runId, user: ctx.user.displayName }, 'Materials sync started');
       const { materialTypes } = await loadInclude(ctx.db);
       void runMaterialSync(ctx.db, conn, materialTypes, runId).then(() => ctx.log.info({ runId }, 'Materials sync finished'));
       return { started: true as const, runId };

@@ -1,15 +1,22 @@
 import { sql } from 'kysely';
-import { PERMISSIONS } from '@supplychain/shared';
+import { authRouter } from '../auth/router.js';
 import { materialsRouter } from '../modules/materials/router.js';
+import { securityRouter } from '../modules/security/router.js';
+import { usersRouter } from '../modules/users/router.js';
+import { adRouter } from '../settings/adRouter.js';
 import { settingsRouter } from '../settings/router.js';
 import { prefsRouter } from '../settings/userPrefs.js';
-import { procedure, router } from './trpc.js';
+import { publicProcedure, router } from './trpc.js';
 
 export const appRouter = router({
+  auth: authRouter,
   materials: materialsRouter,
+  users: usersRouter,
+  security: securityRouter,
   settings: settingsRouter,
+  ad: adRouter,
   prefs: prefsRouter,
-  health: procedure.meta({ permission: PERMISSIONS.systemHealth }).query(async ({ ctx }) => {
+  health: publicProcedure.query(async ({ ctx }) => {
     try {
       await sql`SELECT 1`.execute(ctx.db);
       return { database: 'connected' as const };

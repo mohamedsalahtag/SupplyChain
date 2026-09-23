@@ -44,9 +44,16 @@ A from-scratch rebuild. The previous application failed: unstable workflows, bus
 - Configuration is one page with tabs (`?tab=general|appearance|sap|sync`). A new settings area gets its own tab.
 - Page titles are `Typography.Title level={5}`. Tables are `size="small"` and `bordered`. Record details open in a read-only `Drawer`.
 
-## Security (deferred, but designed in)
+## Security
 
-Every tRPC procedure must declare `.meta({ permission: '<area>.<action>' })` — the guard in `apps/api/src/trpc/trpc.ts` rejects any procedure without one. Today the guard allows everything for a fixed dev user; real login and roles plug in at that single point later.
+- **Sign-in is Active Directory** (`apps/api/src/auth/`). The user's own password is checked by binding to AD over LDAPS. Only users registered on the Users page can sign in. Sessions are an httpOnly, SameSite=Strict cookie holding the user id; the user and their permissions are reloaded from the DB on every request.
+- **Every screen and button is in the permission catalogue** (`packages/shared/src/permissions.ts`). The Security page shows exactly that list. A new screen or button **must** add its entry there.
+- **Every procedure declares a catalogue key** with `procedure.meta({ permission: P.xxx })`, or `SIGNED_IN` for things any signed-in user needs (own preferences, theme). `publicProcedure` is only for sign-in and the health check. `apps/api/src/trpc/trpc.spec.ts` fails if a procedure uses an unknown key or is public without being on its short list.
+- The Administrator role (`IsAdmin`) holds every permission, including future ones. Nobody can disable themselves or remove their own admin role, and the last active admin can't be removed.
+- **In the UI**, use `useCan()` (`apps/web/src/lib/auth.ts`) to hide menu items, tabs and buttons. The server enforces permissions anyway.
+- Security-relevant actions write to `app.AuditLog` (`auth/audit.ts`): sign-ins, users, roles, AD config.
+- **`ALLOW_TEST_LOGIN=true` is for this PC's browser tests only** (sign-in without a password, from localhost). It must never be set on a server.
+- Never write a real password into code, tests, docs or `.env`. Credentials are typed into Configuration by the user and stored encrypted.
 
 ## Commands
 

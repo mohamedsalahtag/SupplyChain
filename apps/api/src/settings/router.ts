@@ -1,40 +1,42 @@
-import { PERMISSIONS } from '@supplychain/shared';
+import { P } from '@supplychain/shared';
 import { z } from 'zod';
 import { countRows } from '../sap/odata.js';
 import { buildSapFilter } from '../modules/materials/sapMaterial.js';
 import { includeSchema, loadAvailableTypes, loadInclude, refreshAvailableTypes, saveInclude } from './materialsInclude.js';
-import { procedure, router } from '../trpc/trpc.js';
+import { procedure, publicProcedure, router } from '../trpc/trpc.js';
 import { loadSapConnection, sapConnectionSchema, saveSapConnection } from './sapConnection.js';
 import { appearanceSchema, brandingSchema, loadUi, saveAppearance, saveBranding } from './uiSettings.js';
 
-const edit = procedure.meta({ permission: PERMISSIONS.settingsSapEdit });
+const edit = procedure.meta({ permission: P.configSapEdit });
+const configOpen = procedure.meta({ permission: P.configOpen });
+const typesEdit = procedure.meta({ permission: P.configSyncTypesEdit });
 
 /** Password may be left empty on save to keep the stored one. */
 const saveInput = sapConnectionSchema.extend({ password: z.string() });
 
 export const settingsRouter = router({
-  /** Read by every screen (the app theme), so it only needs app.view. */
-  getUi: procedure.meta({ permission: PERMISSIONS.appView }).query(({ ctx }) => loadUi(ctx.db)),
+  /** Site name, icon and font size: needed by every screen and by the sign-in page, so public. */
+  getUi: publicProcedure.query(({ ctx }) => loadUi(ctx.db)),
 
   saveAppearance: procedure
-    .meta({ permission: PERMISSIONS.settingsUiEdit })
+    .meta({ permission: P.configAppearanceEdit })
     .input(appearanceSchema)
     .mutation(async ({ ctx, input }) => {
       await saveAppearance(ctx.db, input);
-      ctx.log.info({ user: ctx.user.name, ...input }, 'Appearance saved');
+      ctx.log.info({ user: ctx.user.displayName, ...input }, 'Appearance saved');
       return { saved: true };
     }),
 
   saveBranding: procedure
-    .meta({ permission: PERMISSIONS.settingsUiEdit })
+    .meta({ permission: P.configGeneralEdit })
     .input(brandingSchema)
     .mutation(async ({ ctx, input }) => {
       await saveBranding(ctx.db, input);
-      ctx.log.info({ user: ctx.user.name, siteName: input.siteName, customIcon: !!input.iconDataUrl }, 'Branding saved');
+      ctx.log.info({ user: ctx.user.displayName, siteName: input.siteName, customIcon: !!input.iconDataUrl }, 'Branding saved');
       return { saved: true };
     }),
 
-  getSap: edit.query(async ({ ctx }) => {
+  getSap: configOpen.query(async ({ ctx }) => {
     const conn = await loadSapConnection(ctx.db, ctx.encKey);
     if (!conn) return null;
     const { password, ...rest } = conn; // the password never leaves the server
@@ -49,7 +51,7 @@ export const settingsRouter = router({
       password = existing.password;
     }
     await saveSapConnection(ctx.db, ctx.encKey, { ...input, password });
-    ctx.log.info({ user: ctx.user.name }, 'SAP connection saved');
+    ctx.log.info({ user: ctx.user.displayName }, 'SAP connection saved');
     return { saved: true };
   }),
 
@@ -68,19 +70,19 @@ export const settingsRouter = router({
   }),
 
   /** Chosen material types and the list SAP offers (from the last check). */
-  getMaterialsInclude: edit.query(async ({ ctx }) => {
+  getMaterialsInclude: configOpen.query(async ({ ctx }) => {
     const [include, available] = await Promise.all([loadInclude(ctx.db), loadAvailableTypes(ctx.db)]);
     return { ...include, available };
   }),
 
-  saveMaterialsInclude: edit.input(includeSchema).mutation(async ({ ctx, input }) => {
+  saveMaterialsInclude: typesEdit.input(includeSchema).mutation(async ({ ctx, input }) => {
     await saveInclude(ctx.db, input);
-    ctx.log.info({ user: ctx.user.name, ...input }, 'Material types for sync saved');
+    ctx.log.info({ user: ctx.user.displayName, ...input }, 'Material types for sync saved');
     return { saved: true };
   }),
 
   /** Reads the material types SAP has right now (a few seconds) and keeps the list. */
-  refreshMaterialTypes: edit.mutation(async ({ ctx }) => {
+  refreshMaterialTypes: typesEdit.mutation(async ({ ctx }) => {
     const conn = await loadSapConnection(ctx.db, ctx.encKey);
     if (!conn) throw new Error('No SAP connection saved yet (SAP connection tab).');
     return refreshAvailableTypes(ctx.db, conn);

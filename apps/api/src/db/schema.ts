@@ -16,6 +16,37 @@ export interface Database {
     PrefValue: string;
     UpdatedAt: Date;
   };
+  'app.User': {
+    UserId: Generated<number>;
+    Username: string;
+    Upn: string;
+    DisplayName: string;
+    Email: string;
+    Department: string;
+    Title: string;
+    IsActive: boolean;
+    CreatedAt: Generated<Date>;
+    CreatedBy: string;
+    LastLoginAt: Date | null;
+  };
+  'app.Role': {
+    RoleId: Generated<number>;
+    Name: string;
+    Description: string;
+    IsAdmin: Generated<boolean>;
+    IsBuiltIn: Generated<boolean>;
+    IsActive: Generated<boolean>;
+  };
+  'app.RolePermission': { RoleId: number; PermissionKey: string };
+  'app.UserRole': { UserId: number; RoleId: number };
+  'app.AuditLog': {
+    AuditId: Generated<number>;
+    At: Generated<Date>;
+    UserId: number | null;
+    Action: string;
+    Target: string;
+    Details: string | null;
+  };
   'md.Material': {
     MaterialCode: string;
     Description: string;

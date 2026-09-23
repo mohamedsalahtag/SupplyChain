@@ -1,5 +1,5 @@
 /** Per-user table preferences (rows per page, hidden columns), kept in app.UserPreference. */
-import { DEFAULT_TABLE_PAGE_SIZE, PERMISSIONS, TABLE_PAGE_SIZES } from '@supplychain/shared';
+import { DEFAULT_TABLE_PAGE_SIZE, SIGNED_IN, TABLE_PAGE_SIZES } from '@supplychain/shared';
 import { sql, type Kysely } from 'kysely';
 import { z } from 'zod';
 import type { Database } from '../db/schema.js';
@@ -46,18 +46,19 @@ async function save(db: Kysely<Database>, userId: string, table: string, prefs: 
   });
 }
 
-const view = procedure.meta({ permission: PERMISSIONS.appView });
+/** Each user reads and writes only their own preferences. */
+const view = procedure.meta({ permission: SIGNED_IN });
 
 export const prefsRouter = router({
-  getTable: view.input(z.object({ table: tableKey })).query(({ ctx, input }) => load(ctx.db, ctx.user.id, input.table)),
+  getTable: view.input(z.object({ table: tableKey })).query(({ ctx, input }) => load(ctx.db, String(ctx.user.id), input.table)),
 
   /** Changes only the fields given; the rest stay as saved. */
   setTable: view
     .input(z.object({ table: tableKey }).merge(tablePrefsSchema.partial()))
     .mutation(async ({ ctx, input }) => {
       const { table, ...patch } = input;
-      const next = { ...(await load(ctx.db, ctx.user.id, table)), ...patch };
-      await save(ctx.db, ctx.user.id, table, next);
+      const next = { ...(await load(ctx.db, String(ctx.user.id), table)), ...patch };
+      await save(ctx.db, String(ctx.user.id), table, next);
       return next;
     }),
 });

@@ -20,3 +20,6 @@ Each spec contains:
 | 02 | Configuration · SAP connection (test + sync) | Built · waiting for acceptance |
 | 03 | Configuration · Appearance (app font size) | Built · waiting for acceptance |
 | 04 | Configuration tabs, site name, icon; table columns + rows per page; multi-select filters | Built · waiting for acceptance |
+| 05 | Sign-in with Active Directory; Configuration → Active Directory | Built · waiting for acceptance |
+| 06 | Users (register from AD, roles, active) | Built · waiting for acceptance |
+| 07 | Security (roles and permissions) | Built · waiting for acceptance |

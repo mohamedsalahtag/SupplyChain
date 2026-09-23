@@ -17,6 +17,16 @@ const schema = z.object({
   SETTINGS_ENCRYPTION_KEY: z.string().min(1, 'SETTINGS_ENCRYPTION_KEY is empty — see .env.example'),
   API_PORT: z.coerce.number().int().default(4300),
   LOG_LEVEL: z.string().default('info'),
+  /** Signs the login cookie. 32+ random bytes, base64. */
+  SESSION_SECRET: z.string().min(32, 'SESSION_SECRET is missing or too short — see .env.example'),
+  /** Created as Administrator when the app has no users yet. */
+  BOOTSTRAP_ADMIN: z.string().default(''),
+  /** Active Directory defaults, used until Configuration → Active Directory is saved. */
+  AD_URL: z.string().default('ldaps://192.168.2.19:636'),
+  AD_BASE_DN: z.string().default('OU=Users,DC=sharbatly,DC=com'),
+  AD_UPN_SUFFIX: z.string().default('sharbatlyfruit.com'),
+  /** Local test runs only: allows signing in as a registered user without a password, from localhost. Never on a server. */
+  ALLOW_TEST_LOGIN: bool,
 });
 
 export type Config = z.infer<typeof schema>;
