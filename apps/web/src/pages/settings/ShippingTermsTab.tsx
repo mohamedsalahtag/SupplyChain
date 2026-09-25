@@ -4,6 +4,7 @@ import { PlusOutlined } from '@ant-design/icons';
 import type { RouterOutputs } from '../../lib/format';
 import { trpc } from '../../lib/trpc';
 import { errorText } from '../../lib/workflow';
+import { savedPagination, useTablePrefs } from '../../lib/useTablePrefs';
 
 type Lists = RouterOutputs['handoff']['lists'];
 type Port = Lists['ports'][number];
@@ -18,6 +19,7 @@ export function ShippingTermsTab() {
   const { message } = App.useApp();
   const utils = trpc.useUtils();
   const q = trpc.handoff.lists.useQuery();
+  const termPrefs = useTablePrefs('config-payment-terms');
   const setInco = trpc.handoff.setIncoterm.useMutation();
   const savePort = trpc.handoff.savePort.useMutation();
   const savePay = trpc.handoff.savePaymentTerm.useMutation();
@@ -49,7 +51,7 @@ export function ShippingTermsTab() {
         </Col>
         <Col xs={24} xl={8}>
           <Card size="small" title="Payment terms" extra={<Typography.Text type="secondary" style={{ fontSize: 12 }}>codes from SAP — describe them once</Typography.Text>}>
-            <Table size="small" pagination={{ pageSize: 15, size: 'small' }} rowKey="code" dataSource={q.data?.paymentTerms} loading={q.isPending}
+            <Table size="small" pagination={savedPagination(termPrefs)} rowKey="code" dataSource={q.data?.paymentTerms} loading={q.isPending}
               locale={{ emptyText: 'None yet — they arrive with the next suppliers sync' }} columns={[
                 { title: 'SAP code', dataIndex: 'code', width: 80 },
                 { title: 'Description', key: 'd', render: (_: unknown, p: Pay) => (

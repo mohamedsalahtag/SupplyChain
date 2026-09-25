@@ -3,6 +3,13 @@ import { expect, test, type Page } from '@playwright/test';
 const totalOf = async (page: Page) =>
   Number(((await page.getByText(/[\d,]+ materials$/).textContent()) ?? '').replace(/\D/g, ''));
 
+/** Reads a tRPC query as the signed-in test user (used to remember the user's own settings before a test changes them). */
+async function trpcGet<T>(page: Page, path: string, input: unknown): Promise<T> {
+  const res = await page.request.get(`/trpc/${path}${input === undefined ? '' : `?input=${encodeURIComponent(JSON.stringify(input))}`}`);
+  expect(res.ok(), await res.text()).toBe(true);
+  return (await res.json()).result.data as T;
+}
+
 /**
  * Picks an option in a (multi-)select by typing it first: the list only draws
  * the options in view, so an option scrolled away is not on the page.
@@ -41,7 +48,9 @@ test('01 · Materials: multi-select filters, drawer, no numeric codes', async ({
 });
 
 test('05 · Table preferences (rows per page, hidden columns) survive a reload', async ({ page }) => {
-  // Start from the defaults, whatever an earlier run left saved.
+  // This runs as the real user on the real database: remember their saved choice and put it back at the end.
+  const saved = await trpcGet<{ pageSize: number; hiddenColumns: string[] | null }>(page, 'prefs.getTable', { table: 'materials' });
+  try {
   await page.request.post('/trpc/prefs.setTable', { data: { table: 'materials', pageSize: 25, hiddenColumns: null } });
   await page.goto('/materials');
   const rows = page.locator('.ant-table-tbody tr.ant-table-row');
@@ -84,38 +93,49 @@ test('05 · Table preferences (rows per page, hidden columns) survive a reload',
   await page.locator('.ant-select-item-option').filter({ hasText: '25 / page' }).click();
   await expect(rows).toHaveCount(25);
   await resetSaved;
+  } finally {
+    await page.request.post('/trpc/prefs.setTable', { data: { table: 'materials', ...saved } }); // the user's own choice back
+  }
 });
 
 test('03 · Appearance changes the font size of the whole app', async ({ page }) => {
+  const saved = await trpcGet<{ fontSize: number }>(page, 'settings.getUi', undefined);
+  try {
   await page.goto('/settings?tab=appearance');
   const menuFont = () => page.locator('.ant-menu-item').first().evaluate((el) => getComputedStyle(el).fontSize);
   if ((await menuFont()) !== '13px') { // a run that failed half-way may have left 15 px: put the default back first
     await page.locator('#fontSize').getByText('13 px').click();
-    await page.getByRole('tabpanel').getByRole('button', { name: 'Save' }).click();
+    await page.getByTestId('config-section').getByRole('button', { name: 'Save' }).click();
   }
   await expect.poll(menuFont).toBe('13px');
 
   await page.locator('#fontSize').getByText('15 px').click();
-  await page.getByRole('tabpanel').getByRole('button', { name: 'Save' }).click();
+  await page.getByTestId('config-section').getByRole('button', { name: 'Save' }).click();
   await expect.poll(menuFont).toBe('15px');
   await page.reload();
   await expect.poll(menuFont).toBe('15px');
 
-  await page.locator('#fontSize').getByText('13 px').click(); // default back
-  await page.getByRole('tabpanel').getByRole('button', { name: 'Save' }).click();
+  await page.locator('#fontSize').getByText('13 px').click();
+  await page.getByTestId('config-section').getByRole('button', { name: 'Save' }).click();
   await expect.poll(menuFont).toBe('13px');
+  } finally {
+    await page.request.post('/trpc/settings.saveAppearance', { data: { fontSize: saved.fontSize } }); // what the user had
+  }
 });
 
 test('04 · General: site name and icon', async ({ page }) => {
+  // The user's own site name and icon are put back at the end, whatever happens.
+  const saved = await trpcGet<{ siteName: string; iconDataUrl: string | null }>(page, 'settings.getUi', undefined);
+  try {
   await page.goto('/settings?tab=general');
   const header = page.locator('.ant-layout-header');
-  await expect(page.locator('#siteName')).toHaveValue('Supply Chain');
+  await expect(page.locator('#siteName')).toHaveValue(saved.siteName);
 
   await page.locator('#siteName').fill('Supply Chain TEST');
   // 1×1 green PNG
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
   await page.locator('input[type=file]').setInputFiles({ name: 'icon.png', mimeType: 'image/png', buffer: png });
-  await page.getByRole('tabpanel').getByRole('button', { name: 'Save' }).click();
+  await page.getByTestId('config-section').getByRole('button', { name: 'Save' }).click();
 
   await expect(header).toContainText('Supply Chain TEST');
   await expect(page).toHaveTitle('Supply Chain TEST');
@@ -123,27 +143,11 @@ test('04 · General: site name and icon', async ({ page }) => {
   await page.reload();
   await expect(header.locator('img')).toHaveAttribute('src', /^data:image\/png;base64,/);
 
-  // Put the defaults back.
-  await page.locator('#siteName').fill('Supply Chain');
-  await page.getByRole('button', { name: 'Use default icon' }).click();
-  await page.getByRole('tabpanel').getByRole('button', { name: 'Save' }).click();
-  await expect(page).toHaveTitle('Supply Chain');
-  await expect(page.locator('#app-icon')).toHaveAttribute('href', '/favicon.svg');
-});
-
-test('02 · SAP connection tests and syncs', async ({ page }) => {
-  test.setTimeout(180_000);
-  await page.goto('/settings?tab=sap');
-  await expect(page.locator('#baseUrl')).toHaveValue(/^https:\/\//);
-  await page.getByRole('button', { name: 'Test connection' }).click();
-  await expect(page.getByText('All SAP services answered')).toBeVisible({ timeout: 90_000 });
-  for (const s of ['Materials', 'Suppliers (all groups)', 'Purchase orders (all types)']) await expect(page.getByText(s, { exact: false }).first()).toBeVisible();
-
-  await page.getByRole('tab', { name: 'Materials sync' }).click();
-  await page.getByRole('button', { name: 'Sync now' }).click();
-  await page.locator('.ant-modal-confirm').getByRole('button', { name: 'Sync now' }).click();
-  await expect(page.getByText('Sync finished')).toBeVisible({ timeout: 150_000 });
-  await page.screenshot({ path: 'test-results/02-configuration.png', fullPage: true });
+  } finally {
+    await page.request.post('/trpc/settings.saveBranding', { data: { siteName: saved.siteName, iconDataUrl: saved.iconDataUrl } });
+  }
+  await page.reload();
+  await expect(page).toHaveTitle(saved.siteName);
 });
 
 test('06 · Tables never need sideways scrolling', async ({ page }) => {
@@ -153,7 +157,9 @@ test('06 · Tables never need sideways scrolling', async ({ page }) => {
       const doc = document.documentElement;
       return !!t && t.scrollWidth <= t.clientWidth + 1 && doc.scrollWidth <= doc.clientWidth + 1;
     });
-  await page.request.post('/trpc/prefs.setTable', { data: { table: 'materials', pageSize: 25, hiddenColumns: [] } }); // every column shown
+  const saved = await trpcGet<{ pageSize: number; hiddenColumns: string[] | null }>(page, 'prefs.getTable', { table: 'materials' });
+  try {
+  await page.request.post('/trpc/prefs.setTable', { data: { table: 'materials', pageSize: saved.pageSize, hiddenColumns: [] } }); // every column shown
   for (const width of [1440, 1280, 1024]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/materials');
@@ -161,7 +167,9 @@ test('06 · Tables never need sideways scrolling', async ({ page }) => {
     expect(await fits(), `table fits at ${width}px`).toBe(true);
   }
   await page.screenshot({ path: 'test-results/06-all-columns-1024.png' });
-  await page.request.post('/trpc/prefs.setTable', { data: { table: 'materials', pageSize: 25, hiddenColumns: null } });
+  } finally {
+    await page.request.post('/trpc/prefs.setTable', { data: { table: 'materials', ...saved } }); // the user's own choice back
+  }
 });
 
 test('07 · Materials sync lists SAP material types, ZTRD chosen', async ({ page }) => {

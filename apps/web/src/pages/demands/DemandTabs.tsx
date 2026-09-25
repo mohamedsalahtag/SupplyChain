@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, Empty, List, Space, Table, Tabs, Tag, Typography } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { CR_STATUS, CR_TYPE, APPLY_STATUS } from '../changes/ChangeRequestPage';
@@ -9,6 +9,7 @@ import { ThreadPanel } from '../../components/ThreadPanel';
 import { formatDateTime, type RouterOutputs } from '../../lib/format';
 import { trpc } from '../../lib/trpc';
 import { newCommandId } from '../../lib/workflow';
+import { countOf, TabLabel } from '../../components/TabLabel';
 
 type Demand = RouterOutputs['demand']['get'];
 
@@ -85,25 +86,29 @@ export function DemandTabs({ demand }: { demand: Demand }) {
   const thread = trpc.demand.thread.useQuery({ demandId: demand.demandId });
   const attachments = trpc.demand.attachments.useQuery({ demandId: demand.demandId, includeOld: showOld });
   const comment = trpc.demand.comment.useMutation();
+  // One light query for the numbers on the tabs; each list loads only when its tab is opened.
+  const countsQ = trpc.demand.tabCounts.useQuery({ demandId: demand.demandId });
+  const counts = countsQ.data;
+  useEffect(() => { void countsQ.refetch(); }, [demand.rowVer]); // eslint-disable-line react-hooks/exhaustive-deps -- any action on the demand changes its version
 
   return (
     <Tabs
       items={[
-        { key: 'comments', label: `Comments${thread.data?.length ? ` (${thread.data.length})` : ''}`, children: (
+        { key: 'comments', label: <TabLabel text="Comments" count={countOf(thread.data)} />, children: (
           <ThreadPanel entries={thread.data} loading={thread.isPending} canAdd={demand.actions.comment}
             onAdd={async (body) => { await comment.mutateAsync({ demandId: demand.demandId, commandId: newCommandId(), body }); await utils.demand.thread.invalidate({ demandId: demand.demandId }); }} />
         ) },
-        { key: 'attachments', label: `Attachments${attachments.data?.length ? ` (${attachments.data.filter((a) => a.isCurrent).length})` : ''}`, children: (
+        { key: 'attachments', label: <TabLabel text="Attachments" count={attachments.data?.filter((a) => a.isCurrent).length} />, children: (
           <AttachmentsPanel entityType="DEMAND" entityId={demand.demandId} rows={attachments.data} loading={attachments.isPending} canUpload={demand.actions.attach}
             showOld={showOld} onShowOld={setShowOld} onChanged={() => void utils.demand.attachments.invalidate({ demandId: demand.demandId })} />
         ) },
         ...(demand.workflowStatus === 'ACCEPTED' ? [
-          { key: 'crs', label: 'Change requests', children: <ChangeRequestsTab demandId={demand.demandId} /> },
-          { key: 'merges', label: 'Merges', children: <MergesTab demandId={demand.demandId} /> },
-          { key: 'awards', label: 'Awards', children: <AwardsTab demandId={demand.demandId} /> },
+          { key: 'crs', label: <TabLabel text="Change requests" count={counts?.crs} />, children: <ChangeRequestsTab demandId={demand.demandId} /> },
+          { key: 'merges', label: <TabLabel text="Merges" count={counts?.merges} />, children: <MergesTab demandId={demand.demandId} /> },
+          { key: 'awards', label: <TabLabel text="Awards" count={counts?.awards} />, children: <AwardsTab demandId={demand.demandId} /> },
         ] : []),
-        { key: 'versions', label: 'Versions', children: <VersionsTab demandId={demand.demandId} /> },
-        { key: 'history', label: 'History', children: <HistoryTab demandId={demand.demandId} /> },
+        { key: 'versions', label: <TabLabel text="Versions" count={counts?.versions} />, children: <VersionsTab demandId={demand.demandId} /> },
+        { key: 'history', label: <TabLabel text="History" count={counts?.history} />, children: <HistoryTab demandId={demand.demandId} /> },
       ]}
     />
   );

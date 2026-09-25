@@ -7,6 +7,7 @@ import { useCan } from '../../lib/auth';
 import { trpc } from '../../lib/trpc';
 import { useTablePrefs } from '../../lib/useTablePrefs';
 import { RolePermissions } from './RolePermissions';
+import { countOf, TabLabel } from '../../components/TabLabel';
 
 type RoleUser = { UserId: number; Username: string; DisplayName: string; Email: string; IsActive: boolean };
 
@@ -154,7 +155,7 @@ export function SecurityPage() {
               },
               {
                 key: 'users',
-                label: <span><TeamOutlined /> Users <Tag>{role.userCount}</Tag></span>,
+                label: <TabLabel text={<span><TeamOutlined /> Users</span>} count={role.userCount} />,
                 children: (
                   <AppTable<RoleUser> prefs={usersPrefs} itemName="users" rowKey="UserId" columns={userColumns}
                     dataSource={roleData.data?.users ?? []} loading={roleData.isPending}

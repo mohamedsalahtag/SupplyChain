@@ -20,10 +20,10 @@ Ideas and functions that are **not** in an approved screen spec yet. Each is add
 | 14 | Save a container make-up (materials + shares) as a reusable template | 2026-09-24 | 12 |
 | 15 | ~~E2E test user for the second department~~ (done 2026-09-24 as View as + demo accounts, spec 16) (e.g. `e2e.procurement`, Procurement role, company 1000) so the "decide a change request" path runs in the browser too; today the only other active user is a real person, so deciding is covered by the DB tests only | 2026-09-24 | 14 |
 | 16 | Company-wide list of merges (today each demand lists its own on the Merges tab) | 2026-09-24 | 17 |
-| 17 | Consider READ_COMMITTED_SNAPSHOT on the database so reads never wait for writers (found while load-testing Stage 3; the worker-thread stall itself is fixed) | 2026-09-24 | — |
+| 17 | **Before production:** READ_COMMITTED_SNAPSHOT on the database so reads never wait for writers. Found again 2026-09-25: while a SAP materials sync runs (minutes of MERGE on md.Material), submitting a demand waited 15–20 s behind it. Users would feel this if a sync runs in working hours — until then, schedule syncs outside working hours | 2026-09-24 | — |
 | 18 | Discard or archive the automated-test demands (dozens of "Automated test — ignore" demands in the dev database) | 2026-09-24 | 12 |
 | 19 | ~~Supplier view as a real Excel file (.xlsx) instead of CSV~~ (done 2026-09-25: ExcelJS, loaded on demand; the reports too) | 2026-09-24 | 18 |
-| 20 | Invite more suppliers to an existing RFQ; add quantity to an existing RFQ | 2026-09-24 | 18 |
+| 20 | ~~Invite more suppliers to an existing RFQ~~ (done 2026-09-25); add quantity to an existing RFQ | 2026-09-24 | 18 |
 | 21 | "Open quantity near ETD" exceptions are raised for the automated-test demands too (hundreds on My work in the dev database) — goes with discarding test demands (item 18) | 2026-09-24 | 18 |
 | 22 | A Sales change request that cancels awarded quantity shrinks the award items but not the award's container count (the cancelled quantity is rarely whole containers) — decide how containers follow a partial cancellation | 2026-09-24 | 20 |
 | 23 | Round trips: other multi-step commands (RFQ create/release, merge, change-request apply, un-award by containers' award-item bookkeeping) still move slices one query at a time — move them to the set-based sliceBatch fragments like the award (spec 20 performance fix) | 2026-09-24 | 20 |

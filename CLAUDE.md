@@ -60,16 +60,18 @@ Built stage by stage from `Demand_to_PO_Execution_Plan_v5.md`; one stage at a ti
 - **Separation of duties:** the creator of a demand can't accept it; whoever handed off can't accept the handoff; nobody decides their own CR (admins excepted). Non-admin user/role editors can only give what they hold (`assertMayGrant`, `assertMayEditRole`).
 - **Reports (spec 24)** read the ledger directly (`modules/reports`): never add across units, a zero denominator is N/A, and the From/To filter applies to every section.
 - **Git:** `https://github.com/mohamedsalahtag/SupplyChain.git`, branch `main`. Commit only when the user asks.
-- **Next migration number: 0024.** 0021 = PO and SAP outbox, 0022 = `reports.open` grants, 0023 = RFQ to a supplier outside the shortlist.
+- **Migrations:** 0021 = PO and SAP outbox, 0022 = `reports.open` grants, 0023 = RFQ to a supplier outside the shortlist, 0024 = saved page sizes of 25 → 50.
+- **Next migration number: 0025.**
 
 ## UI conventions
 
 - **Compact and dense.** Screens will carry many details. The theme in `apps/web/src/main.tsx` uses antd's `compactAlgorithm` for spacing, `componentSize="small"` and tight table rows. Don't override it per screen.
 - **Font size, site name and icon are app-wide settings** (Configuration → Appearance / General; `ui.appearance` and `ui.branding` in `app.Setting`; default font 13px). The font number is the real on-screen size: `keepChosenFontSize` stops the compact algorithm from shrinking text. Never hard-code font sizes, the site name or the icon in screens.
-- **Every table is an `AppTable`** (`apps/web/src/components/AppTable.tsx`) with `useTablePrefs('<table-key>')`. That gives 25 / 50 / 100 rows per page (default 25) and a Columns chooser. Both are saved **per user in `app.UserPreference`**, so they survive restarts and change only when the user changes them. Every column needs a stable `key`, a text `title` and a numeric `width`.
+- **Tabs show how many records they hold**: use `TabLabel` with `countOf(query.data)` (`components/TabLabel.tsx`) on every tab title. Run the tab's query in the parent with the **same input** (shared cache, no extra call).
+- **Configuration** is a vertical menu grouped by subject (General · SAP · Workflow · Sign-in), with the section beside it. A new section gets a `group` in `ConfigurationPage.tsx`.
+- **Every table is an `AppTable`** (`apps/web/src/components/AppTable.tsx`) with `useTablePrefs('<table-key>')`. That gives 25 / 50 / 100 rows per page (default **50**) and a Columns chooser. Both are saved **per user in `app.UserPreference`**, so they survive restarts and change only when the user changes them. Every column needs a stable `key`, a text `title` and a numeric `width`.
 - **No table ever scrolls sideways.** `AppTable` turns column widths into shares of the page width (`tableLayout="fixed"`), and long text ends in "…" with the full text on hover. Don't pass `scroll` or `fixed` columns. Columns that should start hidden go in `useTablePrefs('<table>', defaultHidden)`. "Default columns" in the chooser brings them back. API list inputs accept only `TABLE_PAGE_SIZES` from `@supplychain/shared`.
 - **Every filter dropdown is a `MultiFilter`** (`apps/web/src/components/MultiFilter.tsx`): multi-select, searchable, clearable. API filter inputs are arrays, matched with `in`.
-- Configuration is one page with tabs (`?tab=general|appearance|sap|sync|suppliers|po|ad`), each shown only with its permission. A new settings area gets its own tab.
 - Page titles are `Typography.Title level={5}`. Tables are `size="small"` and `bordered`. Record details open in a read-only `Drawer`.
 
 ## Security
@@ -94,5 +96,6 @@ Built stage by stage from `Demand_to_PO_Execution_Plan_v5.md`; one stage at a ti
 - `npm run dev` — API on :4300 and web on :5300
 - `npm run build` then `npm start` — production: one process serves the built web app and the API (`SERVE_WEB=true`, HTTPS via `TLS_PFX_FILE` or `TRUST_PROXY`); see `docs/operations/production-setup.md`. With `NODE_ENV=production` it refuses to start without HTTPS or with a test switch on
 - `npm run typecheck` / `npm test` / `npx playwright test` (smoke tests; needs `npm run dev` running)
+- **Browser tests run against the real dev database as the real administrator.** A test that changes a setting or a preference (site name, icon, font, rows per page, columns) must read the user's saved value first and put **that** back in a `finally` — never the built-in default (found 2026-09-25: the user's icon and page sizes were being reset by test runs).
 - `npm run test:db` — service tests and `tests/invariants/*.sql` against a throw-away `supplychain_test` database (recreated and migrated each run; never the real one). It runs through `apps/api/scripts/test-db.mjs` (sets `UV_THREADPOOL_SIZE`, like dev.mjs); run only one at a time (they share the test database). Over a slow link to SQL Server (VPN, ~100 ms ping) the full run takes ~20 min; e2e then needs `E2E_EXPECT_TIMEOUT=20000`
 - `start-supplychain.bat`: starts the app and logs to `logs\app.log`. `install-autostart.bat` / `remove-autostart.bat` add or remove the Windows Startup shortcut, which runs at logon as that user; the database uses their Windows login.

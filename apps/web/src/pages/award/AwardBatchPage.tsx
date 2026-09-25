@@ -15,6 +15,7 @@ import { n } from '../rfq/rfqLabels';
 import { ACK_CAUSE, ACK_STATUS, CHANGE_TYPE, CONTAINER_CHANGE, SKU_STATUS } from './awardLabels';
 import { ContainerUnawardModal, ShipmentModal, SkuModal, UnawardModal } from './AwardDialogs';
 import { LoadError } from '../../components/LoadError';
+import { countOf, TabLabel } from '../../components/TabLabel';
 
 type Batch = RouterOutputs['award']['get'];
 type Item = Batch['items'][number];
@@ -127,14 +128,14 @@ export function AwardBatchPage() {
       {b.comment && <Descriptions size="small" bordered items={[{ label: 'Comment', children: b.comment }]} />}
 
       <Tabs activeKey={params.get('tab') ?? (can(P.handoffSend) || !can(P.ackRespond) ? 'handoff' : 'ack')} onChange={(k) => setParams({ tab: k }, { replace: true })} items={[
-        { key: 'handoff', label: 'Handoff (per supplier)', children: <HandoffPanel awardBatchId={awardBatchId} /> },
-        { key: 'ack', label: 'Acknowledgement', children: (
+        { key: 'handoff', label: <TabLabel text="Handoff (per supplier)" count={new Set(b.items.filter((i) => i.isActive).map((i) => i.supplierCode)).size} />, children: <HandoffPanel awardBatchId={awardBatchId} /> },
+        { key: 'ack', label: <TabLabel text="Acknowledgement" count={b.ackHistory.length} />, children: (
           <List size="small" bordered dataSource={b.ackHistory} renderItem={(h) => (
             <List.Item><Space wrap><Typography.Text type="secondary">{formatDateTime(h.at)}</Typography.Text><span>{h.by}</span>
               <Typography.Text strong>{ACK_CAUSE[h.cause] ?? h.cause}</Typography.Text><Tag>revision {h.revision}</Tag>{h.comment && <Typography.Text type="secondary">“{h.comment}”</Typography.Text>}</Space></List.Item>
           )} />
         ) },
-        { key: 'changes', label: `Changes (${b.changes.length + b.containerChanges.length})`, children: (<>
+        { key: 'changes', label: <TabLabel text="Changes" count={b.changes.length + b.containerChanges.length} />, children: (<>
           {b.containerChanges.length > 0 && <List size="small" bordered style={{ marginBottom: 8 }} dataSource={b.containerChanges} renderItem={(c) => (
             <List.Item><Space wrap><Typography.Text type="secondary">{formatDateTime(c.at)}</Typography.Text><span>{c.by}</span>
               <Typography.Text strong>{CONTAINER_CHANGE[c.type]}</Typography.Text>
@@ -147,11 +148,11 @@ export function AwardBatchPage() {
               <span>{c.supplierCode}</span>{c.qty && <span>{c.qty}</span>}{c.crNo && <Tag>{c.crNo}</Tag>}{c.reason && <Tag>{c.reason}</Tag>}{c.detail?.to && <span>→ {c.detail.to}</span>}</Space></List.Item>
           )} />
         </>) },
-        { key: 'comments', label: `Comments${thread.data?.length ? ` (${thread.data.length})` : ''}`, children: (
+        { key: 'comments', label: <TabLabel text="Comments" count={countOf(thread.data)} />, children: (
           <ThreadPanel entries={thread.data} loading={thread.isPending} canAdd
             onAdd={async (body) => { await comment.mutateAsync({ awardBatchId, commandId: newCommandId(), body }); await utils.award.thread.invalidate({ awardBatchId }); }} />
         ) },
-        { key: 'attachments', label: 'Attachments', children: (
+        { key: 'attachments', label: <TabLabel text="Attachments" count={attachments.data?.filter((a) => a.isCurrent).length} />, children: (
           <AttachmentsPanel entityType="AWARD_BATCH" entityId={awardBatchId} rows={attachments.data} loading={attachments.isPending} canUpload={b.actions.manage}
             showOld={showOld} onShowOld={setShowOld} onChanged={() => void utils.award.attachments.invalidate({ awardBatchId })} />
         ) },

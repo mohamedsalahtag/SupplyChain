@@ -33,6 +33,26 @@ The picked supplier is listed with a **first contact** tag and what will happen:
 
 An RFQ may have only suppliers from outside the list. Permission: `rfq.manage`. Migration 0023: the `RFQ` origin source and `RfqSupplier.OutsideShortlist`.
 
+## Invite more suppliers to an existing RFQ (added 2026-09-25)
+On the RFQ page, the **Suppliers** tab has **Invite more suppliers…**. It is shown while the RFQ is not cancelled and still has quantity to quote.
+
+The window shows:
+- **The RFQ's own shortlist** (from its lines, per origin). Suppliers already invited are marked *invited* and can't be chosen again.
+- **Add a supplier not on the list…**, the same search as when creating an RFQ, for a first contact.
+
+**Invite** does four things:
+1. It adds the suppliers to the RFQ, as at create (origins recorded for a first contact).
+2. It writes *Invited after creation: …* in the RFQ history.
+3. If the RFQ was already **sent**, **Record quotes** comes back on My work until the newcomers have quoted.
+4. It reminds the buyer to send them the supplier view.
+
+Refused:
+- someone already invited
+- a supplier not able to supply the origin (use "not on the list")
+- a blocked supplier, or one not set up for the company
+- a cancelled RFQ, or one with nothing left to quote
+- an RFQ changed by someone else meanwhile (reload)
+
 ## Main path
 1. **Create RFQ** — from the accepted demand's Procurement panel (**Create RFQ…**) or Purchasing → RFQs → **New RFQ** (pick the demand).
 2. **Step 1 · Quantity:** every line with Open quantity, **per approved ETD week** (quantity shifted to another week shows in that week). Quantity to ask for: default all Open, editable down to 1 carton. Lines on hold by a change request show the hold (they can still be asked for; award waits for the decision).

@@ -10,15 +10,17 @@ export type Outside = { supplierCode: string; name: string; country: string; add
  * RFQ builder step 3 (spec 18 addition): invite a supplier that is not on the shortlist — typically a new supplier whose
  * first contact is this RFQ. Any supplier in SAP that is usable for the company; the origins it lacks are recorded for it.
  */
-export function OutsideSuppliers({ demandId, lineIds, value, onChange, shortlisted }: {
-  demandId: string; lineIds: string[]; value: Outside[]; onChange: (v: Outside[]) => void; shortlisted: string[];
+export function OutsideSuppliers({ source, value, onChange, shortlisted, startOpen = false }: {
+  /** A new RFQ (the demand lines chosen) or an existing RFQ (its own lines). */
+  source: { demandId: string; lineIds: string[] } | { rfqId: string };
+  value: Outside[]; onChange: (v: Outside[]) => void; shortlisted: string[]; startOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(value.length > 0);
+  const [open, setOpen] = useState(startOpen || value.length > 0);
   const [typed, setTyped] = useState('');
   const [q, setQ] = useState('');
   const select = useRef<RefSelectProps>(null);
   useEffect(() => { const t = setTimeout(() => setQ(typed), 300); return () => clearTimeout(t); }, [typed]);
-  const search = trpc.rfq.searchSuppliers.useQuery({ demandId, lineIds, q }, { enabled: open && q.trim().length >= 2, placeholderData: (p) => p });
+  const search = trpc.rfq.searchSuppliers.useQuery({ ...source, q }, { enabled: open && q.trim().length >= 2, placeholderData: (p) => p });
   const rows = (search.data?.rows ?? []).filter((r) => !value.some((v) => v.supplierCode === r.supplierCode));
 
   if (!open) {
@@ -45,7 +47,7 @@ export function OutsideSuppliers({ demandId, lineIds, value, onChange, shortlist
                 <span>{r.supplierCode} · {r.name}</span>
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>{[r.country, r.city].filter(Boolean).join(' · ')}{r.origins.length ? ` · supplies ${r.origins.join(', ')}` : ' · no origin yet'}</Typography.Text>
                 {r.problem && <Tag color="red">{r.problem}</Tag>}
-                {!r.problem && shortlisted.includes(r.supplierCode) && <Tag>already on the list above</Tag>}
+                {!r.problem && shortlisted.includes(r.supplierCode) && <Tag>already on the list above, or invited</Tag>}
               </Space>
             ),
           }))} />

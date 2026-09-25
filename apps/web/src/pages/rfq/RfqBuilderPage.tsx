@@ -155,7 +155,7 @@ export function RfqBuilderPage() {
               )}
             </div>
           ))}
-          {!shortlist.isPending && <OutsideSuppliers demandId={demandId} lineIds={lineIds} value={outside} onChange={setOutside}
+          {!shortlist.isPending && <OutsideSuppliers source={{ demandId, lineIds }} value={outside} onChange={setOutside}
             shortlisted={(shortlist.data ?? []).flatMap((g) => g.entries.map((e) => e.supplierCode))} />}
         </Card>
       )}

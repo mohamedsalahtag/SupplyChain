@@ -12,8 +12,10 @@ export default defineConfig({
     viewport: { width: 1440, height: 900 },
   },
   projects: [
-    { name: 'setup', testMatch: /auth\.setup\.ts/ },
-    { name: 'app', dependencies: ['setup'], testIgnore: /auth\.setup\.ts/, use: { storageState: 'e2e/.auth/admin.json' } },
+    // "sync" runs after every "app" test, pass or fail: a SAP sync must not run next to the workflow tests.
+    { name: 'setup', testMatch: /auth\.setup\.ts/, teardown: 'sync' },
+    { name: 'app', dependencies: ['setup'], testIgnore: [/auth\.setup\.ts/, /sap-sync\.spec\.ts/], use: { storageState: 'e2e/.auth/admin.json' } },
+    { name: 'sync', testMatch: /sap-sync\.spec\.ts/, use: { storageState: 'e2e/.auth/admin.json' } },
   ],
   reporter: 'list',
 });

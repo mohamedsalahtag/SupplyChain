@@ -8,6 +8,8 @@ import { searchOutsideSuppliers } from '../../src/modules/rfq/outsideSuppliers.j
 import { recordQuotes } from '../../src/modules/rfq/quotes.js';
 import { getRfq, shortlistFor } from '../../src/modules/rfq/rfqRead.js';
 import { createRfq, sendRfq } from '../../src/modules/rfq/rfqService.js';
+import { inviteOptions, inviteSuppliers } from '../../src/modules/rfq/invite.js';
+import { listWork } from '../../src/modules/workflow/inbox.js';
 import { isoWeekMonday, isoWeekOf } from '../../src/modules/workflow/isoWeek.js';
 import { refreshOrigins } from '../../src/modules/workflow/origins.js';
 import { actor, db, makeUser, runInvariants, uid } from './helpers.js';
@@ -16,7 +18,7 @@ const cmd = () => randomUUID();
 const wk = (n: number) => isoWeekOf(new Date(isoWeekMonday(isoWeekOf(new Date())).getTime() + n * 7 * 86_400_000));
 const SUB = 'Apples Envy NEWSUP';
 const tag = uid('NS');
-const S = { fresh: `${tag}f`, blocked: `${tag}b`, notExt: `${tag}n` };
+const S = { fresh: `${tag}f`, blocked: `${tag}b`, notExt: `${tag}n`, cl1: `${tag}c`, cl2: `${tag}d`, late: `${tag}l` };
 let sales: ReturnType<typeof actor>;
 let proc: ReturnType<typeof actor>;
 
@@ -40,6 +42,9 @@ beforeAll(async () => {
   await supplier(S.fresh, 'NZ'); // new supplier: registered in NZ, never supplied CL to us
   await supplier(S.blocked, 'NZ', { blocked: true });
   await supplier(S.notExt, 'NZ', { org: false });
+  await supplier(S.cl1, 'CL');
+  await supplier(S.cl2, 'CL');
+  await supplier(S.late, 'NZ');
   sales = actor({ id: await makeUser(), permissions: new Set(['demands.open', 'demand.create', 'demand.submit']), companies: new Set(['1000']) });
   proc = actor({ id: await makeUser(), permissions: new Set(['demands.open', 'demand.accept', 'rfqs.open', 'rfq.manage']), companies: new Set(['1000']) });
 });
@@ -83,6 +88,36 @@ describe('RFQ to a supplier outside the shortlist (spec 18 addition)', () => {
     // next time it is on the shortlist for CL, as a supplier with no history yet
     const [again] = await shortlistFor(db, proc, demandId, [line.lineId]);
     expect(again.entries.find((e) => e.supplierCode === S.fresh)?.origins).toEqual(['CL', 'NZ']);
+    expect(await runInvariants()).toEqual([]);
+  });
+
+  it('more suppliers are invited after the RFQ was sent: from its shortlist and outside it; "Record quotes" comes back; no duplicates, stale version refused', async () => {
+    const { demandId } = await createDemand(db, sales, cmd(), '1000');
+    const item = { majorCategory: 'Apples', subMajorCategory: SUB, size: 'S-100', materialClass: 'Cat1', originCode: 'CL', share: '100' };
+    await submitDemand(db, sales, cmd(), demandId, (await getDemand(db, sales, demandId)).rowVer, { notes: '', weeks: [{ etdWeek: wk(5), groups: [{ name: 'Envy', containerCount: 1, capacity: '1000', unit: 'CT', items: [item] }] }] });
+    await acceptDemand(db, proc, cmd(), demandId, (await getDemand(db, proc, demandId)).rowVer);
+    const line = (await getDemand(db, proc, demandId)).weeks[0].lines[0];
+    const { rfqId } = await createRfq(db, proc, cmd(), { demandId, weeks: [], lines: [{ lineId: line.lineId, week: wk(5), qty: '1000' }], suppliers: [S.cl1] });
+    await sendRfq(db, proc, cmd(), rfqId, (await getRfq(db, proc, rfqId)).rowVer);
+    const key = (await getRfq(db, proc, rfqId)).supplierView[0].key;
+    await recordQuotes(db, proc, cmd(), rfqId, S.cl1, 'USD', [{ etdWeek: wk(5), lineKey: key, unitPrice: '17', availableQty: '1000', quotedSku: null }], [{ etdWeek: wk(5), containersOffered: 1 }]);
+    const quoteTask = async () => (await listWork(db, proc, { tab: 'RFQ_TO_QUOTE', page: 1, pageSize: 100 })).rows.filter((x) => x.action.link === `/rfqs/${rfqId}`).length;
+    expect(await quoteTask()).toBe(0); // everyone quoted
+
+    const opts = await inviteOptions(db, proc, rfqId);
+    const cl = opts.groups.find((g) => g.originCode === 'CL')!;
+    expect([cl.invited, cl.entries.some((e) => e.supplierCode === S.cl2)]).toEqual([[S.cl1], true]);
+
+    const rowVer = (await getRfq(db, proc, rfqId)).rowVer;
+    await expect(inviteSuppliers(db, proc, cmd(), rfqId, rowVer, { suppliers: [S.late], extraSuppliers: [] })).rejects.toMatchObject({ code: 'SUPPLIER_ORIGIN_MISMATCH' });
+    await inviteSuppliers(db, proc, cmd(), rfqId, rowVer, { suppliers: [S.cl2], extraSuppliers: [S.late] });
+    const r = await getRfq(db, proc, rfqId);
+    expect(r.suppliers.map((s) => [s.supplierCode, s.outsideShortlist]).sort()).toEqual([[S.cl1, false], [S.cl2, false], [S.late, true]].sort());
+    expect(await quoteTask()).toBe(1); // their quotes are to be recorded
+    await expect(inviteSuppliers(db, proc, cmd(), rfqId, rowVer, { suppliers: [S.cl1], extraSuppliers: [] })).rejects.toMatchObject({ code: 'NO_SUPPLIER' }); // already invited
+    await expect(inviteSuppliers(db, proc, cmd(), rfqId, rowVer, { suppliers: [], extraSuppliers: [S.fresh] })).rejects.toMatchObject({ code: 'STALE_WRITE' }); // the RFQ changed meanwhile
+    await expect(inviteSuppliers(db, actor({ id: proc.id, permissions: proc.permissions, companies: new Set(['2000']) }), cmd(), rfqId, r.rowVer, { suppliers: [S.cl2], extraSuppliers: [] })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await recordQuotes(db, proc, cmd(), rfqId, S.late, 'USD', [{ etdWeek: wk(5), lineKey: key, unitPrice: '16.5', availableQty: '1000', quotedSku: null }], [{ etdWeek: wk(5), containersOffered: 1 }]);
     expect(await runInvariants()).toEqual([]);
   });
 });

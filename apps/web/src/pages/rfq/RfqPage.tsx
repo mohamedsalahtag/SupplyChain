@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { App, Button, Descriptions, Input, InputNumber, List, Modal, Select, Skeleton, Space, Table, Tabs, Tag, Tooltip, Typography } from 'antd';
-import { DownloadOutlined, EditOutlined, PlusOutlined, SendOutlined, StopOutlined, SwapOutlined, TrophyOutlined } from '@ant-design/icons';
+import { DownloadOutlined, EditOutlined, PlusOutlined, SendOutlined, StopOutlined, SwapOutlined, TrophyOutlined, UserAddOutlined } from '@ant-design/icons';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AwardsTab } from '../award/AwardsListPage';
 import { StatusTag } from '../../components/StatusTag';
@@ -16,6 +16,8 @@ import { MATCH_LABEL, n, RFQ_LINE_STATUS, RFQ_STATUS } from './rfqLabels';
 import { RecordQuotesDrawer } from './RecordQuotesDrawer';
 import { AddQuantityModal, MixChangeDrawer, WeekShiftModal } from './ProcRequests';
 import { LoadError } from '../../components/LoadError';
+import { countOf, TabLabel } from '../../components/TabLabel';
+import { InviteSuppliersModal } from './InviteSuppliersModal';
 
 type Rfq = RouterOutputs['rfq']['get'];
 type Line = Rfq['lines'][number];
@@ -37,6 +39,8 @@ export function RfqPage() {
   const history = trpc.rfq.history.useQuery({ rfqId });
   const [showOld, setShowOld] = useState(false);
   const attachments = trpc.rfq.attachments.useQuery({ rfqId, includeOld: showOld });
+  const [inviting, setInviting] = useState(false);
+  const awards = trpc.award.list.useQuery({ rfqId, page: 1, pageSize: 100 }); // same query as the Awards tab: its count
   const releaseReasons = trpc.rfq.reasons.useQuery({ context: 'RELEASE' });
   const cancelReasons = trpc.rfq.reasons.useQuery({ context: 'RFQ_CANCEL' });
   const send = trpc.rfq.send.useMutation();
@@ -101,7 +105,7 @@ export function RfqPage() {
       ]} />
 
       <Tabs items={[
-        { key: 'lines', label: 'Lines', children: weeks.map((w) => (
+        { key: 'lines', label: <TabLabel text="Lines" count={r.lines.length} />, children: weeks.map((w) => (
           <Table<Line> key={w} size="small" bordered pagination={false} rowKey="rfqLineId" dataSource={r.lines.filter((l) => l.week === w)} tableLayout="fixed" style={{ marginBottom: 10 }}
             title={() => <Space><Typography.Text strong>{w}</Typography.Text><Tag>{r.weeks.find((x) => x.etdWeek === w)?.containerCount ?? 0} containers</Tag></Space>}
             columns={[
@@ -118,7 +122,7 @@ export function RfqPage() {
                 {r.actions.weekShift && l.canShift && <Button size="small" type="link" onClick={() => setShifting(l)}>Week shift…</Button>}</Space> },
             ]} />
         )) },
-        { key: 'quotes', label: `Quotes (${r.quotes.length})`, children: (
+        { key: 'quotes', label: <TabLabel text="Quotes" count={r.quotes.length} />, children: (
           <Space direction="vertical" style={{ width: '100%' }}>
             <Table size="small" bordered pagination={false} rowKey={(v) => `${v.week}|${v.key}`} dataSource={r.supplierView} tableLayout="fixed"
               columns={[
@@ -153,7 +157,8 @@ export function RfqPage() {
             )}
           </Space>
         ) },
-        { key: 'suppliers', label: 'Suppliers', children: (
+        { key: 'suppliers', label: <TabLabel text="Suppliers" count={r.suppliers.length} />, children: (<>
+          {r.actions.invite && <Button icon={<UserAddOutlined />} style={{ marginBottom: 8 }} onClick={() => setInviting(true)}>Invite more suppliers…</Button>}
           <Table size="small" bordered pagination={false} rowKey="supplierCode" dataSource={r.suppliers} tableLayout="fixed"
             columns={[
               { title: 'Supplier', key: 's', width: 280, ellipsis: true, render: (_: unknown, s) => <>{s.supplierCode} · {s.name}{s.outsideShortlist && <Tag color="purple" style={{ marginInlineStart: 6 }}>first contact</Tag>}</> },
@@ -164,14 +169,15 @@ export function RfqPage() {
               )) },
               { title: 'Quoted rows', dataIndex: 'quotedRows', width: 110, align: 'right' },
             ]} />
-        ) },
-        { key: 'awards', label: 'Awards', children: <AwardsTab rfqId={rfqId} /> },
-        { key: 'comments', label: `Comments${thread.data?.length ? ` (${thread.data.length})` : ''}`, children: <ThreadPanel entries={thread.data} loading={thread.isPending} canAdd={false} onAdd={async () => undefined} /> },
-        { key: 'attachments', label: 'Attachments', children: (
+          <InviteSuppliersModal open={inviting} onClose={() => setInviting(false)} rfqId={rfqId} rfqNo={r.rfqNo} rowVer={r.rowVer} sent={r.manualStatus === 'SENT'} />
+        </>) },
+        { key: 'awards', label: <TabLabel text="Awards" count={countOf(awards.data)} />, children: <AwardsTab rfqId={rfqId} /> },
+        { key: 'comments', label: <TabLabel text="Comments" count={countOf(thread.data)} />, children: <ThreadPanel entries={thread.data} loading={thread.isPending} canAdd={false} onAdd={async () => undefined} /> },
+        { key: 'attachments', label: <TabLabel text="Attachments" count={attachments.data?.filter((a) => a.isCurrent).length} />, children: (
           <AttachmentsPanel entityType="RFQ" entityId={rfqId} rows={attachments.data} loading={attachments.isPending} canUpload={r.manualStatus !== 'CANCELLED'}
             showOld={showOld} onShowOld={setShowOld} onChanged={() => void utils.rfq.attachments.invalidate({ rfqId })} />
         ) },
-        { key: 'history', label: 'History', children: (
+        { key: 'history', label: <TabLabel text="History" count={countOf(history.data)} />, children: (
           <List size="small" bordered dataSource={history.data ?? []} loading={history.isPending}
             renderItem={(h) => <List.Item><Space wrap><Typography.Text type="secondary">{formatDateTime(h.at)}</Typography.Text><span>{h.by}</span><Typography.Text strong>{h.event.replace('RFQ_', '').replace('_', ' ').toLowerCase()}</Typography.Text></Space></List.Item>} />
         ) },

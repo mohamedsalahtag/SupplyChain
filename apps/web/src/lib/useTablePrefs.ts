@@ -6,6 +6,12 @@ import { trpc } from './trpc';
 export const PAGE_SIZE_OPTIONS = TABLE_PAGE_SIZES.map(String);
 
 export type TablePrefs = ReturnType<typeof useTablePrefs>;
+
+/** antd `pagination` for a plain Table whose rows are all loaded: the rows-per-page choice is saved like AppTable's. */
+export const savedPagination = (prefs: TablePrefs) => ({
+  pageSize: prefs.pageSize, pageSizeOptions: PAGE_SIZE_OPTIONS, showSizeChanger: true, size: 'small' as const,
+  onChange: (_page: number, size: number) => { if (size !== prefs.pageSize) prefs.setPageSize(size); },
+});
 /** hiddenColumns null = the user never chose; the table's defaults apply. */
 type Prefs = { pageSize: number; hiddenColumns: string[] | null };
 

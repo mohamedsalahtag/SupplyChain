@@ -9,6 +9,7 @@ import { formatDateTime, type RouterOutputs } from '../../lib/format';
 import { trpc } from '../../lib/trpc';
 import { errorText, newCommandId, qtyText } from '../../lib/workflow';
 import { LoadError } from '../../components/LoadError';
+import { countOf, TabLabel } from '../../components/TabLabel';
 
 type Cr = RouterOutputs['cr']['get'];
 type Item = Cr['items'][number];
@@ -172,14 +173,14 @@ export function ChangeRequestPage() {
       )}
 
       <Tabs items={[
-        { key: 'comments', label: `Comments${thread.data?.length ? ` (${thread.data.length})` : ''}`, children: (
+        { key: 'comments', label: <TabLabel text="Comments" count={countOf(thread.data)} />, children: (
           <ThreadPanel entries={thread.data} loading={thread.isPending} canAdd={false} onAdd={async () => undefined} />
         ) },
-        { key: 'attachments', label: 'Attachments', children: (
+        { key: 'attachments', label: <TabLabel text="Attachments" count={attachments.data?.filter((a) => a.isCurrent).length} />, children: (
           <AttachmentsPanel entityType="CR" entityId={crId} rows={attachments.data} loading={attachments.isPending} canUpload={c.status === 'SUBMITTED'}
             showOld={showOld} onShowOld={setShowOld} onChanged={() => void utils.cr.attachments.invalidate({ crId })} />
         ) },
-        { key: 'history', label: 'History', children: (
+        { key: 'history', label: <TabLabel text="History" count={countOf(history.data)} />, children: (
           <List size="small" bordered dataSource={history.data ?? []} loading={history.isPending}
             renderItem={(h) => <List.Item><Space wrap><Typography.Text type="secondary">{formatDateTime(h.at)}</Typography.Text><span>{h.by}</span><Typography.Text strong>{h.event.replace('CR_', '').toLowerCase()}</Typography.Text></Space></List.Item>} />
         ) },

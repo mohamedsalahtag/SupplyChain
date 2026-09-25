@@ -10,8 +10,9 @@ import { useCan } from '../../lib/auth';
 import { formatDateTime, type RouterOutputs } from '../../lib/format';
 import { PO_STATUS } from '../../lib/statuses';
 import { trpc } from '../../lib/trpc';
-import { useTablePrefs } from '../../lib/useTablePrefs';
+import { savedPagination, useTablePrefs } from '../../lib/useTablePrefs';
 import { errorText, newCommandId } from '../../lib/workflow';
+import { countOf, TabLabel } from '../../components/TabLabel';
 
 type Row = RouterOutputs['po']['list']['rows'][number];
 type Status = 'DRAFT' | 'VALIDATED' | 'SUBMITTED' | 'UNKNOWN' | 'CREATED' | 'REJECTED' | 'VOID';
@@ -21,6 +22,10 @@ const byLabel = Object.fromEntries(Object.entries(PO_STATUS).map(([k, v]) => [v.
 export function PoDraftsListPage() {
   const [params, setParams] = useSearchParams();
   const can = useCan();
+  // Counts on the tab titles (the same queries as the tabs: shared cache)
+  const drafts = trpc.po.list.useQuery({ page: 1, pageSize: 25 });
+  const requests = trpc.po.requests.useQuery();
+  const faults = trpc.po.faults.useQuery(undefined, { enabled: can(P.configSapEdit) });
   return (
     <Space direction="vertical" size={10} style={{ width: '100%' }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -31,9 +36,9 @@ export function PoDraftsListPage() {
         <StatusLegend title="What do the PO statuses mean?" defs={PO_STATUS} />
       </div>
       <Tabs activeKey={params.get('tab') ?? 'drafts'} onChange={(k) => setParams({ tab: k }, { replace: true })} items={[
-        { key: 'drafts', label: 'PO drafts', children: <Drafts /> },
-        { key: 'mdr', label: 'Master data requests', children: <Requests /> },
-        ...(can(P.configSapEdit) ? [{ key: 'stub', label: 'SAP connection (stub)', children: <Stub /> }] : []),
+        { key: 'drafts', label: <TabLabel text="PO drafts" count={drafts.data?.total} />, children: <Drafts /> },
+        { key: 'mdr', label: <TabLabel text="Master data requests" count={requests.data?.filter((r) => r.status === 'OPEN').length} />, children: <Requests /> },
+        ...(can(P.configSapEdit) ? [{ key: 'stub', label: <TabLabel text="SAP simulator" count={countOf(faults.data)} />, children: <Stub /> }] : []),
       ]} />
     </Space>
   );
@@ -78,9 +83,10 @@ function Requests() {
   const can = useCan();
   const utils = trpc.useUtils();
   const q = trpc.po.requests.useQuery();
+  const prefs = useTablePrefs('po-master-data-requests');
   const close = trpc.po.closeRequest.useMutation();
   return (
-    <Table size="small" rowKey="mdrId" dataSource={q.data} loading={q.isPending} pagination={{ pageSize: 25 }} locale={{ emptyText: 'No requests' }} columns={[
+    <Table size="small" rowKey="mdrId" dataSource={q.data} loading={q.isPending} pagination={savedPagination(prefs)} locale={{ emptyText: 'No requests' }} columns={[
       { title: 'Material missing in SAP', dataIndex: 'label' }, { title: 'Request', dataIndex: 'note' },
       { title: 'Asked by', key: 'b', render: (_: unknown, r: RouterOutputs['po']['requests'][number]) => `${r.createdBy} · ${formatDateTime(r.createdAt)}` },
       { title: 'Status', key: 's', width: 110, render: (_: unknown, r: RouterOutputs['po']['requests'][number]) => <Tag color={r.status === 'OPEN' ? 'orange' : 'green'}>{r.status === 'OPEN' ? 'Open' : 'Done'}</Tag> },

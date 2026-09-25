@@ -155,6 +155,8 @@ export async function getRfq(db: Db, actor: Actor, rfqId: string) {
       recordQuotes: manage && r.ManualStatus === 'SENT' && inRfq + quoted > 0,
       cancel: manage && r.ManualStatus !== 'CANCELLED' && awarded === 0 && status !== 'CLOSED',
       release: manage && r.ManualStatus !== 'CANCELLED',
+      /** Spec 18 addition: more suppliers after creation, while something is left to quote. */
+      invite: manage && r.ManualStatus !== 'CANCELLED' && inRfq + quoted > 0,
       /** Spec 19: Procurement change requests from this RFQ. */
       addQuantity: propose, mixChange: propose, weekShift: propose,
       /** Spec 20: award quoted quantity. */

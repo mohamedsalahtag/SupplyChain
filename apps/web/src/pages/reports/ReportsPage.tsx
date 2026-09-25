@@ -8,6 +8,7 @@ import { downloadXlsx } from '../../lib/excel';
 import { useTablePrefs } from '../../lib/useTablePrefs';
 import { formatDateTime, type RouterOutputs } from '../../lib/format';
 import { trpc } from '../../lib/trpc';
+import { countOf, TabLabel } from '../../components/TabLabel';
 import { n } from '../rfq/rfqLabels';
 import { APPLY_STATUS, CR_STATUS, CR_TYPE } from '../changes/ChangeRequestPage';
 
@@ -28,6 +29,9 @@ export function ReportsPage() {
   const [params, setParams] = useSearchParams();
   const [filter, setFilter] = useState<Filter>({});
   const [search, setSearch] = useState('');
+  // Row counts on the tab titles: the same queries the tabs run (shared cache)
+  const execCount = trpc.reports.execution.useQuery(filter, { placeholderData: (p) => p });
+  const crCount = trpc.reports.changeRequests.useQuery(filter, { placeholderData: (p) => p });
   const setRange = (r: [Dayjs | null, Dayjs | null] | null) =>
     setFilter((f) => ({ ...f, from: r?.[0]?.format('YYYY-MM-DD'), to: r?.[1]?.format('YYYY-MM-DD') }));
   return (
@@ -45,8 +49,8 @@ export function ReportsPage() {
         </Space>
       </div>
       <Tabs activeKey={params.get('tab') ?? 'execution'} onChange={(k) => setParams({ tab: k }, { replace: true })} destroyOnHidden items={[
-        { key: 'execution', label: 'Demand execution', children: <Execution filter={filter} /> },
-        { key: 'cr', label: 'Change request register', children: <CrRegister filter={filter} /> },
+        { key: 'execution', label: <TabLabel text="Demand execution" count={countOf(execCount.data)} />, children: <Execution filter={filter} /> },
+        { key: 'cr', label: <TabLabel text="Change request register" count={countOf(crCount.data)} />, children: <CrRegister filter={filter} /> },
         { key: 'performance', label: 'Performance', children: <Performance filter={filter} /> },
       ]} />
     </Space>

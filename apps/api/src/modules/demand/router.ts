@@ -1,3 +1,4 @@
+import { sql } from 'kysely';
 /** Demands (specs 12, 13). Thin: every rule lives in demandService / demandRead. */
 import { DEFAULT_TABLE_PAGE_SIZE, P, TABLE_PAGE_SIZES } from '@supplychain/shared';
 import { z } from 'zod';
@@ -41,6 +42,20 @@ export const demandRouter = router({
     const versions = await listVersions(ctx.db, input.demandId);
     const baseline = versions.find((v) => v.versionNo === 1);
     return versions.map((v) => ({ ...v, diffFromBaseline: baseline && v.versionNo !== 1 ? diffSnapshots(baseline.snapshot, v.snapshot) : [] }));
+  }),
+
+  /** The numbers on the demand's tabs in one light query (the lists load only when a tab is opened). */
+  tabCounts: open.input(id).query(async ({ ctx, input }) => {
+    await assertEntityAccess(ctx.db, await loadActor(ctx.db, ctx.user), 'DEMAND', input.demandId, false);
+    const d = input.demandId;
+    const r = (await sql<{ Versions: number; Events: number; Moves: number; Crs: number; Merges: number; Awards: number }>`SELECT
+      (SELECT COUNT(*) FROM scm.DemandVersion WHERE DemandId = ${d}) AS Versions,
+      (SELECT COUNT(*) FROM scm.DomainEvent e WHERE (e.EntityType = 'DEMAND' AND e.EntityId = ${d}) OR e.DemandId = ${d}) AS Events,
+      (SELECT COUNT(*) FROM scm.SliceHistory h JOIN scm.QtySlice s ON s.SliceId = h.SliceId JOIN scm.DemandLine l ON l.LineId = s.LineId WHERE l.DemandId = ${d}) AS Moves,
+      (SELECT COUNT(*) FROM scm.ChangeRequest WHERE DemandId = ${d}) AS Crs,
+      (SELECT COUNT(*) FROM scm.MergeRecord WHERE SourceDemandId = ${d} OR TargetDemandId = ${d}) AS Merges,
+      (SELECT COUNT(*) FROM scm.AwardBatch WHERE DemandId = ${d}) AS Awards`.execute(ctx.db)).rows[0];
+    return { versions: Number(r.Versions), history: Number(r.Events) + Number(r.Moves), crs: Number(r.Crs), merges: Number(r.Merges), awards: Number(r.Awards) };
   }),
 
   history: open.input(id).query(async ({ ctx, input }) => {

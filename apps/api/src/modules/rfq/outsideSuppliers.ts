@@ -13,13 +13,26 @@ import type { Db, Tx } from '../workflow/tx.js';
 
 const P_MANAGE = 'rfq.manage';
 
-/** Suppliers matching a search, with what inviting them would add and why one cannot be invited. */
+/** Suppliers matching a search, with what inviting them would add and why one cannot be invited — for a new RFQ (demand lines). */
 export async function searchOutsideSuppliers(db: Db, actor: Actor, demandId: string, lineIds: string[], q: string) {
   const d = await db.selectFrom('scm.Demand').select(['CompanyCode']).where('DemandId', '=', demandId).executeTakeFirst();
   if (!d || !actor.companies.has(d.CompanyCode) || !hasPermission(actor, P_MANAGE)) throw new NotFoundError(`Demand ${demandId}`);
   const needed = lineIds.length
     ? [...new Set((await db.selectFrom('scm.DemandLine').select('OriginCode').where('DemandId', '=', demandId).where('LineId', 'in', lineIds).execute()).map((l) => l.OriginCode))].sort()
     : [];
+  return searchFor(db, d.CompanyCode, needed, q);
+}
+
+/** The same search for an RFQ that exists (invite more suppliers): the origins are the RFQ's live lines. */
+export async function searchOutsideSuppliersForRfq(db: Db, actor: Actor, rfqId: string, q: string) {
+  const r = await db.selectFrom('scm.Rfq').select(['CompanyCode']).where('RfqId', '=', rfqId).executeTakeFirst();
+  if (!r || !actor.companies.has(r.CompanyCode) || !hasPermission(actor, P_MANAGE)) throw new NotFoundError(`RFQ ${rfqId}`);
+  const needed = [...new Set((await db.selectFrom('scm.RfqLine').select('OriginCode').where('RfqId', '=', rfqId).where('IsCancelled', '=', false).execute()).map((l) => l.OriginCode))].sort();
+  return searchFor(db, r.CompanyCode, needed, q);
+}
+
+async function searchFor(db: Db, companyCode: string, needed: string[], q: string) {
+  const d = { CompanyCode: companyCode };
   const term = q.trim();
   if (term.length < 2) return { origins: needed, rows: [] };
   const like = `%${term.replace(/[[%_]/g, '[$&]')}%`;
