@@ -68,7 +68,7 @@ export async function openInbox(db: Db | Tx, item: OpenItem): Promise<void> {
     .where('ItemType', '=', item.itemType)
     .where('EntityType', '=', item.entityType)
     .where('EntityId', '=', entityId)
-    .where('IsOpen', '=', true)
+    .where(sql<SqlBool>`IsOpen = 1`) // literal: the one-open-item index (filtered on IsOpen = 1) is then usable
     .executeTakeFirst();
   if (Number(refreshed.numUpdatedRows) > 0) return;
 
@@ -104,7 +104,7 @@ export async function closeInbox(db: Db | Tx, itemType: string, entityType: stri
     .where('ItemType', '=', itemType)
     .where('EntityType', '=', entityType)
     .where('EntityId', '=', String(entityId))
-    .where('IsOpen', '=', true)
+    .where(sql<SqlBool>`IsOpen = 1`) // literal: the one-open-item index (filtered on IsOpen = 1) is then usable
     .executeTakeFirst();
   return Number(r.numUpdatedRows);
 }
@@ -114,7 +114,8 @@ type Eb = ExpressionBuilder<Database & { i: Database['scm.InboxItem'] }, 'i'>;
 /** Open items this actor may act on: their permissions, and their companies or no company. */
 function visibleTo(actor: Actor) {
   return (eb: Eb) => {
-    const parts: Expression<SqlBool>[] = [eb('i.IsOpen', '=', true), eb.or([eb('i.ExcludeUserId', 'is', null), eb('i.ExcludeUserId', '<>', actor.id)])];
+    // A literal (not a parameter), so SQL Server can use the index of open items only (IX_InboxItem_OpenItems).
+    const parts: Expression<SqlBool>[] = [sql<SqlBool>`i.IsOpen = 1`, eb.or([eb('i.ExcludeUserId', 'is', null), eb('i.ExcludeUserId', '<>', actor.id)])];
     if (!actor.isAdmin) {
       const perms = [...actor.permissions];
       parts.push(perms.length ? eb('i.Permission', 'in', perms) : sql<SqlBool>`1 = 0`);

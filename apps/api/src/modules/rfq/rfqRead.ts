@@ -1,6 +1,6 @@
 /** Reading RFQs (spec 18): builder data, shortlist, one RFQ with its supplier view and quotes, the list, history. */
 import { rfqSteps } from '../workflow/lastStep.js';
-import { sql } from 'kysely';
+import { sql, type RawBuilder } from 'kysely';
 import { anyClass, anySize, skusForSpec } from '../demand/lookups.js';
 import { hasPermission, type Actor } from '../workflow/access.js';
 import { DomainError, NotFoundError } from '../workflow/errors.js';
@@ -167,39 +167,60 @@ export async function getRfq(db: Db, actor: Actor, rfqId: string) {
 
 export type RfqFilters = { q?: string; company?: string[]; status?: string[]; demandId?: string; page: number; pageSize: number };
 
+/**
+ * Purchasing → RFQs. Status, filter and paging run in SQL (database review 2026-09): the list used to load every RFQ of
+ * the company and page in memory, which grew with history and broke past ~2,000 RFQs (SQL Server's parameter limit).
+ * The status is rfqStatus() written in SQL; a status filter needs it for every RFQ, otherwise only the page is summed.
+ */
 export async function listRfqs(db: Db, actor: Actor, f: RfqFilters) {
-  const companies = [...actor.companies];
+  const companies = (f.company?.length ? f.company.filter((c) => actor.companies.has(c)) : [...actor.companies]);
   if (!companies.length) return { rows: [], total: 0 };
-  let q = db.selectFrom('scm.Rfq as r').innerJoin('scm.Demand as d', 'd.DemandId', 'r.DemandId').leftJoin('app.User as u', 'u.UserId', 'r.CreatedBy')
-    .where('r.CompanyCode', 'in', f.company?.length ? f.company.filter((c) => actor.companies.has(c)) : companies);
-  if (f.q) { const p = `%${f.q.replace(/[[%_]/g, '[$&]')}%`; q = q.where((eb) => eb.or([eb('r.RfqNo', 'like', p), eb('d.DemandNo', 'like', p)])); }
-  if (f.demandId) q = q.where('r.DemandId', '=', f.demandId);
-  const rows = await q.select(['r.RfqId', 'r.RfqNo', 'r.DemandId', 'd.DemandNo', 'r.CompanyCode', 'r.ManualStatus', 'r.CreatedAt', 'u.DisplayName as CreatedByName'])
-    .select((eb) => [
-      eb.selectFrom('scm.RfqSupplier as s').whereRef('s.RfqId', '=', 'r.RfqId').select(eb.fn.countAll<number>().as('n')).as('Suppliers'),
-      eb.selectFrom('scm.RfqSupplier as s').whereRef('s.RfqId', '=', 'r.RfqId')
-        .where((e2) => e2.exists(e2.selectFrom('scm.SupplierQuote as x').select('x.QuoteId').whereRef('x.RfqId', '=', 's.RfqId').whereRef('x.SupplierCode', '=', 's.SupplierCode').where('x.IsCurrent', '=', true)))
-        .select(eb.fn.countAll<number>().as('n')).as('Quoted'),
-    ])
-    .orderBy('r.RfqId', 'desc').execute();
-  const ids = rows.map((r) => String(r.RfqId));
-  const agg = ids.length ? (await sql<{ RfqId: string; Weeks: string | null; InRfq: string; Quoted: string; Awarded: string }>`
-    SELECT l.RfqId, MIN(l.ProposedEtdWeek) + CASE WHEN MIN(l.ProposedEtdWeek) <> MAX(l.ProposedEtdWeek) THEN ' – ' + MAX(l.ProposedEtdWeek) ELSE '' END AS Weeks,
+  const like = f.q ? `%${f.q.replace(/[[%_]/g, '[$&]')}%` : null;
+  const status = sql`CASE WHEN r.ManualStatus = 'CANCELLED' THEN 'CANCELLED'
+      WHEN a.InRfq + a.Quoted = 0 AND a.Awarded = 0 THEN 'CLOSED' WHEN r.ManualStatus = 'DRAFT' THEN 'DRAFT'
+      WHEN a.InRfq + a.Quoted = 0 THEN 'FULLY_AWARDED' WHEN a.Awarded > 0 THEN 'PARTIALLY_AWARDED' WHEN a.Quoted > 0 THEN 'QUOTING' ELSE 'SENT' END`;
+  const agg = (ids: RawBuilder<unknown>) => sql`(SELECT l.RfqId, MIN(l.ProposedEtdWeek) AS W1, MAX(l.ProposedEtdWeek) AS W2,
       ISNULL(SUM(CASE WHEN s.ExecState = 'IN_RFQ' THEN s.Qty END), 0) AS InRfq, ISNULL(SUM(CASE WHEN s.ExecState = 'QUOTED' THEN s.Qty END), 0) AS Quoted,
       ISNULL(SUM(CASE WHEN s.ExecState IN (${sql.join(AWARDED)}) THEN s.Qty END), 0) AS Awarded
-    FROM scm.RfqLine l LEFT JOIN scm.QtySlice s ON s.RfqLineId = l.RfqLineId WHERE l.RfqId IN (${sql.join(ids)}) GROUP BY l.RfqId`.execute(db)).rows : [];
-  const steps = await rfqSteps(db, ids); // spec 21: the last step per RFQ
-  let out = rows.map((r) => {
-    const a = agg.find((x) => String(x.RfqId) === String(r.RfqId));
+    FROM scm.RfqLine l LEFT JOIN scm.QtySlice s ON s.RfqLineId = l.RfqLineId WHERE l.RfqId IN (${ids}) GROUP BY l.RfqId)`;
+  const scope = sql`SELECT r.RfqId FROM scm.Rfq r JOIN scm.Demand d ON d.DemandId = r.DemandId WHERE r.CompanyCode IN (${sql.join(companies)})
+    ${like ? sql`AND (r.RfqNo LIKE ${like} OR d.DemandNo LIKE ${like})` : sql``} ${f.demandId ? sql`AND r.DemandId = ${f.demandId}` : sql``}`;
+  const offset = (f.page - 1) * f.pageSize;
+  type Row = { RfqId: string; RfqNo: string; DemandId: string; DemandNo: string; CompanyCode: string; ManualStatus: 'DRAFT' | 'SENT' | 'CANCELLED'; CreatedAt: Date; CreatedByName: string | null;
+    W1: string | null; W2: string | null; InRfq: string; Quoted: string; Awarded: string; Total: number };
+  const pageRows = f.status?.length
+    ? (await sql<Row>`WITH x AS (
+        SELECT r.RfqId, r.RfqNo, r.DemandId, d.DemandNo, r.CompanyCode, r.ManualStatus, r.CreatedAt, u.DisplayName AS CreatedByName, a.W1, a.W2, a.InRfq, a.Quoted, a.Awarded, ${status} AS Status
+        FROM scm.Rfq r JOIN scm.Demand d ON d.DemandId = r.DemandId LEFT JOIN app.[User] u ON u.UserId = r.CreatedBy
+        LEFT JOIN ${agg(scope)} a0 ON a0.RfqId = r.RfqId
+        CROSS APPLY (SELECT a0.W1, a0.W2, ISNULL(a0.InRfq, 0) AS InRfq, ISNULL(a0.Quoted, 0) AS Quoted, ISNULL(a0.Awarded, 0) AS Awarded) a
+        WHERE r.RfqId IN (${scope}))
+      SELECT *, COUNT(*) OVER () AS Total FROM x WHERE Status IN (${sql.join(f.status)}) ORDER BY RfqId DESC OFFSET ${offset} ROWS FETCH NEXT ${f.pageSize} ROWS ONLY`.execute(db)).rows
+    : (await sql<Row>`WITH p AS (SELECT r.RfqId, COUNT(*) OVER () AS Total FROM scm.Rfq r WHERE r.RfqId IN (${scope}) ORDER BY r.RfqId DESC OFFSET ${offset} ROWS FETCH NEXT ${f.pageSize} ROWS ONLY)
+      SELECT r.RfqId, r.RfqNo, r.DemandId, d.DemandNo, r.CompanyCode, r.ManualStatus, r.CreatedAt, u.DisplayName AS CreatedByName, a0.W1, a0.W2,
+        ISNULL(a0.InRfq, 0) AS InRfq, ISNULL(a0.Quoted, 0) AS Quoted, ISNULL(a0.Awarded, 0) AS Awarded, p.Total
+      FROM p JOIN scm.Rfq r ON r.RfqId = p.RfqId JOIN scm.Demand d ON d.DemandId = r.DemandId LEFT JOIN app.[User] u ON u.UserId = r.CreatedBy
+      LEFT JOIN ${agg(sql`SELECT RfqId FROM p`)} a0 ON a0.RfqId = r.RfqId ORDER BY r.RfqId DESC`.execute(db)).rows;
+  const total = Number(pageRows[0]?.Total ?? (f.page > 1 ? (await sql<{ n: number }>`SELECT COUNT(*) AS n FROM scm.Rfq r WHERE r.RfqId IN (${scope})`.execute(db)).rows[0].n : 0));
+  const ids = pageRows.map((r) => String(r.RfqId));
+  // Supplier counts and the last step: for the page only.
+  const [counts, steps] = await Promise.all([
+    ids.length ? sql<{ RfqId: string; Suppliers: number; Quoted: number }>`
+      SELECT s.RfqId, COUNT(*) AS Suppliers, COUNT(q.One) AS Quoted
+      FROM scm.RfqSupplier s OUTER APPLY (SELECT TOP 1 1 AS One FROM scm.SupplierQuote x WHERE x.RfqId = s.RfqId AND x.SupplierCode = s.SupplierCode AND x.IsCurrent = 1) q
+      WHERE s.RfqId IN (${sql.join(ids)}) GROUP BY s.RfqId`.execute(db).then((r) => r.rows) : Promise.resolve([]),
+    rfqSteps(db, ids), // spec 21: the last step per RFQ
+  ]);
+  const rows = pageRows.map((r) => {
+    const c = counts.find((x) => String(x.RfqId) === String(r.RfqId));
     return {
       rfqId: String(r.RfqId), rfqNo: r.RfqNo, demandId: String(r.DemandId), demandNo: r.DemandNo, companyCode: r.CompanyCode,
-      status: rfqStatus(r.ManualStatus, { inRfq: fromDb(a?.InRfq ?? 0), quoted: fromDb(a?.Quoted ?? 0), awarded: fromDb(a?.Awarded ?? 0) }),
-      weeks: a?.Weeks ?? '', suppliers: Number(r.Suppliers ?? 0), quoted: Number(r.Quoted ?? 0), createdBy: r.CreatedByName ?? '', createdAt: r.CreatedAt.toISOString(),
-      lastStep: steps.get(String(r.RfqId))?.at(-1) ?? null,
+      status: rfqStatus(r.ManualStatus, { inRfq: fromDb(r.InRfq), quoted: fromDb(r.Quoted), awarded: fromDb(r.Awarded) }),
+      weeks: r.W1 ? (r.W1 !== r.W2 ? `${r.W1} – ${r.W2}` : r.W1) : '', suppliers: Number(c?.Suppliers ?? 0), quoted: Number(c?.Quoted ?? 0),
+      createdBy: r.CreatedByName ?? '', createdAt: r.CreatedAt.toISOString(), lastStep: steps.get(String(r.RfqId))?.at(-1) ?? null,
     };
   });
-  if (f.status?.length) out = out.filter((r) => f.status!.includes(r.status));
-  return { total: out.length, rows: out.slice((f.page - 1) * f.pageSize, f.page * f.pageSize) };
+  return { total, rows };
 }
 
 export async function rfqHistory(db: Db, rfqId: string) {

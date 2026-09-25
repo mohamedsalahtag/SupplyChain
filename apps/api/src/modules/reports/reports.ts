@@ -151,27 +151,38 @@ export async function performance(db: Db, actor: Actor, f: ReportFilter) {
   }
   // Slice milestones (split ancestry walked for events before a split), quantity-weighted by unit.
   const milestones = (await sql<{ Unit: string; Qty: string; ClockStart: Date; AcceptedAt: Date | null; InRfq: Date | null; Quoted: Date | null; Awarded: Date | null; HandedOff: Date | null; HandoffAccepted: Date | null; PoCreated: Date | null; ConfirmedEtd: Date | null }>`
+    SET NOCOUNT ON;
+    -- 1. Each PO-created slice with its split ancestors, and for each ancestor the moment its child split off (computed once
+    --    per step, not per history row: database review 2026-09, 4.9 million → a fraction of the page reads).
+    CREATE TABLE #lin (LeafId bigint NOT NULL, AncId bigint NOT NULL, CutAt datetime2 NULL);
     WITH lineage AS (
       SELECT s.SliceId AS LeafId, s.SliceId AS AncId, CAST(NULL AS bigint) AS ChildId FROM scm.QtySlice s
         JOIN scm.DemandLine l ON l.LineId = s.LineId JOIN scm.Demand d ON d.DemandId = l.DemandId
         WHERE s.ExecState = 'PO_CREATED' AND d.CompanyCode IN (${sql.join(companies)}) ${acceptedBetween(f)}
       UNION ALL
       SELECT lg.LeafId, p.SplitFromSliceId, p.SliceId FROM lineage lg JOIN scm.QtySlice p ON p.SliceId = lg.AncId WHERE p.SplitFromSliceId IS NOT NULL)
-    SELECT l.Unit, s.Qty, s.EffectiveSubmittedAt AS ClockStart, d.AcceptedAt,
-      MIN(CASE WHEN h.TriggerName = 'ADD_TO_RFQ' THEN h.ChangedAt END) AS InRfq,
-      MIN(CASE WHEN h.TriggerName = 'QUOTE_RECORDED' THEN h.ChangedAt END) AS Quoted,
-      MIN(CASE WHEN h.TriggerName = 'AWARD' THEN h.ChangedAt END) AS Awarded,
-      MIN(CASE WHEN h.TriggerName = 'HANDOFF_SEND' THEN h.ChangedAt END) AS HandedOff,
-      MAX(CASE WHEN h.TriggerName = 'HANDOFF_ACCEPT' THEN h.ChangedAt END) AS HandoffAccepted,
-      MIN(CASE WHEN h.TriggerName = 'SAP_CONFIRMED' THEN h.ChangedAt END) AS PoCreated,
-      (SELECT MIN(sh.ConfirmedEtd) FROM scm.AwardItem ai JOIN scm.AwardShipment sh ON sh.AwardBatchId = ai.AwardBatchId AND sh.SupplierCode = ai.SupplierCode AND sh.EtdWeek = ai.EtdWeek
-        WHERE ai.AwardItemId = s.AwardItemId) AS ConfirmedEtd
-    FROM lineage lg JOIN scm.QtySlice s ON s.SliceId = lg.LeafId JOIN scm.DemandLine l ON l.LineId = s.LineId JOIN scm.Demand d ON d.DemandId = l.DemandId
-    JOIN scm.SliceHistory h ON h.SliceId = lg.AncId
-      -- an ancestor's events count only until its child split off (the parent lives on with its own later path)
-      AND (lg.ChildId IS NULL OR h.ChangedAt <= (SELECT MIN(c.ChangedAt) FROM scm.SliceHistory c WHERE c.SliceId = lg.ChildId))
-    GROUP BY lg.LeafId, l.Unit, s.Qty, s.EffectiveSubmittedAt, d.AcceptedAt, s.AwardItemId
-    OPTION (MAXRECURSION 1000)`.execute(db)).rows;
+    INSERT INTO #lin (LeafId, AncId, CutAt)
+    SELECT lg.LeafId, lg.AncId, CASE WHEN lg.ChildId IS NULL THEN NULL ELSE (SELECT MIN(c.ChangedAt) FROM scm.SliceHistory c WHERE c.SliceId = lg.ChildId) END
+    FROM lineage lg OPTION (MAXRECURSION 1000);
+    CREATE CLUSTERED INDEX IX_lin ON #lin (AncId);
+    -- 2. The milestones: an ancestor's events count only until its child split off (the parent lives on with its own path).
+    WITH m AS (
+      SELECT lg.LeafId,
+        MIN(CASE WHEN h.TriggerName = 'ADD_TO_RFQ' THEN h.ChangedAt END) AS InRfq,
+        MIN(CASE WHEN h.TriggerName = 'QUOTE_RECORDED' THEN h.ChangedAt END) AS Quoted,
+        MIN(CASE WHEN h.TriggerName = 'AWARD' THEN h.ChangedAt END) AS Awarded,
+        MIN(CASE WHEN h.TriggerName = 'HANDOFF_SEND' THEN h.ChangedAt END) AS HandedOff,
+        MAX(CASE WHEN h.TriggerName = 'HANDOFF_ACCEPT' THEN h.ChangedAt END) AS HandoffAccepted,
+        MIN(CASE WHEN h.TriggerName = 'SAP_CONFIRMED' THEN h.ChangedAt END) AS PoCreated
+      FROM #lin lg JOIN scm.SliceHistory h ON h.SliceId = lg.AncId AND (lg.CutAt IS NULL OR h.ChangedAt <= lg.CutAt)
+        AND h.TriggerName IN ('ADD_TO_RFQ', 'QUOTE_RECORDED', 'AWARD', 'HANDOFF_SEND', 'HANDOFF_ACCEPT', 'SAP_CONFIRMED')
+      GROUP BY lg.LeafId)
+    -- aggregated first, then one confirmed ETD per slice (was evaluated before grouping: seconds of CPU)
+    SELECT l.Unit, s.Qty, s.EffectiveSubmittedAt AS ClockStart, d.AcceptedAt, m.InRfq, m.Quoted, m.Awarded, m.HandedOff, m.HandoffAccepted, m.PoCreated, e.ConfirmedEtd
+    FROM m JOIN scm.QtySlice s ON s.SliceId = m.LeafId JOIN scm.DemandLine l ON l.LineId = s.LineId JOIN scm.Demand d ON d.DemandId = l.DemandId
+    OUTER APPLY (SELECT MIN(sh.ConfirmedEtd) AS ConfirmedEtd FROM scm.AwardItem ai JOIN scm.AwardShipment sh ON sh.AwardBatchId = ai.AwardBatchId AND sh.SupplierCode = ai.SupplierCode AND sh.EtdWeek = ai.EtdWeek
+      WHERE ai.AwardItemId = s.AwardItemId) e;
+    DROP TABLE #lin;`.execute(db)).rows;
   const hours = (a: Date | null, b: Date | null) => (a && b ? (new Date(b).getTime() - new Date(a).getTime()) / 36e5 : null);
   const later = (a: Date | null, b: Date | null) => (a && b ? (new Date(a) > new Date(b) ? a : b) : a ?? b);
   const stageDefs: [string, (m: (typeof milestones)[number]) => number | null][] = [

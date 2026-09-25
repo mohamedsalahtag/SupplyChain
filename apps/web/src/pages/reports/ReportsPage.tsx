@@ -154,8 +154,12 @@ function CrRegister({ filter }: { filter: Filter }) {
   );
 }
 
+/** Without dates the performance report covers the last 3 months: over years of history it is the heaviest query (database review 2026-09). */
+const lastQuarter = () => new Date(Date.now() - 91 * 86_400_000).toISOString().slice(0, 10);
+
 function Performance({ filter }: { filter: Filter }) {
-  const q = trpc.reports.performance.useQuery(filter, { placeholderData: (p) => p });
+  const defaulted = !filter.from && !filter.to;
+  const q = trpc.reports.performance.useQuery(defaulted ? { ...filter, from: lastQuarter() } : filter, { placeholderData: (p) => p });
   const p = q.data;
   if (q.error) return <Alert type="error" showIcon message={q.error.message} />;
   if (!p) return <Card loading />;
@@ -175,6 +179,7 @@ function Performance({ filter }: { filter: Filter }) {
   ]);
   return (
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
+      {defaulted && <Alert type="info" showIcon message={`Last 3 months (demands accepted since ${lastQuarter()}). Pick dates above for another period.`} />}
       <div style={{ textAlign: 'right' }}><Button icon={<DownloadOutlined />} disabled={!p.headline.length} onClick={() => void exportXlsx()}>Export to Excel</Button></div>
       {p.headline.length === 0 && <Empty description="No accepted demands in this period" />}
       {p.headline.map((u) => (

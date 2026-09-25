@@ -9,12 +9,24 @@ import type { Db, Tx } from './tx.js';
 export type EntryKind = 'COMMENT' | 'SYSTEM' | 'DECISION' | 'CLARIFICATION';
 
 export async function getOrCreateThread(tx: Tx, entityType: string, entityId: string | number): Promise<string> {
-  const id = String(entityId);
-  const found = (await sql<{ ThreadId: string }>`
-    SELECT ThreadId FROM scm.Thread WITH (UPDLOCK, HOLDLOCK) WHERE EntityType = ${entityType} AND EntityId = ${id}`.execute(tx)).rows[0];
-  if (found) return String(found.ThreadId);
-  const created = await tx.insertInto('scm.Thread').values({ EntityType: entityType, EntityId: id }).output('inserted.ThreadId').executeTakeFirstOrThrow();
-  return String(created.ThreadId);
+  const r = await sql<{ ThreadId: string }>`SET NOCOUNT ON; ${threadSql(0, entityType, String(entityId))} SELECT CAST(@thread0 AS nvarchar(20)) AS ThreadId;`.execute(tx);
+  return String(r.rows[0].ThreadId);
+}
+
+/**
+ * The object's thread into `@thread<n>`, created if missing. No HOLDLOCK: a range lock on a missing key made new objects
+ * with neighbouring ids (demands submitted at the same time) queue behind each other for their whole transaction
+ * (database review 2026-09). The unique index still guarantees one thread per object: when two transactions create it
+ * at the same moment, the second gets a duplicate key, ignores it and reads the first one's thread.
+ */
+function threadSql(n: number, entityType: string, id: string): RawBuilder<unknown> {
+  const t = sql.raw(`@thread${n}`);
+  return sql`DECLARE ${t} bigint = (SELECT ThreadId FROM scm.Thread WHERE EntityType = ${entityType} AND EntityId = ${id});
+IF ${t} IS NULL BEGIN
+  BEGIN TRY INSERT INTO scm.Thread (EntityType, EntityId) VALUES (${entityType}, ${id}); SET ${t} = SCOPE_IDENTITY(); END TRY
+  BEGIN CATCH IF ERROR_NUMBER() NOT IN (2601, 2627) THROW; END CATCH;
+  IF ${t} IS NULL SET ${t} = (SELECT ThreadId FROM scm.Thread WHERE EntityType = ${entityType} AND EntityId = ${id});
+END;`;
 }
 
 type NewEntry = { entityType: string; entityId: string | number; kind: EntryKind; body: string; authorUserId: number | null; eventId?: string | null; correctsEntryId?: string | null };
@@ -28,8 +40,7 @@ export function threadEntrySql(n: number, e: NewEntry, eventVar?: string): RawBu
   const t = sql.raw(`@thread${n}`);
   const id = String(e.entityId);
   const ev = eventVar ? sql.raw(`@${eventVar}`) : sql`${e.eventId ?? null}`;
-  return sql`DECLARE ${t} bigint = (SELECT ThreadId FROM scm.Thread WITH (UPDLOCK, HOLDLOCK) WHERE EntityType = ${e.entityType} AND EntityId = ${id});
-IF ${t} IS NULL BEGIN INSERT INTO scm.Thread (EntityType, EntityId) VALUES (${e.entityType}, ${id}); SET ${t} = SCOPE_IDENTITY(); END;
+  return sql`${threadSql(n, e.entityType, id)}
 INSERT INTO scm.ThreadEntry (ThreadId, EntryKind, Body, AuthorUserId, EventId, CorrectsEntryId) VALUES (${t}, ${e.kind}, ${e.body}, ${e.authorUserId}, ${ev}, ${e.correctsEntryId ?? null});
 DECLARE ${sql.raw(`@entry${n}`)} bigint = SCOPE_IDENTITY();`;
 }

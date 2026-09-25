@@ -149,10 +149,15 @@ export type ListFilter = {
 export async function listDemands(db: Db, actor: Actor, f: ListFilter) {
   const companies = [...actor.companies];
   if (companies.length === 0) return { total: 0, rows: [] };
-  let q = db.selectFrom('scm.Demand as d').innerJoin('scm.vDemandStatus as s', 's.DemandId', 'd.DemandId').where('d.CompanyCode', 'in', companies);
+  // The status is only computed for the page — or, with a status filter, as a filter (database review 2026-09: joining it
+  // before paging worked out the status of every demand of the company to show 50).
+  let q = db.selectFrom('scm.Demand as d').where('d.CompanyCode', 'in', companies);
   if (f.mine) q = q.where('d.CreatedBy', '=', actor.id);
   if (f.company?.length) q = q.where('d.CompanyCode', 'in', f.company);
-  if (f.status?.length) q = q.where('s.Status', 'in', f.status);
+  if (f.status?.length) {
+    const wanted = f.status;
+    q = q.where((eb) => eb.exists(eb.selectFrom('scm.vDemandStatus as s').select('s.DemandId').whereRef('s.DemandId', '=', 'd.DemandId').where('s.Status', 'in', wanted)));
+  }
   if (f.q) {
     const p = `%${f.q.replace(/[[%_]/g, '[$&]')}%`;
     q = q.where((eb) => eb.or([
@@ -167,11 +172,13 @@ export async function listDemands(db: Db, actor: Actor, f: ListFilter) {
   }
   const [rows, count] = await Promise.all([
     q.leftJoin('app.User as u', 'u.UserId', 'd.CreatedBy')
-      .select(['d.DemandId', 'd.DemandNo', 'd.CompanyCode', 's.Status', 'd.CreatedAt', 'd.SubmittedAt', 'd.AcceptedAt', 'd.CurrentVersion', 'u.DisplayName as CreatedByName'])
+      .select(['d.DemandId', 'd.DemandNo', 'd.CompanyCode', 'd.CreatedAt', 'd.SubmittedAt', 'd.AcceptedAt', 'd.CurrentVersion', 'u.DisplayName as CreatedByName'])
       .orderBy('d.DemandId', 'desc').offset((f.page - 1) * f.pageSize).fetch(f.pageSize).execute(),
     q.select((eb) => eb.fn.countAll<number>().as('n')).executeTakeFirstOrThrow(),
   ]);
   const ids = rows.map((r) => String(r.DemandId));
+  const statusOf = new Map((ids.length ? await db.selectFrom('scm.vDemandStatus').select(['DemandId', 'Status']).where('DemandId', 'in', ids).execute() : [])
+    .map((x) => [String(x.DemandId), x.Status]));
   const [weeks, qty] = ids.length
     ? await Promise.all([
         db.selectFrom('scm.DemandWeek').select(['DemandId', 'EtdWeek', 'ContainerCount']).where('DemandId', 'in', ids).orderBy('EtdWeek').execute(),
@@ -195,12 +202,13 @@ export async function listDemands(db: Db, actor: Actor, f: ListFilter) {
     rows: rows.map((r) => {
       const id = String(r.DemandId);
       const ws = weeks.filter((w) => String(w.DemandId) === id);
+      const status = statusOf.get(id) ?? 'DRAFT';
       return {
-        demandId: id, demandNo: r.DemandNo, companyCode: r.CompanyCode, status: r.Status, createdBy: r.CreatedByName ?? '', createdAt: r.CreatedAt.toISOString(),
+        demandId: id, demandNo: r.DemandNo, companyCode: r.CompanyCode, status, createdBy: r.CreatedByName ?? '', createdAt: r.CreatedAt.toISOString(),
         submittedAt: r.SubmittedAt?.toISOString() ?? null, acceptedAt: r.AcceptedAt?.toISOString() ?? null, currentVersion: Number(r.CurrentVersion),
         weeks: ws.map((w) => w.EtdWeek.slice(5)).join(', '), containers: ws.reduce((s, w) => s + Number(w.ContainerCount), 0),
         lines: qty.filter((x) => String(x.DemandId) === id).reduce((s, x) => s + Number(x.lines), 0),
-        requested: perUnit(id, 'req'), open: r.Status === 'DRAFT' || r.Status === 'SUBMITTED' || r.Status === 'RETURNED' ? '' : perUnit(id, 'open'),
+        requested: perUnit(id, 'req'), open: status === 'DRAFT' || status === 'SUBMITTED' || status === 'RETURNED' ? '' : perUnit(id, 'open'),
         lastStep: steps.get(id)?.at(-1) ?? null,
         progress: progressOf(progressRows.filter((x) => String(x.DemandId) === id)),
         mergedInto: mergedRows.get(id) ?? null,

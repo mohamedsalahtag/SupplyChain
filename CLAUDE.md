@@ -60,8 +60,14 @@ Built stage by stage from `Demand_to_PO_Execution_Plan_v5.md`; one stage at a ti
 - **Separation of duties:** the creator of a demand can't accept it; whoever handed off can't accept the handoff; nobody decides their own CR (admins excepted). Non-admin user/role editors can only give what they hold (`assertMayGrant`, `assertMayEditRole`).
 - **Reports (spec 24)** read the ledger directly (`modules/reports`): never add across units, a zero denominator is N/A, and the From/To filter applies to every section.
 - **Git:** `https://github.com/mohamedsalahtag/SupplyChain.git`, branch `main`. Commit only when the user asks.
-- **Migrations:** 0021 = PO and SAP outbox, 0022 = `reports.open` grants, 0023 = RFQ to a supplier outside the shortlist, 0024 = saved page sizes of 25 → 50.
-- **Next migration number: 0025.**
+- **Migrations:** 0021 = PO and SAP outbox, 0022 = `reports.open` grants, 0023 = RFQ to a supplier outside the shortlist, 0024 = saved page sizes of 25 → 50, 0025–0028 = database review (indexes, status view; 0027's indexed views removed again by 0028).
+- **Next migration number: 0029.**
+- **Database performance rules (review 2026-09-26, `docs/review/2026-09-database-review.md`):**
+  - Lists page **in SQL** and fetch details for the page only. Never load a whole table to filter or page in memory, and never send an unbounded list of IDs as parameters (SQL Server stops at ~2,100 parameters and 10,000 variables).
+  - A **filtered index** (`WHERE IsOpen = 1`, `IsCurrent = 1`) is only used when the query writes that value as a **literal** (`sql\`IsOpen = 1\``), never as a parameter.
+  - **Never `UPDLOCK, HOLDLOCK` on a key that may not exist yet** (get-or-create): it takes a range lock, and objects created together (neighbouring ids) queue for their whole transaction. Insert and treat a duplicate key as "already created" (`threadSql` in `threads.ts`). No aggregate indexed views on write-hot tables for the same reason (tried and reverted, 0027 → 0028).
+  - `scripts/perf/contention.ts N` submits N demands at once on `supplychain_perf` and prints what SQL Server waits on.
+  - A foreign key the app looks rows up by gets an index. Measure a new heavy screen with `apps/api/scripts/perf/` (`build.ts` → `supplychain_perf` with 20,000 demands, `bench.ts` → database time and pages per screen).
 
 ## UI conventions
 

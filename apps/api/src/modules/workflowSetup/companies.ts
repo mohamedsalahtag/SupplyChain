@@ -1,5 +1,5 @@
 /** Companies (spec 11): the data scope of the workflow. Never deleted, only deactivated. */
-import { sql } from 'kysely';
+import { sql, type SqlBool } from 'kysely';
 import { z } from 'zod';
 import { DomainError } from '../workflow/errors.js';
 import { rowVerHex, updateWithRowVer, withTx, type Db } from '../workflow/tx.js';
@@ -70,7 +70,7 @@ export async function saveCompany(db: Db, c: CompanyInput): Promise<void> {
         .selectFrom('scm.InboxItem')
         .select((eb) => eb.fn.countAll<number>().as('n'))
         .where('CompanyCode', '=', c.companyCode)
-        .where('IsOpen', '=', true)
+        .where(sql<SqlBool>`IsOpen = 1`)
         .executeTakeFirstOrThrow();
       if (Number(open.n) > 0) throw new DomainError('COMPANY_IN_USE', `Company ${c.companyCode} has ${open.n} open work item(s); it cannot be deactivated yet`);
     }

@@ -3,7 +3,7 @@
  * (setting "weeks before ETD"), and an origin no supplier can supply.
  * Run hourly and after RFQ commands; items open and close themselves.
  */
-import { sql } from 'kysely';
+import { sql, type SqlBool } from 'kysely';
 import { closeInbox, openInbox } from '../workflow/inbox.js';
 import { isoWeekOf } from '../workflow/isoWeek.js';
 import { formatQty, fromDb } from '../workflow/qty.js';
@@ -20,7 +20,7 @@ export async function refreshAging(db: Db, now = new Date()): Promise<{ opened: 
     FROM scm.QtySlice s JOIN scm.DemandLine l ON l.LineId = s.LineId JOIN scm.Demand d ON d.DemandId = l.DemandId
     WHERE s.ExecState = 'OPEN' AND d.WorkflowStatus = 'ACCEPTED' AND l.IsActive = 1 AND s.ApprovedEtdWeek <= ${until} -- weeks already past are the most urgent: kept
     GROUP BY l.LineId, d.DemandId, d.DemandNo, d.CompanyCode, l.SubMajorCategory, l.Unit`.execute(db)).rows;
-  const open = await db.selectFrom('scm.InboxItem').select('EntityId').where('ItemType', '=', 'OPEN_QTY_AGING').where('IsOpen', '=', true).execute();
+  const open = await db.selectFrom('scm.InboxItem').select('EntityId').where('ItemType', '=', 'OPEN_QTY_AGING').where(sql<SqlBool>`IsOpen = 1`).execute();
   const dueIds = new Set(due.map((r) => String(r.LineId)));
   let closed = 0;
   for (const o of open.filter((x) => !dueIds.has(x.EntityId))) closed += await closeInbox(db, 'OPEN_QTY_AGING', 'LINE', o.EntityId, null);
@@ -33,7 +33,7 @@ export async function refreshAging(db: Db, now = new Date()): Promise<{ opened: 
     });
   }
   // Origins that had no supplier: closed as soon as one can supply them.
-  const missing = await db.selectFrom('scm.InboxItem').select(['EntityId', 'CompanyCode']).where('ItemType', '=', 'SUPPLIER_MISSING_ORIGIN').where('IsOpen', '=', true).execute();
+  const missing = await db.selectFrom('scm.InboxItem').select(['EntityId', 'CompanyCode']).where('ItemType', '=', 'SUPPLIER_MISSING_ORIGIN').where(sql<SqlBool>`IsOpen = 1`).execute();
   for (const m of missing) {
     const origin = m.EntityId.split(':')[1];
     const [g] = await supplierShortlist(db, m.CompanyCode ?? '', [{ lineId: '0', majorCategory: '', subMajorCategory: '', size: '', originCode: origin, materialCode: null, unit: '' }]);
