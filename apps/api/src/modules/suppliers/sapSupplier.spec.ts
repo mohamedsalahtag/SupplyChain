@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assertGroups, businessPartnerFilter, formatAddress, mapSupplier, pickCurrency, supplierFilter } from './sapSupplier.js';
+import { assertGroups, businessPartnerFilter, formatAddress, mapSupplier, mapSupplierOrgs, pickCurrency, supplierFilter } from './sapSupplier.js';
 
 const supplier = {
   Supplier: ' 10000000 ',
@@ -22,6 +22,7 @@ describe('supplier mapping', () => {
     expect(mapSupplier(supplier, bp, ['ZAMS'])).toEqual({
       SupplierCode: '10000000', Name: 'Al Ateeq Trading', SupplierGroup: 'ZAMS', Country: 'SA', Currency: 'SAR',
       Street: 'Al Ateeq', HouseNumber: '12', City: 'Jeddah', PostalCode: '21442', Region: '02', Email: 'info@example.com',
+      PurchasingIsBlocked: false, PostingIsBlocked: false,
     });
   });
 
@@ -51,5 +52,26 @@ describe('supplier filters', () => {
     expect(() => assertGroups([])).toThrow();
     expect(() => assertGroups(['KRED'])).toThrow();
     expect(() => assertGroups(["ZE' or 1 eq 1"])).toThrow();
+  });
+});
+
+describe('supplier blocks and purchasing organizations (spec 11)', () => {
+  it('reads the supplier-level blocks', () => {
+    expect(mapSupplier({ ...supplier, PurchasingIsBlocked: true, PostingIsBlocked: false }, bp, ['ZAMS'])).toMatchObject({ PurchasingIsBlocked: true, PostingIsBlocked: false });
+  });
+  it('lists purchasing orgs with their own block, skipping deleted ones and duplicates', () => {
+    const s = {
+      Supplier: '10000000',
+      to_SupplierPurchasingOrg: { results: [
+        { PurchasingOrganization: '1000', PurchasingIsBlockedForSupplier: false },
+        { PurchasingOrganization: '2000', PurchasingIsBlockedForSupplier: true },
+        { PurchasingOrganization: '3000', DeletionIndicator: true },
+        { PurchasingOrganization: '1000', PurchasingIsBlockedForSupplier: false, PaymentTerms: 'N030', IncotermsClassification: 'FCA', IncotermsLocation1: 'Jeddah' },
+      ] },
+    };
+    expect(mapSupplierOrgs(s)).toEqual([
+      { SupplierCode: '10000000', PurchasingOrg: '1000', IsBlocked: false, PaymentTerms: 'N030', Incoterm: 'FCA', IncotermLocation: 'Jeddah' }, // the later duplicate wins
+      { SupplierCode: '10000000', PurchasingOrg: '2000', IsBlocked: true, PaymentTerms: '', Incoterm: '', IncotermLocation: '' },
+    ]);
   });
 });

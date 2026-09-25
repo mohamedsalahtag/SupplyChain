@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Status wording</title>
+<style>
+  :root { --green:#1f6f43; --line:#f0f0f0; --border:#d9d9d9; --bg:#f5f5f5; --text:#1f1f1f; --muted:#8c8c8c; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:13px/1.5 -apple-system,"Segoe UI",Roboto,Arial,sans-serif; color:var(--text); background:var(--bg); }
+  header { height:40px; background:#001529; color:#fff; display:flex; align-items:center; padding:0 16px; gap:8px; }
+  header .logo { width:22px; height:22px; border-radius:4px; background:var(--green); }
+  main { max-width:1180px; margin:0 auto; padding:12px 16px 40px; }
+  h4 { margin:18px 0 6px; font-size:15px; } h5 { margin:0; font-size:16px; }
+  .muted { color:var(--muted); } .small { font-size:12px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:8px; margin-bottom:12px; }
+  .card-h { padding:8px 12px; border-bottom:1px solid var(--line); display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .pad { padding:10px 12px; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { padding:6px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+  th { background:#fafafa; font-size:12px; color:#595959; }
+  .tag { display:inline-block; border-radius:4px; padding:0 7px; font-size:12px; border:1px solid; white-space:nowrap; }
+  .t-grey { color:#595959; border-color:#d9d9d9; background:#fafafa; } .t-purple { color:#531dab; border-color:#d3adf7; background:#f9f0ff; }
+  .t-orange { color:#d46b08; border-color:#ffd591; background:#fff7e6; } .t-blue { color:#0958d9; border-color:#91caff; background:#e6f4ff; }
+  .t-cyan { color:#08979c; border-color:#87e8de; background:#e6fffb; } .t-geek { color:#1d39c4; border-color:#adc6ff; background:#f0f5ff; }
+  .t-green { color:#389e0d; border-color:#b7eb8f; background:#f6ffed; } .t-lime { color:#7cb305; border-color:#eaff8f; background:#fcffe6; }
+  .t-red { color:#cf1322; border-color:#ffa39e; background:#fff1f0; } .t-gold { color:#d48806; border-color:#ffe58f; background:#fffbe6; }
+  .who { display:inline-block; font-size:11px; border-radius:10px; padding:0 7px; background:#f0f0f0; color:#595959; margin-left:4px; }
+  .old { color:var(--muted); text-decoration:line-through; }
+  .bar { display:flex; height:8px; border-radius:4px; overflow:hidden; width:180px; background:#f0f0f0; margin-top:4px; }
+  .bar span { display:block; height:100%; }
+  .leg { font-size:11px; color:#595959; } .leg i { display:inline-block; width:8px; height:8px; border-radius:2px; margin:0 3px 0 8px; }
+  .statusline { background:#fafafa; border:1px solid var(--line); border-radius:6px; padding:6px 10px; margin-top:6px; }
+  .tip { position:relative; cursor:help; }
+  .tip .bubble { display:none; position:absolute; left:0; top:22px; z-index:5; width:340px; background:#1f1f1f; color:#fff; border-radius:6px; padding:8px 10px; font-size:12px; line-height:1.5; }
+  .tip:hover .bubble { display:block; }
+  button { font:inherit; border:1px solid var(--border); background:#fff; border-radius:4px; padding:2px 10px; cursor:pointer; }
+  .drawer { display:none; position:fixed; top:0; right:0; bottom:0; width:520px; max-width:100%; background:#fff; box-shadow:-6px 0 16px rgba(0,0,0,.12); padding:14px; overflow:auto; z-index:9; }
+  .drawer.open { display:block; }
+</style>
+</head>
+<body>
+<header><div class="logo"></div><b>Supply chain</b></header>
+<main>
+  <p class="muted">Mockup — proposed wording only (no process change). Every status says <b>who has it now</b> and <b>what happens next</b>; hovering a status explains it; the page header adds <b>who did the last step and when</b>.</p>
+
+  <h4>1 · Demands — list (Purchasing → Demands)</h4>
+  <div class="card">
+    <div class="card-h"><b>Demands</b><span style="margin-left:auto"><button onclick="document.getElementById('legend').classList.add('open')">What do the statuses mean?</button></span></div>
+    <table>
+      <tr><th>Demand</th><th>Company</th><th>Status</th><th>Progress</th><th>Last step</th></tr>
+      <tr><td>D-000231</td><td>1000</td>
+        <td><span class="tip"><span class="tag t-grey">Draft</span><span class="who">Sales</span><span class="bubble">Sales is still preparing it. Procurement cannot see it yet. Next: Sales submits it to Procurement.</span></span></td>
+        <td class="muted small">—</td><td class="small">Created by Sara (Sales) · 24 Sep 09:10</td></tr>
+      <tr><td>D-000232</td><td>1000</td>
+        <td><span class="tip"><span class="tag t-purple">Waiting for Procurement to accept</span><span class="bubble">Sales submitted it (version 1). Next: Procurement accepts it, or returns it to Sales with a reason. Sales can still take it back to change it.</span></span></td>
+        <td class="muted small">—</td><td class="small">Submitted by Sara (Sales) · 24 Sep 10:12</td></tr>
+      <tr><td>D-000233</td><td>1000</td>
+        <td><span class="tip"><span class="tag t-orange">Returned to Sales</span><span class="bubble">Procurement returned it with a reason. Next: Sales changes it and submits it again.</span></span></td>
+        <td class="muted small">—</td><td class="small">Returned by Omar (Procurement) · 24 Sep 11:30 · "Wrong week"</td></tr>
+      <tr><td>D-000230</td><td>1000</td>
+        <td><span class="tip"><span class="tag t-blue">Accepted · nothing sourced yet</span><span class="bubble">Procurement accepted it. None of its quantity is in an RFQ yet. Next: Procurement creates an RFQ.</span></span></td>
+        <td><div class="bar"><span style="width:100%;background:#bfbfbf"></span></div><span class="leg"><i style="background:#bfbfbf"></i>100% open</span></td>
+        <td class="small">Accepted by Omar (Procurement) · 24 Sep 12:02</td></tr>
+      <tr><td>D-000228</td><td>1000</td>
+        <td><span class="tip"><span class="tag t-cyan">Partly in sourcing</span><span class="bubble">Some quantity is in an RFQ or awarded; the rest is still open on the demand. Next: Procurement sources the open part (Create RFQ…).</span></span></td>
+        <td><div class="bar"><span style="width:50%;background:#52c41a"></span><span style="width:50%;background:#bfbfbf"></span></div><span class="leg"><i style="background:#52c41a"></i>50% awarded<i style="background:#bfbfbf"></i>50% open</span></td>
+        <td class="small">AB-000007 acknowledged by Sara (Sales) · 24 Sep 15:40</td></tr>
+      <tr><td>D-000225</td><td>1000</td>
+        <td><span class="tip"><span class="tag t-geek">All in sourcing</span><span class="bubble">Every quantity is in an RFQ, awarded or further; nothing is open. Next: the RFQs are quoted and awarded, then handed off (Stage 6).</span></span></td>
+        <td><div class="bar"><span style="width:40%;background:#722ed1"></span><span style="width:60%;background:#52c41a"></span></div><span class="leg"><i style="background:#722ed1"></i>40% in RFQ<i style="background:#52c41a"></i>60% awarded</span></td>
+        <td class="small">RFQ-000011 sent by Omar (Procurement) · 23 Sep</td></tr>
+      <tr><td>D-000210</td><td>1000</td>
+        <td><span class="tip"><span class="tag t-green">Closed · all ordered</span><span class="bubble">All quantity reached a purchase order. Nothing more to do.</span></span></td>
+        <td><div class="bar"><span style="width:100%;background:#237804"></span></div><span class="leg"><i style="background:#237804"></i>100% on PO</span></td><td class="small">Last PO confirmed · 20 Sep</td></tr>
+      <tr><td>D-000205</td><td>1000</td>
+        <td><span class="tip"><span class="tag t-lime">Closed · partly ordered, rest cancelled</span><span class="bubble">Part reached a purchase order; the rest was cancelled (change request or not sourced). Nothing more to do.</span></span></td>
+        <td><div class="bar"><span style="width:70%;background:#237804"></span><span style="width:30%;background:#ff7875"></span></div><span class="leg"><i style="background:#237804"></i>70% on PO<i style="background:#ff7875"></i>30% cancelled</span></td><td class="small">CR-000014 approved · 19 Sep</td></tr>
+      <tr><td>D-000199</td><td>1000</td>
+        <td><span class="tip"><span class="tag t-grey">Merged into D-000198</span><span class="bubble">Its weeks were merged into another demand, which carries on. Nothing more to do here.</span></span></td>
+        <td class="muted small">—</td><td class="small">Merged by Omar (Procurement) · 18 Sep</td></tr>
+    </table>
+  </div>
+
+  <h4>2 · Demand page header</h4>
+  <div class="card pad">
+    <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap"><h5>D-000230</h5><span class="tag t-cyan">Partly in sourcing</span><span class="muted">1000 · version 1</span></div>
+    <div class="statusline small">
+      <b>Now:</b> 3,201 CT awarded (AB-000007, acknowledged by Sales), 3,201 CT still open on the demand.
+      <b>Next:</b> Procurement sources the open part — <a href="#">Create RFQ…</a><br>
+      <span class="muted">History: created by Sara (Sales) 24 Sep 09:10 → submitted to Procurement 24 Sep 10:12 → accepted by Omar (Procurement) 24 Sep 12:02 → RFQ-000012 sent 24 Sep 13:15 → AB-000007 awarded 24 Sep 15:02</span>
+    </div>
+  </div>
+
+  <h4>3 · RFQs — list (Purchasing → RFQs)</h4>
+  <div class="card">
+    <table>
+      <tr><th>RFQ</th><th>Demand</th><th>Status</th><th>Suppliers</th><th>Last step</th></tr>
+      <tr><td>RFQ-000014</td><td>D-000231</td>
+        <td><span class="tip"><span class="tag t-grey">Draft · not sent to suppliers</span><span class="bubble">Procurement is preparing it. Next: download the supplier view, send it to the suppliers (e-mail, outside the app) and press Send.</span></span></td>
+        <td>3 invited</td><td class="small">Created by Omar (Procurement) · 24 Sep 13:00</td></tr>
+      <tr><td>RFQ-000013</td><td>D-000228</td>
+        <td><span class="tip"><span class="tag t-blue">Sent · waiting for quotes</span><span class="bubble">Procurement sent it to the invited suppliers (outside the app) and marked it Sent. Next: record each supplier's quote.</span></span></td>
+        <td>0 of 3 quoted</td><td class="small">Sent to 3 suppliers by Omar (Procurement) · 24 Sep 13:15</td></tr>
+      <tr><td>RFQ-000012</td><td>D-000230</td>
+        <td><span class="tip"><span class="tag t-purple">Quotes in · ready to award</span><span class="bubble">At least one supplier has quoted. Next: record the other quotes, or award (Award…).</span></span></td>
+        <td>2 of 3 quoted</td><td class="small">Quote from Andes Export recorded · 24 Sep 14:20</td></tr>
+      <tr><td>RFQ-000011</td><td>D-000225</td>
+        <td><span class="tip"><span class="tag t-lime">Partly awarded</span><span class="bubble">Part of the quoted containers is awarded; the rest is still quoted. Next: award the rest, or release it back to the demand.</span></span></td>
+        <td>3 of 3 quoted</td><td class="small">AB-000006 · 24 Sep 15:02</td></tr>
+      <tr><td>RFQ-000010</td><td>D-000220</td>
+        <td><span class="tip"><span class="tag t-green">Fully awarded</span><span class="bubble">Everything in this RFQ is awarded. Next: handoff to the PO team (Stage 6), from the award.</span></span></td>
+        <td>2 of 2 quoted</td><td class="small">AB-000005 · 23 Sep</td></tr>
+      <tr><td>RFQ-000032</td><td>D-000287</td>
+        <td><span class="tip"><span class="tag t-grey">Closed · nothing left (all released)</span><span class="bubble">Replaces "Closed". The RFQ holds no quantity any more: everything was released or un-awarded back to the demand, where it is open again. Nothing more to do in this RFQ.</span></span></td>
+        <td>1 of 1 quoted</td><td class="small">Released back to the demand by Omar (Procurement) · 24 Sep 21:40 · "Supplier out"</td></tr>
+      <tr><td>RFQ-000009</td><td>D-000219</td>
+        <td><span class="tip"><span class="tag t-red">Cancelled</span><span class="bubble">Procurement cancelled it; its quantity went back to the demand. The reason is shown.</span></span></td>
+        <td>2 invited</td><td class="small">Cancelled by Omar (Procurement) · 22 Sep · Not needed — "duplicate"</td></tr>
+    </table>
+  </div>
+
+  <h4>4 · RFQ page header</h4>
+  <div class="card pad">
+    <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap"><h5>RFQ-000012</h5><span class="tag t-purple">Quotes in · ready to award</span><span class="muted">D-000230 · 1000</span></div>
+    <div class="statusline small">
+      <b>Sent to:</b> Agrisouth (Chile) S.A. ✓ quoted · Andes Export ✓ quoted · Valle Verde — no quote yet<br>
+      <b>Next:</b> record Valle Verde's quote, or <a href="#">Award…</a><br>
+      <span class="muted">History: created by Omar (Procurement) 24 Sep 13:00 → sent 24 Sep 13:15 (supplier view downloaded, e-mailed outside the app) → quotes recorded 14:05, 14:20</span>
+    </div>
+  </div>
+
+  <h4>5 · Awards — the same idea</h4>
+  <div class="card">
+    <table>
+      <tr><th>Old</th><th>New</th><th>Meaning · next</th></tr>
+      <tr><td class="old">Sales: pending</td><td><span class="tag t-gold">Waiting for Sales to acknowledge</span></td><td class="small">Next: Sales acknowledges or asks a question. Never blocks the handoff.</td></tr>
+      <tr><td class="old">Sales: query</td><td><span class="tag t-orange">Sales asked a question</span></td><td class="small">Next: Procurement answers; then Sales is asked again.</td></tr>
+      <tr><td class="old">Sales: acknowledged</td><td><span class="tag t-green">Acknowledged by Sales</span></td><td class="small">Next: handoff to the PO team (Stage 6).</td></tr>
+    </table>
+  </div>
+</main>
+
+<div class="drawer" id="legend">
+  <div style="display:flex;justify-content:space-between;align-items:center"><b>What do the demand statuses mean?</b><button onclick="document.getElementById('legend').classList.remove('open')">Close</button></div>
+  <table style="margin-top:8px">
+    <tr><th>Status</th><th>Who has it</th><th>Next</th></tr>
+    <tr><td><span class="tag t-grey">Draft</span></td><td>Sales</td><td class="small">Sales submits it to Procurement</td></tr>
+    <tr><td><span class="tag t-purple">Waiting for Procurement to accept</span></td><td>Procurement</td><td class="small">Accept, or return to Sales</td></tr>
+    <tr><td><span class="tag t-orange">Returned to Sales</span></td><td>Sales</td><td class="small">Change and submit again</td></tr>
+    <tr><td><span class="tag t-blue">Accepted · nothing sourced yet</span></td><td>Procurement</td><td class="small">Create an RFQ</td></tr>
+    <tr><td><span class="tag t-cyan">Partly in sourcing</span></td><td>Procurement</td><td class="small">Source the open part</td></tr>
+    <tr><td><span class="tag t-geek">All in sourcing</span></td><td>Procurement</td><td class="small">Quote, award, hand off</td></tr>
+    <tr><td><span class="tag t-green">Closed · all ordered</span></td><td>—</td><td class="small">Nothing</td></tr>
+    <tr><td><span class="tag t-lime">Closed · partly ordered, rest cancelled</span></td><td>—</td><td class="small">Nothing</td></tr>
+    <tr><td><span class="tag t-red">Cancelled</span></td><td>—</td><td class="small">Nothing</td></tr>
+    <tr><td><span class="tag t-grey">Merged into D-…</span></td><td>—</td><td class="small">Continue on the other demand</td></tr>
+  </table>
+  <p class="small muted">The same drawer exists on the RFQs and Awards lists for their statuses.</p>
+</div>
+</body>
+</html>

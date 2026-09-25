@@ -12,6 +12,7 @@ export const PREFERRED_PURCHASING_ORG = '1000';
 type Row = Record<string, unknown>;
 const text = (v: unknown): string => (v == null ? '' : String(v).trim());
 const results = (v: unknown): Row[] => ((v as { results?: Row[] } | undefined)?.results ?? []);
+const flag = (v: unknown): boolean => v === true || v === 'true' || v === 'X';
 
 export function assertGroups(groups: readonly string[]): void {
   if (groups.length === 0) throw new Error('Choose at least one supplier group');
@@ -25,7 +26,13 @@ export const supplierFilter = (groups: readonly string[]) => (assertGroups(group
 export const businessPartnerFilter = (groups: readonly string[]) => (assertGroups(groups), anyOf('BusinessPartnerGrouping', groups));
 
 export const SUPPLIER_QUERY = {
-  select: 'Supplier,SupplierName,SupplierAccountGroup,to_SupplierPurchasingOrg/PurchasingOrganization,to_SupplierPurchasingOrg/PurchaseOrderCurrency',
+  select: [
+    'Supplier,SupplierName,SupplierAccountGroup,PurchasingIsBlocked,PostingIsBlocked',
+    'to_SupplierPurchasingOrg/PurchasingOrganization,to_SupplierPurchasingOrg/PurchaseOrderCurrency',
+    'to_SupplierPurchasingOrg/PurchasingIsBlockedForSupplier,to_SupplierPurchasingOrg/DeletionIndicator',
+    // spec 22: the default payment terms and Incoterm for the handoff
+    'to_SupplierPurchasingOrg/PaymentTerms,to_SupplierPurchasingOrg/IncotermsClassification,to_SupplierPurchasingOrg/IncotermsLocation1',
+  ].join(','),
   expand: 'to_SupplierPurchasingOrg',
   orderBy: 'Supplier',
 };
@@ -49,7 +56,12 @@ export type SupplierRow = {
   PostalCode: string;
   Region: string;
   Email: string;
+  PurchasingIsBlocked: boolean;
+  PostingIsBlocked: boolean;
 };
+
+/** The supplier's purchasing organizations (deleted ones left out). */
+export type SupplierOrgRow = { SupplierCode: string; PurchasingOrg: string; IsBlocked: boolean; PaymentTerms: string; Incoterm: string; IncotermLocation: string };
 
 /** Org 1000's currency, else the first organization's. */
 export function pickCurrency(orgs: Row[]): string {
@@ -79,7 +91,23 @@ export function mapSupplier(s: Row, bp: Row | undefined, groups: readonly string
     PostalCode: text(address.PostalCode),
     Region: text(address.Region),
     Email: email,
+    PurchasingIsBlocked: flag(s.PurchasingIsBlocked),
+    PostingIsBlocked: flag(s.PostingIsBlocked),
   };
+}
+
+export function mapSupplierOrgs(s: Row): SupplierOrgRow[] {
+  const code = text(s.Supplier);
+  const byOrg = new Map<string, SupplierOrgRow>();
+  for (const o of results(s.to_SupplierPurchasingOrg)) {
+    const org = text(o.PurchasingOrganization);
+    if (!code || !org || flag(o.DeletionIndicator)) continue;
+    byOrg.set(org, {
+      SupplierCode: code, PurchasingOrg: org, IsBlocked: flag(o.PurchasingIsBlockedForSupplier),
+      PaymentTerms: text(o.PaymentTerms), Incoterm: text(o.IncotermsClassification), IncotermLocation: text(o.IncotermsLocation1),
+    });
+  }
+  return [...byOrg.values()];
 }
 
 /** "Street 12, 21442 Jeddah, SA" — for display. */

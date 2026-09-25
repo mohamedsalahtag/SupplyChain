@@ -11,19 +11,22 @@ export type UserListRow = {
   Department: string;
   Title: string;
   IsActive: boolean;
+  IsDemo: boolean;
   LastLoginAt: string | null;
   CreatedAt: string;
   roles: { RoleId: number; Name: string }[];
+  companies: string[];
 };
 
 export async function listUsers(db: Kysely<Database>): Promise<UserListRow[]> {
-  const [users, links] = await Promise.all([
+  const [users, links, companies] = await Promise.all([
     db.selectFrom('app.User').selectAll().orderBy('DisplayName').execute(),
     db
       .selectFrom('app.UserRole as ur')
       .innerJoin('app.Role as r', 'r.RoleId', 'ur.RoleId')
       .select(['ur.UserId', 'r.RoleId', 'r.Name'])
       .execute(),
+    db.selectFrom('scm.UserCompany').select(['UserId', 'CompanyCode']).orderBy('CompanyCode').execute(),
   ]);
   return users.map((u) => ({
     UserId: Number(u.UserId),
@@ -33,11 +36,13 @@ export async function listUsers(db: Kysely<Database>): Promise<UserListRow[]> {
     Department: u.Department,
     Title: u.Title,
     IsActive: u.IsActive,
+    IsDemo: u.IsDemo,
     LastLoginAt: u.LastLoginAt ? u.LastLoginAt.toISOString() : null,
     CreatedAt: u.CreatedAt.toISOString(),
     roles: links
       .filter((l) => Number(l.UserId) === Number(u.UserId))
       .map((l) => ({ RoleId: Number(l.RoleId), Name: l.Name })),
+    companies: companies.filter((c) => Number(c.UserId) === Number(u.UserId)).map((c) => c.CompanyCode),
   }));
 }
 
@@ -52,6 +57,31 @@ async function isAdminRoleSet(db: Transaction<Database>, roleIds: number[]): Pro
   if (roleIds.length === 0) return false;
   const r = await db.selectFrom('app.Role').select('RoleId').where('RoleId', 'in', roleIds).where('IsAdmin', '=', true).where('IsActive', '=', true).executeTakeFirst();
   return !!r;
+}
+
+type Granter = { id: number; isAdmin: boolean; permissions: ReadonlySet<string> };
+
+/**
+ * A holder of users.add / users.edit who is not an administrator may hand out only what they hold themselves:
+ * never an administrator role, never a role with a key they lack, never to themselves or to an administrator
+ * (security review 2026-09: otherwise the key is as strong as Administrator).
+ */
+export async function assertMayGrant(db: Kysely<Database>, actor: Granter, roleIds: number[], targetUserId: number | null): Promise<void> {
+  if (actor.isAdmin) return;
+  const deny = (message: string) => { throw new TRPCError({ code: 'FORBIDDEN', message }); };
+  if (targetUserId === actor.id) deny('You cannot change your own roles — ask an administrator.');
+  if (targetUserId !== null) {
+    const admin = await db.selectFrom('app.UserRole as ur').innerJoin('app.Role as r', 'r.RoleId', 'ur.RoleId').select('r.RoleId')
+      .where('ur.UserId', '=', targetUserId).where('r.IsAdmin', '=', true).executeTakeFirst();
+    if (admin) deny('Only an administrator can change an administrator.');
+  }
+  if (!roleIds.length) return;
+  const roles = await db.selectFrom('app.Role').select(['RoleId', 'Name', 'IsAdmin']).where('RoleId', 'in', roleIds).execute();
+  const adminRole = roles.find((r) => r.IsAdmin);
+  if (adminRole) deny(`Only an administrator can give the role ${adminRole.Name}.`);
+  const keys = await db.selectFrom('app.RolePermission').select('PermissionKey').distinct().where('RoleId', 'in', roleIds).execute();
+  const missing = keys.map((k) => k.PermissionKey).filter((k) => !actor.permissions.has(k));
+  if (missing.length) deny(`You can only give roles whose permissions you hold yourself (missing: ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? '…' : ''}).`);
 }
 
 /** Active users holding an active admin role. */

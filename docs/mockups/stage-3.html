@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stage 3 mockup</title>
+<style>
+  :root { --green:#1f6f43; --border:#d9d9d9; --bg:#f5f5f5; --text:#1f1f1f; --muted:#8c8c8c; --red:#cf1322; --amber:#d48806; --blue:#1677ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; font: 13px/1.5 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color:var(--text); background:var(--bg); }
+  header { height:40px; background:#001529; color:#fff; display:flex; align-items:center; padding:0 16px; gap:8px; }
+  header .logo { width:22px; height:22px; border-radius:4px; background:var(--green); }
+  header .site { font-weight:600; flex:1; }
+  .shell { display:flex; min-height:calc(100vh - 40px); }
+  nav { width:190px; background:#fff; border-right:1px solid #f0f0f0; padding:6px 0; flex-shrink:0; }
+  nav .grp { color:var(--muted); padding:6px 16px 2px; font-size:12px; }
+  nav a { display:flex; justify-content:space-between; padding:5px 16px 5px 28px; color:var(--text); cursor:pointer; }
+  nav a.active { background:#e6f4ea; color:var(--green); border-right:3px solid var(--green); }
+  nav .badge { background:#8c8c8c; color:#fff; border-radius:10px; padding:0 7px; font-size:11px; }
+  main { flex:1; padding:12px 16px; min-width:0; }
+  h5 { font-size:16px; margin:0; }
+  .sub, .note { color:var(--muted); } .note { font-size:12px; }
+  .card { background:#fff; border:1px solid #f0f0f0; border-radius:6px; padding:8px 12px; margin-bottom:10px; }
+  .inner { border:1px solid #f0f0f0; border-radius:6px; margin:6px 0; }
+  .inner-h { background:#fafafa; padding:4px 8px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; border-bottom:1px solid #f0f0f0; }
+  .tabs { display:flex; gap:2px; border-bottom:1px solid #f0f0f0; margin:8px 0; flex-wrap:wrap; }
+  .tab { padding:5px 12px; cursor:pointer; border:1px solid transparent; border-bottom:none; border-radius:6px 6px 0 0; color:#595959; }
+  .tab.active { background:#fff; border-color:#f0f0f0; color:var(--green); font-weight:600; margin-bottom:-1px; }
+  .pill { display:inline-block; min-width:18px; text-align:center; background:#8c8c8c; color:#fff; border-radius:9px; padding:0 6px; font-size:11px; margin-left:4px; }
+  table { width:100%; border-collapse:collapse; table-layout:fixed; background:#fff; }
+  th, td { border:1px solid #f0f0f0; padding:4px 8px; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  th { background:#fafafa; font-weight:600; } td.num, th.num { text-align:right; }
+  tr.click { cursor:pointer; } tr.click:hover td { background:#fafafa; }
+  tr.changed td { background:#fffbe6; } tr.added td { background:#f6ffed; } tr.removed td { background:#fff1f0; text-decoration:line-through; color:#8c8c8c; }
+  .chip { display:inline-block; border-radius:4px; padding:0 6px; font-size:12px; border:1px solid; }
+  .chip.red { color:var(--red); border-color:#ffa39e; background:#fff1f0; }
+  .chip.amber { color:var(--amber); border-color:#ffe58f; background:#fffbe6; }
+  .chip.grey { color:#595959; border-color:#d9d9d9; background:#fafafa; }
+  .chip.green { color:var(--green); border-color:#b7eb8f; background:#f6ffed; }
+  .chip.blue { color:var(--blue); border-color:#91caff; background:#e6f4ff; }
+  .chip.purple { color:#531dab; border-color:#d3adf7; background:#f9f0ff; }
+  button { font:inherit; border:1px solid var(--border); background:#fff; border-radius:4px; padding:1px 10px; cursor:pointer; }
+  button.primary { background:var(--green); color:#fff; border-color:var(--green); }
+  button.danger { color:var(--red); border-color:#ffa39e; }
+  button.link { border:none; background:none; color:var(--blue); padding:0 4px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  input, select, textarea { font:inherit; border:1px solid var(--border); border-radius:4px; padding:1px 6px; }
+  .banner { background:#e6f4ff; border:1px solid #91caff; border-radius:6px; padding:6px 10px; margin-bottom:10px; }
+  .info { background:#e6f4ff; border:1px solid #91caff; border-radius:6px; padding:6px 10px; margin:8px 0; }
+  .warn { background:#fffbe6; border:1px solid #ffe58f; border-radius:6px; padding:6px 10px; margin:8px 0; }
+  .err { background:#fff1f0; border:1px solid #ffa39e; border-radius:6px; padding:6px 10px; margin:8px 0; }
+  .page { display:none; } .page.active { display:block; }
+  .menu { position:absolute; background:#fff; box-shadow:0 6px 16px rgba(0,0,0,.12); border-radius:6px; padding:4px 0; display:none; z-index:5; min-width:200px; right:0; }
+  .menu div { padding:4px 12px; cursor:pointer; } .menu div:hover { background:#f5f5f5; }
+  .rel { position:relative; display:inline-block; }
+  .seg { display:inline-flex; border:1px solid var(--border); border-radius:4px; overflow:hidden; }
+  .seg span { padding:1px 10px; cursor:pointer; } .seg span.on { background:var(--green); color:#fff; }
+  .desc { display:grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap:4px 16px; }
+  .desc div span { color:var(--muted); }
+</style>
+</head>
+<body>
+<header><div class="logo"></div><div class="site">Supply Chain</div><span>Procurement buyer (example) ▾</span></header>
+<div class="shell">
+  <nav>
+    <div class="grp">General</div>
+    <a>My work</a>
+    <div class="grp">Master data</div>
+    <a>Materials</a><a>Suppliers</a>
+    <div class="grp">Purchasing</div>
+    <a class="active" onclick="go('target')">Demands</a><a>Change requests</a><a>Purchase orders</a>
+  </nav>
+  <main>
+    <div class="banner">Mockup · Stage 3 merge. Pages: <button onclick="go('target')">Target D-000101</button> <button onclick="go('step1')">Wizard step 1</button> <button onclick="go('step2')">Step 2 + preview</button> <button onclick="go('after')">Target after merge</button> <button onclick="go('source')">Source D-000118 after</button></div>
+
+    <!-- TARGET before -->
+    <section class="page active" id="page-target">
+      <div class="row"><h5>D-000101</h5><span class="chip blue">Not started</span><span class="sub">1000 · KSA</span></div>
+      <div class="card" style="margin-top:8px"><b>Procurement</b>
+        <div class="row" style="margin-top:6px"><button style="width:300px">⊘ Not sourced…</button><span class="note">Quantity that cannot be bought — Sales decides whether to drop it.</span></div>
+        <div class="row" style="margin-top:6px"><button class="primary" style="width:300px" onclick="go('step1')">⇲ Merge another demand into this…</button><span class="note">Move weeks (or a whole demand) of the same company into this one, to source them together.</span></div>
+      </div>
+      <div class="card"><div class="inner-h"><b>2026-W42</b><span class="sub">Mon 12 Oct 2026</span><span class="chip grey">5 containers</span><span>Gala: 5 × 1,000 CT</span></div>
+        <table><tr><th>Material</th><th>Size</th><th>Class</th><th>Origin</th><th class="num">Per container</th><th class="num">Requested</th><th class="num">Open</th><th class="num">Merged out</th></tr>
+        <tr><td>Apples Royal Gala</td><td>S-100</td><td>Cat1</td><td>CL</td><td class="num">1,000</td><td class="num">5,000</td><td class="num">5,000</td><td class="num">—</td></tr></table>
+      </div>
+      <div class="tabs"><span class="tab active">Comments</span><span class="tab">Change requests</span><span class="tab">Merges</span><span class="tab">Versions</span><span class="tab">History</span></div>
+    </section>
+
+    <!-- STEP 1 -->
+    <section class="page" id="page-step1">
+      <a class="sub" onclick="go('target')">← D-000101</a>
+      <h5 style="margin:6px 0">Merge into D-000101 · Step 1 of 2: which demand?</h5>
+      <div class="info">Only accepted demands of company 1000 are listed. Their weeks move into the same weeks of D-000101.</div>
+      <table><tr><th style="width:110px">Demand</th><th>Created by</th><th>Weeks</th><th class="num" style="width:110px">Containers</th><th class="num" style="width:140px">Open</th><th style="width:90px"></th></tr>
+        <tr class="click" onclick="go('step2')"><td>D-000118</td><td>Sara (Sales) · 3 Oct</td><td>2026-W42, 2026-W43, 2026-W44</td><td class="num">5</td><td class="num">5,200 CT</td><td><button>Choose</button></td></tr>
+        <tr class="click"><td>D-000120</td><td>Omar (Sales) · 5 Oct</td><td>2026-W44</td><td class="num">1</td><td class="num">1,200 CT</td><td><button>Choose</button></td></tr>
+      </table>
+    </section>
+
+    <!-- STEP 2 -->
+    <section class="page" id="page-step2">
+      <a class="sub" onclick="go('step1')">← Step 1</a>
+      <h5 style="margin:6px 0">Merge D-000118 into D-000101 · Step 2 of 2: which weeks?</h5>
+      <div class="card">
+        <div class="row"><label><input type="checkbox"> <b>Entire demand</b></label><span class="note">(not possible: one week is on hold)</span></div>
+        <div class="row"><label><input type="checkbox" checked> 2026-W42 · 2 containers · Gala 2,000 CT</label></div>
+        <div class="row"><label><input type="checkbox" checked> 2026-W43 · 2 containers · Granny 2,000 CT</label></div>
+        <div class="row" style="color:#8c8c8c"><label><input type="checkbox" disabled> 2026-W44 · 1 container · Gala 1,200 CT</label> <span class="chip amber">On hold in CR-000012</span></div>
+        <div class="row" style="margin-top:6px"><input style="width:520px" placeholder="Comment (optional)" value="Same customer, one shipment"><button onclick="document.getElementById('prev').style.display='block'">Check</button></div>
+      </div>
+      <div class="card" id="prev" style="display:none"><b>Preview</b>
+        <div class="info">OK — nothing blocks this merge.</div>
+        <table><tr><th style="width:100px">Week</th><th>Material</th><th class="num">D-000101 now</th><th class="num">Adds</th><th class="num">After</th></tr>
+          <tr><td>2026-W42</td><td>Apples Royal Gala S-100 Cat1 CL</td><td class="num">5,000 CT</td><td class="num">+2,000</td><td class="num"><b>7,000 CT</b></td></tr>
+          <tr class="changed"><td>2026-W42</td><td>Containers · group "Gala" 2 × 1,000 CT moves</td><td class="num">5</td><td class="num">+2</td><td class="num"><b>7</b></td></tr>
+          <tr class="added"><td>2026-W43</td><td>Apples Granny Smith S-113 Cat1 CL <span class="chip green">new line</span></td><td class="num">—</td><td class="num">+2,000</td><td class="num"><b>2,000 CT</b></td></tr>
+          <tr class="added"><td>2026-W43</td><td>Containers · new week · group "Granny" 2 × 1,000 CT moves</td><td class="num">0</td><td class="num">+2</td><td class="num"><b>2</b></td></tr>
+        </table>
+        <div class="row" style="margin-top:8px"><button class="primary" onclick="if (confirm('Merge 2 weeks of D-000118 into D-000101?')) go('after')">Merge</button><span class="note">Can be undone from the Merges tab while the merged quantity is still Open.</span></div>
+      </div>
+    </section>
+
+    <!-- TARGET after -->
+    <section class="page" id="page-after">
+      <div class="row"><h5>D-000101</h5><span class="chip blue">Not started</span><span class="sub">1000 · KSA · version 2 (Merge in MG-000001)</span></div>
+      <div class="card" style="margin-top:8px"><div class="inner-h"><b>2026-W42</b><span class="chip grey">7 containers</span><span>Gala: 5 × 1,000 CT</span><span>Gala: 2 × 1,000 CT <span class="chip purple">from D-000118 · MG-000001</span></span></div>
+        <table><tr><th>Material</th><th>Size</th><th>Class</th><th>Origin</th><th class="num">Requested</th><th class="num">Open</th><th class="num">Merged out</th></tr>
+        <tr><td>Apples Royal Gala</td><td>S-100</td><td>Cat1</td><td>CL</td><td class="num">7,000 ⓘ</td><td class="num">7,000</td><td class="num">—</td></tr></table>
+        <div class="note">ⓘ 2,000 CT from D-000118 via MG-000001 (origin: Sales, requested 3 Oct)</div>
+      </div>
+      <div class="card"><div class="inner-h"><b>2026-W43</b><span class="chip grey">2 containers</span><span>Granny: 2 × 1,000 CT <span class="chip purple">from D-000118 · MG-000001</span></span></div>
+        <table><tr><th>Material</th><th>Size</th><th>Class</th><th>Origin</th><th class="num">Requested</th><th class="num">Open</th></tr>
+        <tr><td>Apples Granny Smith</td><td>S-113</td><td>Cat1</td><td>CL</td><td class="num">2,000</td><td class="num">2,000</td></tr></table>
+      </div>
+      <div class="tabs"><span class="tab">Comments</span><span class="tab">Change requests</span><span class="tab active">Merges (1)</span><span class="tab">Versions</span><span class="tab">History</span></div>
+      <table><tr><th style="width:100px">Merge</th><th style="width:75px">Direction</th><th style="width:95px">Other</th><th>Weeks</th><th class="num" style="width:90px">Containers</th><th class="num" style="width:100px">Quantity</th><th>By / at</th><th style="width:90px">Status</th><th style="width:100px"></th></tr>
+        <tr><td>MG-000001</td><td>In</td><td>D-000118</td><td>2026-W42, 2026-W43</td><td class="num">4</td><td class="num">4,000 CT</td><td>Buyer · 7 Oct 10:12</td><td><span class="chip green">Executed</span></td><td><button class="danger" onclick="document.getElementById('um').style.display='block'">Unmerge…</button></td></tr>
+      </table>
+      <div class="card" id="um" style="display:none; margin-top:8px"><b>Unmerge MG-000001?</b>
+        <div class="note">Everything goes back: D-000118's quantities are Open again and its container groups return to 2026-W42 and 2026-W43. D-000101 keeps its own 5 containers of Gala.</div>
+        <textarea rows="2" style="width:100%; margin:6px 0" placeholder="Reason (required)"></textarea>
+        <button class="danger">Unmerge</button> <button onclick="document.getElementById('um').style.display='none'">Cancel</button>
+      </div>
+    </section>
+
+    <!-- SOURCE after -->
+    <section class="page" id="page-source">
+      <div class="row"><h5>D-000118</h5><span class="chip blue">Not started</span><span class="sub">1000 · KSA · version 2 (Merge out MG-000001)</span></div>
+      <div class="warn">2026-W42 and 2026-W43 were merged into <a>D-000101</a> (MG-000001) and are sourced there. When all of a demand's quantity is merged out, its status becomes <b>Merged</b>.</div>
+      <div class="card"><div class="inner-h"><b>2026-W42</b><span class="chip grey">0 containers</span><span class="chip purple">Merged into D-000101 · MG-000001</span></div>
+        <table><tr><th>Material</th><th>Size</th><th>Class</th><th>Origin</th><th class="num">Requested</th><th class="num">Open</th><th class="num">Merged out</th><th>Status</th></tr>
+        <tr><td>Apples Royal Gala</td><td>S-100</td><td>Cat1</td><td>CL</td><td class="num">2,000</td><td class="num">—</td><td class="num">2,000</td><td><span class="chip grey">Merged</span></td></tr></table>
+      </div>
+      <div class="note">2026-W43 looks the same (Granny, 2,000 CT merged out). 2026-W44 stays here, Open, on hold in CR-000012.</div>
+    </section>
+  </main>
+</div>
+<script>
+function go(p) { document.querySelectorAll('.page').forEach(function (s) { s.classList.toggle('active', s.id === 'page-' + p); }); window.scrollTo(0, 0); }
+</script>
+</body>
+</html>

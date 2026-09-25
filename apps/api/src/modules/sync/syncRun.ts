@@ -5,6 +5,7 @@
  */
 import { sql, type Kysely } from 'kysely';
 import type { Database } from '../../db/schema.js';
+import { closeInbox, openInbox } from '../workflow/inbox.js';
 
 export const SYNC_SOURCES = ['sap.materials', 'sap.suppliers', 'sap.purchaseOrders'] as const;
 export type SyncSource = (typeof SYNC_SOURCES)[number];
@@ -72,6 +73,29 @@ export async function finishRun(
     })
     .where('SyncRunId', '=', runId)
     .execute();
+  await syncOutcomeInbox(db, runId, status, message);
+}
+
+/** Who fixes a failed sync, and where (spec 10: sync failures are Exceptions on My work). */
+const FIX_AT: Record<SyncSource, { permission: string; label: string; link: string }> = {
+  'sap.materials': { permission: 'configuration.sync.run', label: 'Materials', link: '/settings?tab=sync' },
+  'sap.suppliers': { permission: 'configuration.suppliers.run', label: 'Suppliers', link: '/settings?tab=suppliers' },
+  'sap.purchaseOrders': { permission: 'configuration.po.run', label: 'Purchase orders', link: '/settings?tab=po' },
+};
+
+/** A failed run opens (or refreshes) the source's exception; a successful run closes it. */
+async function syncOutcomeInbox(db: Kysely<Database>, runId: number, status: 'Succeeded' | 'Failed', message: string | null): Promise<void> {
+  const run = await db.selectFrom('integ.SyncRun').select(['Source']).where('SyncRunId', '=', runId).executeTakeFirst();
+  const fix = run && FIX_AT[run.Source as SyncSource];
+  if (!fix) return;
+  if (status === 'Succeeded') {
+    await closeInbox(db, 'SYNC_FAILED', 'SYNC_SOURCE', run.Source, null);
+    return;
+  }
+  await openInbox(db, {
+    itemType: 'SYNC_FAILED', permission: fix.permission, companyCode: null, entityType: 'SYNC_SOURCE', entityId: run.Source,
+    number: `SYNC-${runId}`, title: `${fix.label} sync failed`, note: message?.slice(0, 1000) ?? null, link: fix.link, raisedBy: null,
+  });
 }
 
 /** The running run (if any) and the last finished one, shaped for the UI. */

@@ -9,7 +9,14 @@ import { MaterialsSyncSection } from './MaterialsSyncSection';
 import { MaterialTypesSection } from './MaterialTypesSection';
 import { PurchaseOrdersSyncTab } from './PurchaseOrdersSyncTab';
 import { SapConnectionSection } from './SapConnectionSection';
+import { ShippingTermsTab } from './ShippingTermsTab';
 import { SuppliersSyncTab } from './SuppliersSyncTab';
+import { CompaniesTab } from './workflow/CompaniesTab';
+import { OriginsTab } from './workflow/OriginsTab';
+import { SupplierOriginsTab } from './workflow/SupplierOriginsTab';
+import { ReasonCodesTab } from './workflow/ReasonCodesTab';
+import { WorkflowSettingsTab } from './workflow/WorkflowSettingsTab';
+import { BackToWork } from '../../components/BackToWork';
 
 /** Settings → Configuration: one tab per area, shown only with its permission. The open tab is in the URL (?tab=). */
 export function ConfigurationPage() {
@@ -32,20 +39,29 @@ export function ConfigurationPage() {
     },
     (can(P.configSuppliersEdit) || can(P.configSuppliersRun)) && { key: 'suppliers', label: 'Suppliers sync', children: <SuppliersSyncTab /> },
     (can(P.configPoEdit) || can(P.configPoRun)) && { key: 'po', label: 'Purchase orders sync', children: <PurchaseOrdersSyncTab /> },
+    can(P.configWfCompaniesEdit) && { key: 'companies', label: 'Companies', children: <CompaniesTab /> },
+    can(P.configWfReasonsEdit) && { key: 'reasons', label: 'Reason codes', children: <ReasonCodesTab /> },
+    can(P.configWfOriginsEdit) && { key: 'origins', label: 'Origins', children: <OriginsTab /> },
+    can(P.configOpen) && { key: 'supplier-origins', label: 'Supplier origins', children: <SupplierOriginsTab /> },
+    can(P.configWfSettingsEdit) && { key: 'workflow', label: 'Workflow', children: <WorkflowSettingsTab /> },
+    can(P.configShippingEdit) && { key: 'shipping', label: 'Shipping terms', children: <ShippingTermsTab /> },
     can(P.configAdEdit) && { key: 'ad', label: 'Active Directory', children: <ActiveDirectorySection /> },
   ].filter((t): t is { key: string; label: string; children: JSX.Element } => !!t);
 
   const tab = tabs.some((t) => t.key === params.get('tab')) ? params.get('tab')! : tabs[0]?.key;
+  // Table tabs use the full page width; form tabs stay narrow.
+  const wide = ['companies', 'reasons', 'origins'].includes(tab ?? '');
 
   return (
-    <div style={{ width: '100%', maxWidth: 780 }}>
+    <div style={{ width: '100%', maxWidth: wide ? undefined : 780 }}>
+      <BackToWork />
       <Typography.Title level={5} style={{ margin: 0 }}>
         Configuration
       </Typography.Title>
       {tabs.length === 0 ? (
         <Result status="403" title="Nothing to configure" subTitle="You have no configuration permissions." />
       ) : (
-        <Tabs activeKey={tab} onChange={(key) => setParams({ tab: key }, { replace: true })} items={tabs} />
+        <Tabs activeKey={tab} onChange={(key) => setParams((p) => { p.set('tab', key); return p; }, { replace: true })} items={tabs} />
       )}
     </div>
   );

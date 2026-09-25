@@ -33,6 +33,7 @@ flowchart TD
 ```
 - **Pressing Sync again never duplicates.** Orders are keyed by number, lines by (order, item). Each order's lines are replaced as a set, so lines deleted in SAP disappear. Verified: after a full sync of 1,795 orders and 7,327 lines, a changes-only sync and a **Re-sync everything** left the same counts, with 0 duplicate lines.
 - **Re-sync everything** ignores the watermark and re-reads everything after the start date.
+- **Delete all and sync fresh** is a red button with a danger confirmation. It clears the watermark, then deletes every order and its lines inside the **first page's** transaction, and writes the full copy page by page. If SAP can't be reached, nothing is deleted. If the run fails later, the list stays incomplete until the next **Sync now**, which is then a full one. Starting it writes `config.po.freshSync` to the audit log.
 - Changing the types or the start date clears the watermark, so the next sync is a full one.
 
 ## Screen: Purchasing → Purchase orders
@@ -48,4 +49,4 @@ flowchart TD
 | An order changes in SAP between syncs | The next changes-only sync picks it up via LastChangeDateTime, with a one-hour overlap. |
 | Server stops mid-sync | The run is marked abandoned after 30 minutes; the next sync repeats safely. |
 
-Permissions: `purchaseOrders.open`, `configuration.po.edit`, `configuration.po.run`.
+Permissions: `purchaseOrders.open`, `configuration.po.edit`, `configuration.po.run`, `configuration.po.fresh` (Delete all and sync fresh).

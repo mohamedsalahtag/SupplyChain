@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stage 1 mockup</title>
+<style>
+  :root { --green:#1f6f43; --border:#d9d9d9; --bg:#f5f5f5; --text:#1f1f1f; --muted:#8c8c8c; --red:#cf1322; --amber:#d48806; --blue:#1677ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; font: 13px/1.5 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color:var(--text); background:var(--bg); }
+  header { height:40px; background:#001529; color:#fff; display:flex; align-items:center; padding:0 16px; gap:8px; }
+  header .logo { width:22px; height:22px; border-radius:4px; background:var(--green); }
+  header .site { font-weight:600; flex:1; }
+  .shell { display:flex; min-height:calc(100vh - 40px); }
+  nav { width:190px; background:#fff; border-right:1px solid #f0f0f0; padding:6px 0; flex-shrink:0; }
+  nav .grp { color:var(--muted); padding:6px 16px 2px; font-size:12px; }
+  nav a { display:flex; justify-content:space-between; padding:5px 16px 5px 28px; color:var(--text); cursor:pointer; }
+  nav a.active { background:#e6f4ea; color:var(--green); border-right:3px solid var(--green); }
+  nav .badge { background:#8c8c8c; color:#fff; border-radius:10px; padding:0 7px; font-size:11px; }
+  main { flex:1; padding:12px 16px; min-width:0; }
+  h5 { font-size:16px; margin:0; }
+  .sub { color:var(--muted); }
+  .card { background:#fff; border:1px solid #f0f0f0; border-radius:6px; padding:8px 12px; margin-bottom:10px; }
+  .card-title { font-weight:600; display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; gap:8px; flex-wrap:wrap; }
+  .tabs { display:flex; gap:2px; border-bottom:1px solid #f0f0f0; margin:8px 0; flex-wrap:wrap; }
+  .tab { padding:5px 12px; cursor:pointer; border:1px solid transparent; border-bottom:none; border-radius:6px 6px 0 0; color:#595959; }
+  .tab.active { background:#fff; border-color:#f0f0f0; color:var(--green); font-weight:600; margin-bottom:-1px; }
+  .pill { display:inline-block; min-width:18px; text-align:center; background:#8c8c8c; color:#fff; border-radius:9px; padding:0 6px; font-size:11px; margin-left:4px; }
+  table { width:100%; border-collapse:collapse; table-layout:fixed; background:#fff; }
+  th, td { border:1px solid #f0f0f0; padding:4px 8px; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  th { background:#fafafa; font-weight:600; }
+  td.num, th.num { text-align:right; }
+  tr.click { cursor:pointer; } tr.click:hover td { background:#fafafa; }
+  .chip { display:inline-block; border-radius:4px; padding:0 6px; font-size:12px; border:1px solid; }
+  .chip.red { color:var(--red); border-color:#ffa39e; background:#fff1f0; }
+  .chip.amber { color:var(--amber); border-color:#ffe58f; background:#fffbe6; }
+  .chip.grey { color:#595959; border-color:#d9d9d9; background:#fafafa; }
+  .chip.green { color:var(--green); border-color:#b7eb8f; background:#f6ffed; }
+  .chip.blue { color:var(--blue); border-color:#91caff; background:#e6f4ff; }
+  .chip.purple { color:#531dab; border-color:#d3adf7; background:#f9f0ff; }
+  button { font:inherit; border:1px solid var(--border); background:#fff; border-radius:4px; padding:1px 10px; cursor:pointer; }
+  button.primary { background:var(--green); color:#fff; border-color:var(--green); }
+  button.danger { color:var(--red); border-color:#ffa39e; }
+  button.link { border:none; background:none; color:var(--blue); padding:0 4px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  input, select, textarea { font:inherit; border:1px solid var(--border); border-radius:4px; padding:1px 6px; }
+  .note { color:var(--muted); font-size:12px; }
+  .banner { background:#e6f4ff; border:1px solid #91caff; border-radius:6px; padding:6px 10px; margin-bottom:10px; }
+  .warn { background:#fffbe6; border:1px solid #ffe58f; border-radius:6px; padding:6px 10px; margin:8px 0; }
+  .drawer { position:fixed; top:0; right:0; width:440px; height:100vh; background:#fff; box-shadow:-6px 0 16px rgba(0,0,0,.12); padding:12px 16px; display:none; z-index:9; overflow:auto; }
+  .drawer.open { display:block; }
+  .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; z-index:10; align-items:center; justify-content:center; }
+  .modal-bg.open { display:flex; }
+  .modal { background:#fff; border-radius:8px; padding:14px 16px; width:420px; }
+  .form label { display:block; margin:8px 0 2px; color:#595959; }
+  .form input, .form select, .form textarea { width:100%; }
+  .page { display:none; } .page.active { display:block; }
+  .seg { display:inline-flex; border:1px solid var(--border); border-radius:4px; overflow:hidden; }
+  .seg span { padding:1px 10px; cursor:pointer; } .seg span.on { background:var(--green); color:#fff; }
+  .week { border:1px solid #f0f0f0; border-radius:6px; margin-bottom:8px; background:#fff; }
+  .week-h { background:#fafafa; padding:4px 8px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; border-bottom:1px solid #f0f0f0; }
+  .del { color:var(--red); background:#fff1f0; } .add { color:var(--green); background:#f6ffed; }
+  .desc { display:grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap:4px 16px; }
+  .desc div span { color:var(--muted); }
+  .timeline div { padding:4px 0; border-bottom:1px dashed #f0f0f0; }
+</style>
+</head>
+<body>
+<header><div class="logo"></div><div class="site">Supply Chain</div><span id="who">Sales planner (example) ▾</span></header>
+<div class="shell">
+  <nav>
+    <div class="grp">General</div>
+    <a data-page="work">My work <span class="badge">2</span></a>
+    <div class="grp">Master data</div>
+    <a>Materials</a><a>Suppliers</a>
+    <div class="grp">Purchasing</div>
+    <a data-page="list" class="active">Demands</a><a>Purchase orders</a>
+    <div class="grp">Administration</div>
+    <a>Users</a><a>Security</a><a>Configuration</a>
+  </nav>
+  <main>
+    <div class="banner">Mockup: switch persona → <button onclick="persona('sales')">Sales</button> <button onclick="persona('proc')">Procurement</button>. Buttons shown are the actions the server allows for that user and demand.</div>
+
+    <!-- MY WORK -->
+    <section class="page" id="page-work">
+      <div class="row"><h5>My work</h5><span class="sub">Everything waiting on you, next step one click away.</span></div>
+      <div class="tabs"><div class="tab active">Accept demand <span class="pill">2</span></div><div class="tab">Exceptions <span class="pill">1</span></div></div>
+      <table>
+        <thead><tr><th style="width:110px">Due</th><th style="width:100px">Number</th><th>What</th><th style="width:80px">Company</th><th style="width:130px">Raised by</th><th style="width:130px">Action</th></tr></thead>
+        <tbody>
+          <tr><td><span class="chip red">Overdue 1 d</span></td><td>D-000118</td><td>W14, W16 · 3 containers · Apples Royal Gala S-100 ZA · 3,000 CT</td><td>1000</td><td>Sales planner</td><td><button class="primary" onclick="go('view-sub')">Review demand</button></td></tr>
+          <tr><td><span class="chip grey">Due in 20 h</span></td><td>D-000121</td><td>W18 · 2 containers · Granny Smith CL · 2,000 CT</td><td>1000</td><td>Sales planner</td><td><button class="primary" onclick="go('view-sub')">Review demand</button></td></tr>
+        </tbody>
+      </table>
+      <div class="note" style="margin-top:6px">Sales sees a <b>Fix and resubmit</b> tab here when Procurement returns a demand.</div>
+    </section>
+
+    <!-- LIST -->
+    <section class="page active" id="page-list">
+      <div class="row" style="justify-content:space-between">
+        <div class="row"><h5>Demands</h5><span class="sub">Demands of your companies</span></div>
+        <button class="primary sales-only" onclick="go('edit')">+ New demand</button>
+      </div>
+      <div class="row" style="margin:8px 0">
+        <span class="seg"><span class="on">Mine</span><span>All in my companies</span></span>
+        <input placeholder="Search number or material" style="width:210px">
+        <select><option>Company</option><option>1000</option></select>
+        <select><option>Status</option><option>Draft</option><option>Submitted</option><option>Returned</option><option>Not started</option><option>Partially in execution</option></select>
+        <input placeholder="Week from" style="width:90px"><input placeholder="to" style="width:90px">
+        <button style="margin-left:auto">⚙ Columns (10/12)</button>
+      </div>
+      <table>
+        <thead><tr><th style="width:95px">Number</th><th style="width:70px">Company</th><th style="width:130px">Status</th><th style="width:120px">Created by</th><th style="width:110px">Submitted</th><th style="width:100px">ETD weeks</th><th class="num" style="width:80px">Containers</th><th class="num" style="width:55px">Lines</th><th>Requested</th><th>Open</th></tr></thead>
+        <tbody>
+          <tr class="click" onclick="go('view-acc')"><td>D-000101</td><td>1000</td><td><span class="chip blue">Not started</span></td><td>Sales planner</td><td>1 Mar 2026</td><td>W14–W15</td><td class="num">7</td><td class="num">3</td><td>9,000 CT</td><td>9,000 CT</td></tr>
+          <tr class="click" onclick="go('view-sub')"><td>D-000118</td><td>1000</td><td><span class="chip purple">Submitted</span></td><td>Sales planner</td><td>10 Mar 2026</td><td>W14, W16</td><td class="num">3</td><td class="num">2</td><td>3,000 CT</td><td>—</td></tr>
+          <tr class="click" onclick="go('edit')"><td>D-000124</td><td>1000</td><td><span class="chip grey">Draft</span></td><td>Sales planner</td><td>—</td><td>W20</td><td class="num">2</td><td class="num">2</td><td>1,500 CT · 400 KGM</td><td>—</td></tr>
+          <tr class="click" onclick="go('edit')"><td>D-000119</td><td>1000</td><td><span class="chip amber">Returned</span></td><td>Sales planner</td><td>11 Mar 2026</td><td>W15</td><td class="num">1</td><td class="num">1</td><td>1,000 CT</td><td>—</td></tr>
+        </tbody>
+      </table>
+      <div class="note" style="margin-top:6px">4 demands · 25 / page · units are never added together</div>
+    </section>
+
+    <!-- EDIT (draft / returned) -->
+    <section class="page" id="page-edit">
+      <div class="warn"><b>Revised 2026-09-24:</b> weeks are now entered as <b>container groups</b> (containers × capacity, materials by share %, sizes × classes composed, copy to other weeks). The built screen replaces this page; see spec 12.</div>
+      <a class="note" onclick="go('list')" style="cursor:pointer">← Demands</a>
+      <div class="row" style="justify-content:space-between">
+        <div class="row"><h5>D-000124</h5><span class="chip grey">Draft</span><span class="sub">Company 1000 · KSA · created by Sales planner</span></div>
+        <div class="row"><button>Save</button><button class="primary" onclick="submitCheck()">Submit to Procurement</button></div>
+      </div>
+      <div class="warn" id="submitProblems" style="display:none"><b>Cannot submit yet:</b><br>• W20: container count must be at least 1<br>• W21: add at least one line<br>• Line "Apples Royal Gala · S-100 · CL": ordered in CT here but in KGM in W20 (one unit per material per demand)</div>
+      <div class="card"><label class="note">Notes</label><textarea style="width:100%" rows="2">Ramadan promotion volumes</textarea></div>
+
+      <div class="week">
+        <div class="week-h"><b>ETD week</b><input value="2026-W20" style="width:90px"><span class="note">Mon 11 May 2026</span><b>Containers</b><input value="2" style="width:60px"><button class="link" onclick="openDrawer('lineDrawer')">+ Add line</button><button class="link" style="margin-left:auto;color:var(--red)">Remove week</button></div>
+        <table>
+          <thead><tr><th style="width:70px">Mode</th><th>Specification / SKU</th><th style="width:60px">Origin</th><th style="width:60px">Unit</th><th class="num" style="width:110px">Quantity</th><th style="width:70px"></th></tr></thead>
+          <tbody>
+            <tr><td>Spec</td><td>Apples · Apples Royal Gala · S-100</td><td>ZA</td><td>CT</td><td class="num"><input value="1500" style="width:90px;text-align:right"></td><td><button class="link" style="color:var(--red)">Remove</button></td></tr>
+            <tr><td>SKU</td><td>APGSGGFR02180CAL113 · Apple Granny Smith France 18 KG</td><td>FR</td><td>CT</td><td class="num"><input value="400" style="width:90px;text-align:right"></td><td><button class="link" style="color:var(--red)">Remove</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <button onclick="alert('Adds another week block')">+ Add week</button>
+      <div class="tabs" style="margin-top:12px"><div class="tab active">Comments</div><div class="tab">Attachments</div><div class="tab">History</div></div>
+      <div class="card note">Comments and attachments work on drafts too (e.g. the customer's order as a PDF).</div>
+    </section>
+
+    <!-- VIEW (submitted: Procurement decides) -->
+    <section class="page" id="page-view-sub">
+      <a class="note" onclick="go('work')" style="cursor:pointer">← Back to My work</a>
+      <div class="row" style="justify-content:space-between">
+        <div class="row"><h5>D-000118</h5><span class="chip purple">Submitted</span><span class="sub">Company 1000 · submitted 10 Mar 2026 by Sales planner · version 1</span></div>
+        <div class="row proc-only"><button class="danger" onclick="openModal('returnModal')">Return…</button><button class="primary" onclick="go('view-acc')">Accept</button></div>
+      </div>
+      <div class="week"><div class="week-h"><b>2026-W14</b><span>2 containers</span></div>
+        <table><thead><tr><th>Specification / SKU</th><th style="width:60px">Origin</th><th style="width:60px">Unit</th><th class="num" style="width:110px">Requested</th></tr></thead>
+        <tbody><tr><td>Apples · Apples Royal Gala · S-100</td><td>ZA</td><td>CT</td><td class="num">2,000.000</td></tr></tbody></table></div>
+      <div class="week"><div class="week-h"><b>2026-W16</b><span>1 container</span></div>
+        <table><thead><tr><th>Specification / SKU</th><th style="width:60px">Origin</th><th style="width:60px">Unit</th><th class="num" style="width:110px">Requested</th></tr></thead>
+        <tbody><tr><td>Apples · Apples Royal Gala · S-100</td><td>ZA</td><td>CT</td><td class="num">1,000.000</td></tr></tbody></table></div>
+    </section>
+
+    <!-- VIEW (accepted: Demand 360) -->
+    <section class="page" id="page-view-acc">
+      <a class="note" onclick="go('list')" style="cursor:pointer">← Demands</a>
+      <div class="row" style="justify-content:space-between">
+        <div class="row"><h5>D-000101</h5><span class="chip blue">Not started</span></div>
+        <div class="row note">Change requests arrive in Stage 2</div>
+      </div>
+      <div class="card desc">
+        <div><span>Company</span><br>1000 · KSA</div><div><span>Created by</span><br>Sales planner</div>
+        <div><span>Submitted (baseline v1)</span><br>1 Mar 2026 09:10</div><div><span>Accepted</span><br>2 Mar 2026 11:02 · Buyer</div>
+      </div>
+      <div class="tabs" id="viewTabs">
+        <div class="tab active" data-v="lines">Lines &amp; quantities</div><div class="tab" data-v="versions">Versions</div><div class="tab" data-v="history">History</div><div class="tab" data-v="comments">Comments <span class="pill">2</span></div><div class="tab" data-v="att">Attachments <span class="pill">1</span></div>
+      </div>
+      <div class="v" id="v-lines">
+        <div class="week"><div class="week-h"><b>2026-W14</b><span>5 containers</span><span class="chip blue">Not started</span></div>
+          <table><thead><tr><th>Specification / SKU</th><th style="width:55px">Origin</th><th style="width:45px">Unit</th><th class="num" style="width:95px">Requested</th><th class="num" style="width:95px">Open</th><th class="num" style="width:95px">In progress</th><th class="num" style="width:90px">PO created</th><th class="num" style="width:85px">Cancelled</th><th class="num" style="width:85px">Merged out</th><th style="width:100px">Status</th></tr></thead>
+          <tbody>
+            <tr><td>Apples · Apples Royal Gala · S-100</td><td>CL</td><td>CT</td><td class="num">5,000.000</td><td class="num" title="Open 5,000.000">5,000.000</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td><span class="chip blue">Not started</span></td></tr>
+            <tr><td>Apples · Apples Granny Smith · any size</td><td>CL</td><td>CT</td><td class="num">2,000.000</td><td class="num">2,000.000</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td><span class="chip blue">Not started</span></td></tr>
+          </tbody></table></div>
+        <div class="week"><div class="week-h"><b>2026-W15</b><span>2 containers</span><span class="chip blue">Not started</span></div>
+          <table><tbody><tr><td>Apples · Apples Royal Gala · S-100</td><td style="width:55px">CL</td><td style="width:45px">CT</td><td class="num" style="width:95px">2,000.000</td><td class="num" style="width:95px">2,000.000</td><td class="num" style="width:95px">—</td><td class="num" style="width:90px">—</td><td class="num" style="width:85px">—</td><td class="num" style="width:85px">—</td><td style="width:100px"><span class="chip blue">Not started</span></td></tr></tbody></table></div>
+      </div>
+      <div class="v" id="v-versions" style="display:none">
+        <table><thead><tr><th style="width:70px">Version</th><th style="width:120px">Reason</th><th style="width:150px">When</th><th style="width:140px">By</th><th></th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Submit <span class="chip green">Baseline</span></td><td>1 Mar 2026 09:10</td><td>Sales planner</td><td><button class="link">View</button></td></tr>
+          <tr><td>2</td><td>Resubmit</td><td>1 Mar 2026 15:40</td><td>Sales planner</td><td><button class="link" onclick="document.getElementById('diff').style.display='block'">Compare with baseline</button></td></tr>
+        </tbody></table>
+        <div class="card" id="diff" style="display:none; margin-top:8px"><b>Version 2 compared with baseline (version 1)</b>
+          <table style="margin-top:6px"><thead><tr><th>Week / line</th><th class="num">Baseline</th><th class="num">Version 2</th></tr></thead>
+          <tbody><tr><td>W14 containers</td><td class="num">4</td><td class="num del">5</td></tr>
+          <tr><td>W14 · Royal Gala S-100 CL</td><td class="num">4,000.000 CT</td><td class="num del">5,000.000 CT</td></tr>
+          <tr><td>W14 · Granny Smith CL</td><td class="num">—</td><td class="num add">2,000.000 CT (new)</td></tr></tbody></table></div>
+      </div>
+      <div class="v timeline card" id="v-history" style="display:none">
+        <div>2 Mar 11:02 · Buyer · <b>Accepted</b> — 3 lines, 9,000 CT created Open</div>
+        <div>1 Mar 15:40 · Sales planner · <b>Resubmitted</b> (version 2)</div>
+        <div>1 Mar 12:00 · Buyer · <b>Returned</b>: "W14 needs 5 containers for this volume"</div>
+        <div>1 Mar 09:10 · Sales planner · <b>Submitted</b> (version 1, baseline)</div>
+      </div>
+      <div class="v card" id="v-comments" style="display:none">
+        <div class="timeline"><div><b>Buyer</b> · 1 Mar 12:00 · <i>Returned</i> — W14 needs 5 containers for this volume</div><div><b>System</b> · 2 Mar 11:02 — Demand accepted by Buyer</div></div>
+        <textarea rows="2" style="width:100%; margin-top:6px" placeholder="Add a comment"></textarea><button class="primary" style="margin-top:4px">Add comment</button>
+        <div class="note">Comments cannot be edited; a correction is a new comment.</div>
+      </div>
+      <div class="v card" id="v-att" style="display:none">
+        <table><thead><tr><th>File</th><th style="width:70px">Version</th><th style="width:140px">Uploaded by</th><th style="width:140px">When</th><th style="width:150px"></th></tr></thead>
+        <tbody><tr><td>customer-order-ramadan.pdf</td><td>1</td><td>Sales planner</td><td>1 Mar 09:05</td><td><button class="link">Download</button><button class="link">New version…</button></td></tr></tbody></table>
+        <button style="margin-top:6px">Upload…</button> <span class="note">PDF, images, Excel, Word, email · up to 20 MB · downloads are logged</span>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="drawer" id="lineDrawer">
+  <div class="row" style="justify-content:space-between"><b>Add line to 2026-W20</b><button class="link" onclick="closeAll()">✕</button></div>
+  <div class="form">
+    <label>Mode</label><span class="seg"><span class="on" id="mSpec" onclick="mode('spec')">Specification</span><span id="mSku" onclick="mode('sku')">SKU</span></span>
+    <div id="specFields">
+      <label>Category</label><select><option>Apples</option><option>Citrus</option><option>Grapes</option></select>
+      <label>Sub-category</label><select><option>Apples Royal Gala</option><option>Apples Granny Smith</option><option>Apples Cripps Pink</option></select>
+      <label>Size</label><select><option>Any size</option><option>S-100</option><option>S-113</option><option>S-125</option></select>
+      <label>Origin (countries that have this specification)</label><select><option>ZA · South Africa</option><option>CL · Chile</option><option>TR · Türkiye</option><option>FR · France</option></select>
+      <label>Unit</label><select><option>CT · Carton (most common)</option><option>KGM · Kilogram</option></select>
+    </div>
+    <div id="skuFields" style="display:none">
+      <label>Material (search code or description)</label><input value="APGSGGFR02180CAL113 · Apple Granny Smith France 18 KG">
+      <div class="note" style="margin-top:4px">Apples · Apples Granny Smith · S-113 · origin FR · unit CT (from the material)</div>
+    </div>
+    <label>Quantity</label><input value="1500">
+    <div class="note">Up to 3 decimals; CT must be whole cartons (Configuration → Workflow).</div>
+    <div style="margin-top:12px"><button class="primary" onclick="closeAll()">Add line</button> <button onclick="closeAll()">Cancel</button></div>
+  </div>
+</div>
+
+<div class="modal-bg" id="returnModal"><div class="modal form">
+  <b>Return D-000118 to Sales?</b>
+  <label>Comment (required) — what should Sales change?</label><textarea rows="3">W14 needs 5 containers for this volume</textarea>
+  <div style="margin-top:10px; text-align:right"><button onclick="closeAll()">Cancel</button> <button class="danger" onclick="closeAll();go('work')">Return</button></div>
+</div></div>
+
+<script>
+function go(p) {
+  document.querySelectorAll('.page').forEach(x => x.classList.toggle('active', x.id === 'page-' + p));
+  document.querySelectorAll('nav a').forEach(x => x.classList.toggle('active', x.dataset.page === (p === 'work' ? 'work' : p === 'list' ? 'list' : 'list')));
+  document.getElementById('submitProblems').style.display = 'none';
+}
+document.querySelectorAll('nav a[data-page]').forEach(el => el.onclick = () => go(el.dataset.page));
+function persona(p) {
+  document.getElementById('who').textContent = (p === 'sales' ? 'Sales planner (example)' : 'Buyer (example)') + ' ▾';
+  document.querySelectorAll('.sales-only').forEach(e => e.style.display = p === 'sales' ? '' : 'none');
+  document.querySelectorAll('.proc-only').forEach(e => e.style.display = p === 'proc' ? '' : 'none');
+  go(p === 'proc' ? 'work' : 'list');
+}
+function submitCheck() { document.getElementById('submitProblems').style.display = 'block'; }
+function openDrawer(id) { closeAll(); document.getElementById(id).classList.add('open'); }
+function openModal(id) { closeAll(); document.getElementById(id).classList.add('open'); }
+function closeAll() { document.querySelectorAll('.drawer,.modal-bg').forEach(d => d.classList.remove('open')); }
+function mode(m) {
+  document.getElementById('specFields').style.display = m === 'spec' ? '' : 'none';
+  document.getElementById('skuFields').style.display = m === 'sku' ? '' : 'none';
+  document.getElementById('mSpec').classList.toggle('on', m === 'spec');
+  document.getElementById('mSku').classList.toggle('on', m === 'sku');
+}
+document.querySelectorAll('#viewTabs .tab').forEach(el => el.onclick = () => {
+  document.querySelectorAll('#viewTabs .tab').forEach(x => x.classList.remove('active')); el.classList.add('active');
+  document.querySelectorAll('.v').forEach(v => v.style.display = v.id === 'v-' + el.dataset.v ? '' : 'none');
+});
+persona('sales');
+</script>
+</body>
+</html>

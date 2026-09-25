@@ -1,3 +1,4 @@
+import { TRPCError } from '@trpc/server';
 import { P } from '@supplychain/shared';
 import { z } from 'zod';
 import { audit } from '../auth/audit.js';
@@ -27,6 +28,10 @@ export const adRouter = router({
   /** An empty search password keeps the saved one. */
   save: adEdit.input(adConnectionSchema).mutation(async ({ ctx, input }) => {
     const current = await loadAdConnection(ctx.db, ctx.cfg);
+    // The saved password is only reused for the same server and account: it is never sent to a new address.
+    if (!input.searchPassword && current.searchPassword && (input.url !== current.url || input.searchUser !== current.searchUser)) {
+      throw new TRPCError({ code: 'BAD_REQUEST', message: 'The server or account changed: enter the search password again.' });
+    }
     const searchPassword = input.searchPassword || current.searchPassword;
     await saveAdConnection(ctx.db, ctx.encKey, { ...input, searchPassword });
     await audit(ctx.db, { userId: ctx.user.id, action: 'config.ad.save', details: { url: input.url, baseDn: input.baseDn, searchUser: input.searchUser } }, ctx.log);

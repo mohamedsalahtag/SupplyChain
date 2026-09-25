@@ -1,11 +1,13 @@
 import { P } from '@supplychain/shared';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { loadActor } from '../workflow/access.js';
 import { audit } from '../../auth/audit.js';
 import { DirectoryUnreachableError, findDirectoryUser, searchDirectory, WrongCredentialsError } from '../../auth/ldap.js';
 import { loadAdConnection, toAdSettings } from '../../settings/adConnection.js';
 import { procedure, router, type Context } from '../../trpc/trpc.js';
-import { assertRolesExist, listUsers, updateUser } from './usersService.js';
+import { setUserCompanies } from '../workflowSetup/companies.js';
+import { assertMayGrant, assertRolesExist, listUsers, updateUser } from './usersService.js';
 
 const open = procedure.meta({ permission: P.usersOpen });
 const add = procedure.meta({ permission: P.usersAdd });
@@ -58,6 +60,7 @@ export const usersRouter = router({
   /** Registers an AD user. Details are read from AD again here, never taken from the browser. */
   add: add.input(z.object({ username: z.string().trim().min(1).max(100), roleIds: roleIds.min(1, 'Choose at least one role') })).mutation(async ({ ctx, input }) => {
     await assertRolesExist(ctx.db, input.roleIds);
+    await assertMayGrant(ctx.db, ctx.user, input.roleIds, null);
     const ad = await directory(ctx);
     const person = await findDirectoryUser(toAdSettings(ad), ad.searchUser, ad.searchPassword, input.username).catch(directoryError);
     if (!person) throw new TRPCError({ code: 'NOT_FOUND', message: 'That user was not found in Active Directory.' });
@@ -89,9 +92,26 @@ export const usersRouter = router({
     return { userId };
   }),
 
+  /** Which companies the user works for (spec 11): the data scope of the workflow. */
+  setCompanies: procedure
+    .meta({ permission: P.usersCompaniesEdit })
+    .input(z.object({ userId: z.number().int().positive(), companyCodes: z.array(z.string().max(10)).max(20) }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.user.isAdmin) { // a non-administrator never widens anyone's data scope beyond their own, nor their own
+        if (input.userId === ctx.user.id) throw new TRPCError({ code: 'FORBIDDEN', message: 'You cannot change your own companies — ask an administrator.' });
+        const mine = (await loadActor(ctx.db, ctx.user)).companies;
+        const outside = input.companyCodes.filter((c) => !mine.has(c));
+        if (outside.length) throw new TRPCError({ code: 'FORBIDDEN', message: `You can only give companies you work for yourself (not ${outside.join(', ')}).` });
+      }
+      await setUserCompanies(ctx.db, input.userId, input.companyCodes);
+      await audit(ctx.db, { userId: ctx.user.id, action: 'users.companies', target: String(input.userId), details: input }, ctx.log);
+      return { saved: true };
+    }),
+
   update: edit
     .input(z.object({ userId: z.number().int().positive(), roleIds, isActive: z.boolean() }))
     .mutation(async ({ ctx, input }) => {
+      await assertMayGrant(ctx.db, ctx.user, input.roleIds, input.userId);
       await updateUser(ctx.db, ctx.user.id, input);
       await audit(ctx.db, { userId: ctx.user.id, action: 'user.update', target: String(input.userId), details: input }, ctx.log);
       return { saved: true };

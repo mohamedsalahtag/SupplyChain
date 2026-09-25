@@ -9,6 +9,18 @@ import { procedure, router } from '../../trpc/trpc.js';
 const open = procedure.meta({ permission: P.securityOpen });
 const edit = procedure.meta({ permission: P.securityRolesEdit });
 
+/**
+ * A non-administrator with security.roles.edit may not change a role they hold, nor grant a key they lack
+ * (otherwise the key is as strong as Administrator — security review 2026-09).
+ */
+async function assertMayEditRole(ctx: { db: Kysely<Database>; user: { id: number; isAdmin: boolean; permissions: ReadonlySet<string> } }, roleId: number, keys: string[]) {
+  if (ctx.user.isAdmin) return;
+  const held = await ctx.db.selectFrom('app.UserRole').select('RoleId').where('UserId', '=', ctx.user.id).where('RoleId', '=', roleId).executeTakeFirst();
+  if (held) throw new TRPCError({ code: 'FORBIDDEN', message: 'You cannot change a role you hold — ask an administrator.' });
+  const missing = keys.filter((k) => !ctx.user.permissions.has(k));
+  if (missing.length) throw new TRPCError({ code: 'FORBIDDEN', message: `You can only grant permissions you hold yourself (missing: ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? '…' : ''}).` });
+}
+
 const roleId = z.number().int().positive();
 const details = z.object({
   name: z.string().trim().min(2, 'Enter a role name').max(100),
@@ -88,6 +100,7 @@ export const securityRouter = router({
 
   updateRole: edit.input(details.extend({ roleId, isActive: z.boolean() })).mutation(async ({ ctx, input }) => {
     await editableRole(ctx.db, input.roleId);
+    await assertMayEditRole(ctx, input.roleId, []);
     await ctx.db
       .updateTable('app.Role')
       .set({ Name: input.name, Description: input.description, IsActive: input.isActive })
@@ -105,6 +118,7 @@ export const securityRouter = router({
       const role = await editableRole(ctx.db, input.roleId);
       const unknown = input.permissionKeys.filter((k) => !ALL_PERMISSION_KEYS.includes(k));
       if (unknown.length) throw new TRPCError({ code: 'BAD_REQUEST', message: `Unknown permission: ${unknown.join(', ')}` });
+      await assertMayEditRole(ctx, input.roleId, input.permissionKeys);
       const keys = [...new Set(input.permissionKeys)];
       await ctx.db.transaction().execute(async (trx) => {
         await trx.deleteFrom('app.RolePermission').where('RoleId', '=', input.roleId).execute();
@@ -117,6 +131,7 @@ export const securityRouter = router({
   /** Only a role nobody holds can be deleted. */
   deleteRole: edit.input(z.object({ roleId })).mutation(async ({ ctx, input }) => {
     const role = await editableRole(ctx.db, input.roleId);
+    await assertMayEditRole(ctx, input.roleId, []);
     const holder = await ctx.db.selectFrom('app.UserRole').select('UserId').where('RoleId', '=', input.roleId).executeTakeFirst();
     if (holder) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Remove this role from its users before deleting it.' });
     await ctx.db.deleteFrom('app.Role').where('RoleId', '=', input.roleId).execute();

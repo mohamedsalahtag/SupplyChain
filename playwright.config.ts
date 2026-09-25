@@ -4,6 +4,8 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: 'e2e',
   timeout: 60_000,
+  // Over a slow link to SQL Server (VPN) raise it, e.g. E2E_EXPECT_TIMEOUT=20000.
+  expect: { timeout: Number(process.env.E2E_EXPECT_TIMEOUT ?? 5_000) },
   use: {
     baseURL: 'http://localhost:5300',
     channel: 'msedge', // installed with Windows; no browser download needed

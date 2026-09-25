@@ -22,7 +22,7 @@ test.describe('signed out', () => {
 test('10 · signed in: name in the header, log out returns to sign-in', async ({ page, context }) => {
   await page.goto('/');
   await expect(page.getByTestId('user-menu')).toContainText(/mohamed/i);
-  for (const item of ['Home', 'Materials', 'Users', 'Security', 'Configuration']) {
+  for (const item of ['My work', 'Materials', 'Users', 'Security', 'Configuration']) {
     await expect(page.locator('.ant-menu').getByText(item, { exact: true })).toBeVisible();
   }
   await page.getByTestId('user-menu').click();

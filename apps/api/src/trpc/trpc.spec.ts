@@ -5,7 +5,7 @@ import { appRouter } from './router.js';
 import { createCallerFactory, procedure, router, type Context } from './trpc.js';
 
 const user = (over: Partial<AuthUser> = {}): AuthUser => ({
-  id: 1, username: 'u', displayName: 'U', isAdmin: false, permissions: new Set(), ...over,
+  id: 1, username: 'u', displayName: 'U', isAdmin: false, isDemo: false, viewAs: null, permissions: new Set(), ...over,
 });
 const ctx = (u: AuthUser | null) => ({ user: u, log: console }) as unknown as Context;
 

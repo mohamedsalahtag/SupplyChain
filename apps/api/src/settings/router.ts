@@ -1,3 +1,4 @@
+import { TRPCError } from '@trpc/server';
 import { P } from '@supplychain/shared';
 import { z } from 'zod';
 import { countRows, entityPath } from '../sap/odata.js';
@@ -47,7 +48,11 @@ export const settingsRouter = router({
     let password = input.password;
     if (!password) {
       const existing = await loadSapConnection(ctx.db, ctx.encKey);
-      if (!existing) throw new Error('Enter the password');
+      if (!existing) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Enter the password' });
+      // The saved password is only reused for the same SAP address and user: it is never sent to a new host.
+      if (existing.baseUrl !== input.baseUrl || existing.user !== input.user) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'The SAP address or user changed: enter the password again.' });
+      }
       password = existing.password;
     }
     await saveSapConnection(ctx.db, ctx.encKey, { ...input, password });

@@ -17,5 +17,5 @@ export function connectionString(cfg: Config): string {
 }
 
 export function createDb(cfg: Config): Kysely<Database> {
-  return new Kysely<Database>({ dialect: new OdbcMssqlDialect(connectionString(cfg)) });
+  return new Kysely<Database>({ dialect: new OdbcMssqlDialect(connectionString(cfg), cfg.DB_POOL_MAX) });
 }

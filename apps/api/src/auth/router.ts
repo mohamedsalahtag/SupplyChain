@@ -2,7 +2,8 @@ import type {} from '@fastify/cookie'; // adds setCookie / clearCookie to the re
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { loadAdConnection, toAdSettings } from '../settings/adConnection.js';
-import { publicProcedure, router, type Context } from '../trpc/trpc.js';
+import { SIGNED_IN } from '@supplychain/shared';
+import { procedure, publicProcedure, router, type Context } from '../trpc/trpc.js';
 import { audit } from './audit.js';
 import { DirectoryUnreachableError, signInToDirectory, WrongCredentialsError } from './ldap.js';
 import { SESSION_COOKIE, SESSION_HOURS, signSession } from './session.js';
@@ -19,8 +20,8 @@ function limitAttempts(ip: string): void {
   }
 }
 
-async function startSession(ctx: Context, userId: number): Promise<void> {
-  ctx.res.setCookie(SESSION_COOKIE, await signSession(userId, ctx.cfg.SESSION_SECRET), {
+async function startSession(ctx: Context, userId: number, viewAsBy?: number): Promise<void> {
+  ctx.res.setCookie(SESSION_COOKIE, await signSession(userId, ctx.cfg.SESSION_SECRET, viewAsBy), {
     httpOnly: true,
     sameSite: 'strict',
     secure: ctx.req.protocol === 'https',
@@ -28,6 +29,9 @@ async function startSession(ctx: Context, userId: number): Promise<void> {
     maxAge: SESSION_HOURS * 3600,
   });
 }
+
+/** View as (spec 16) is offered to active administrators, and kept while they view as a demo user. */
+const canViewAs = (ctx: Context) => Boolean(ctx.cfg.ALLOW_VIEW_AS && ctx.user && (ctx.user.viewAs || ctx.user.isAdmin));
 
 const isLoopback = (ip: string) => ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
 
@@ -41,9 +45,46 @@ export const authRouter = router({
           displayName: ctx.user.displayName,
           isAdmin: ctx.user.isAdmin,
           permissions: [...ctx.user.permissions],
+          viewAs: ctx.user.viewAs ? { realName: ctx.user.viewAs.realName } : null,
+          canViewAs: canViewAs(ctx),
         }
       : null,
   ),
+
+  /** The demo accounts an administrator can view the app as, with their roles and companies. */
+  viewAsOptions: procedure.meta({ permission: SIGNED_IN }).query(async ({ ctx }) => {
+    if (!canViewAs(ctx)) throw new TRPCError({ code: 'FORBIDDEN', message: 'View as is not available' });
+    const [users, roles, companies] = await Promise.all([
+      ctx.db.selectFrom('app.User').select(['UserId', 'Username', 'DisplayName']).where('IsDemo', '=', true).where('IsActive', '=', true).orderBy('UserId').execute(),
+      ctx.db.selectFrom('app.UserRole as ur').innerJoin('app.Role as r', 'r.RoleId', 'ur.RoleId').select(['ur.UserId', 'r.Name']).execute(),
+      ctx.db.selectFrom('scm.UserCompany').select(['UserId', 'CompanyCode']).orderBy('CompanyCode').execute(),
+    ]);
+    return users.map((u) => ({
+      userId: Number(u.UserId),
+      displayName: u.DisplayName || u.Username,
+      roles: roles.filter((r) => Number(r.UserId) === Number(u.UserId)).map((r) => r.Name),
+      companies: companies.filter((c) => Number(c.UserId) === Number(u.UserId)).map((c) => c.CompanyCode),
+    }));
+  }),
+
+  /** Switch into a demo account; everything done now is recorded as that account. */
+  viewAsStart: procedure.meta({ permission: SIGNED_IN }).input(z.object({ userId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    if (!canViewAs(ctx)) throw new TRPCError({ code: 'FORBIDDEN', message: 'View as is not available' });
+    const target = await ctx.db.selectFrom('app.User').select(['Username', 'IsActive', 'IsDemo']).where('UserId', '=', input.userId).executeTakeFirst();
+    if (!target?.IsDemo || !target.IsActive) throw new TRPCError({ code: 'FORBIDDEN', message: 'Only active demo accounts can be viewed as' });
+    const realUserId = ctx.user.viewAs?.realUserId ?? ctx.user.id;
+    await startSession(ctx, input.userId, realUserId);
+    await audit(ctx.db, { userId: realUserId, action: 'viewAs.start', target: target.Username, details: { ip: ctx.req.ip } }, ctx.log);
+    return { ok: true };
+  }),
+
+  /** Back to the administrator's own account. */
+  viewAsStop: procedure.meta({ permission: SIGNED_IN }).mutation(async ({ ctx }) => {
+    if (!ctx.user.viewAs) return { ok: true };
+    await startSession(ctx, ctx.user.viewAs.realUserId);
+    await audit(ctx.db, { userId: ctx.user.viewAs.realUserId, action: 'viewAs.stop', target: ctx.user.username }, ctx.log);
+    return { ok: true };
+  }),
 
   login: publicProcedure
     .input(z.object({ username: z.string().trim().min(1).max(200), password: z.string().min(1).max(256) }))
@@ -68,10 +109,10 @@ export const authRouter = router({
 
       const user = await ctx.db
         .selectFrom('app.User')
-        .select(['UserId', 'IsActive'])
+        .select(['UserId', 'IsActive', 'IsDemo'])
         .where('Username', '=', dir.username)
         .executeTakeFirst();
-      if (!user) {
+      if (!user || user.IsDemo) {
         await audit(ctx.db, { userId: null, action: 'login.notRegistered', target: dir.username, details: { ip: ctx.req.ip } }, ctx.log);
         throw new TRPCError({ code: 'FORBIDDEN', message: 'You are not registered in this app. Ask an administrator to add you.' });
       }

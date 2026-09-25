@@ -33,7 +33,8 @@ export async function loadAdConnection(db: Kysely<Database>, cfg: Config): Promi
       url: cfg.AD_URL,
       baseDn: cfg.AD_BASE_DN,
       upnSuffix: cfg.AD_UPN_SUFFIX,
-      allowSelfSigned: true,
+      // Until settings are saved: certificates are checked on a production server (a forged directory could collect passwords).
+      allowSelfSigned: process.env.NODE_ENV !== 'production',
       searchUser: '',
       searchPassword: '',
       saved: false,

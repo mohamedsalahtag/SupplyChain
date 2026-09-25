@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { App, Button, Card, Form, Input, Space, Typography, Upload } from 'antd';
+import { App, Button, Card, Form, Input, Space, Tag, Typography, Upload } from 'antd';
 import { DeleteOutlined, SaveOutlined, UploadOutlined } from '@ant-design/icons';
 import { trpc } from '../../lib/trpc';
 
@@ -15,7 +15,29 @@ const readAsDataUrl = (file: File) =>
     reader.readAsDataURL(file);
   });
 
-/** Configuration → General: site name and icon (browser tab + header), for every user. Spec 04. */
+/** Database status (moved here from the old Home screen, spec 10). */
+function SystemStatusCard() {
+  const health = trpc.health.useQuery();
+  const status = health.isPending ? (
+    <Tag>Checking…</Tag>
+  ) : health.error ? (
+    <Tag color="red">API unreachable</Tag>
+  ) : health.data.database === 'connected' ? (
+    <Tag color="green">Connected</Tag>
+  ) : (
+    <Tag color="red">Database unreachable — see the server log</Tag>
+  );
+  return (
+    <Card size="small" title="System status">
+      <Space>
+        <Typography.Text>Database:</Typography.Text>
+        {status}
+      </Space>
+    </Card>
+  );
+}
+
+/** Configuration → General: system status, site name and icon (browser tab + header), for every user. Spec 04. */
 export function GeneralSection() {
   const { message } = App.useApp();
   const utils = trpc.useUtils();
@@ -54,29 +76,32 @@ export function GeneralSection() {
   const changed = ui.data && (siteName.trim() !== ui.data.siteName || icon !== ui.data.iconDataUrl);
 
   return (
-    <Card size="small" title="Site name and icon" loading={ui.isPending}
-      extra={<Typography.Text type="secondary">Shown in the header and the browser tab, for every user</Typography.Text>}>
-      <Form layout="horizontal" labelCol={{ flex: '150px' }} labelAlign="left" colon={false}>
-        <Form.Item label="Site name" required validateStatus={siteName.trim() ? undefined : 'error'}
-          help={siteName.trim() ? undefined : 'Enter a site name'}>
-          <Input id="siteName" value={siteName} maxLength={60} showCount onChange={(e) => setSiteName(e.target.value)} style={{ width: 320 }} />
-        </Form.Item>
-        <Form.Item label="Icon" extra="PNG, JPG, SVG, WEBP or ICO, up to 256 KB. A square image works best.">
-          <Space align="center" wrap>
-            <img src={icon ?? DEFAULT_ICON} alt="Current icon" width={40} height={40}
-              style={{ objectFit: 'contain', border: '1px solid #e5e7e6', borderRadius: 6, padding: 4, background: '#fff' }} />
-            <Upload accept={ICON_TYPES.join(',')} showUploadList={false} beforeUpload={pickIcon}>
-              <Button icon={<UploadOutlined />}>Choose image…</Button>
-            </Upload>
-            <Button icon={<DeleteOutlined />} disabled={!icon} onClick={() => setIcon(null)}>
-              Use default icon
-            </Button>
-          </Space>
-        </Form.Item>
-        <Button type="primary" icon={<SaveOutlined />} disabled={!changed || !siteName.trim()} loading={save.isPending} onClick={onSave}>
-          Save
-        </Button>
-      </Form>
-    </Card>
+    <Space direction="vertical" size={10} style={{ width: '100%' }}>
+      <SystemStatusCard />
+      <Card size="small" title="Site name and icon" loading={ui.isPending}
+        extra={<Typography.Text type="secondary">Shown in the header and the browser tab, for every user</Typography.Text>}>
+        <Form layout="horizontal" labelCol={{ flex: '150px' }} labelAlign="left" colon={false}>
+          <Form.Item label="Site name" required validateStatus={siteName.trim() ? undefined : 'error'}
+            help={siteName.trim() ? undefined : 'Enter a site name'}>
+            <Input id="siteName" value={siteName} maxLength={60} showCount onChange={(e) => setSiteName(e.target.value)} style={{ width: 320 }} />
+          </Form.Item>
+          <Form.Item label="Icon" extra="PNG, JPG, SVG, WEBP or ICO, up to 256 KB. A square image works best.">
+            <Space align="center" wrap>
+              <img src={icon ?? DEFAULT_ICON} alt="Current icon" width={40} height={40}
+                style={{ objectFit: 'contain', border: '1px solid #e5e7e6', borderRadius: 6, padding: 4, background: '#fff' }} />
+              <Upload accept={ICON_TYPES.join(',')} showUploadList={false} beforeUpload={pickIcon}>
+                <Button icon={<UploadOutlined />}>Choose image…</Button>
+              </Upload>
+              <Button icon={<DeleteOutlined />} disabled={!icon} onClick={() => setIcon(null)}>
+                Use default icon
+              </Button>
+            </Space>
+          </Form.Item>
+          <Button type="primary" icon={<SaveOutlined />} disabled={!changed || !siteName.trim()} loading={save.isPending} onClick={onSave}>
+            Save
+          </Button>
+        </Form>
+      </Card>
+    </Space>
   );
 }

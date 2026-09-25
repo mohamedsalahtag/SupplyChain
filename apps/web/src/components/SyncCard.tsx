@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, App, Button, Card, Descriptions, Divider, Space } from 'antd';
-import { SyncOutlined } from '@ant-design/icons';
+import { DeleteOutlined, SyncOutlined } from '@ant-design/icons';
 import { trpc } from '../lib/trpc';
 import { formatDateTime, syncSummary } from '../lib/format';
 
@@ -20,13 +20,15 @@ type Props = {
   blockedReason?: string | null;
   /** Offer "Re-sync everything" (full: true) next to Sync now. */
   offerFull?: { label: string; confirmText: string };
+  /** Offer the red "Delete all and sync fresh" button, which starts its own run. */
+  offerFresh?: { confirmText: string; start: () => Promise<StartResult> };
   extraInfo?: ReactNode;
   /** Called when a run this card started has finished, to refresh related data. */
   onFinished?: () => void;
 };
 
 /** Last result + Sync now for one SAP source. Shared by every sync in Configuration. */
-export function SyncCard({ title, source, start, confirmText, missingLabel, blockedReason, offerFull, extraInfo, onFinished }: Props) {
+export function SyncCard({ title, source, start, confirmText, missingLabel, blockedReason, offerFull, offerFresh, extraInfo, onFinished }: Props) {
   const { modal } = App.useApp();
   const [notice, setNotice] = useState<Notice>(null);
   const [starting, setStarting] = useState(false);
@@ -48,10 +50,10 @@ export function SyncCard({ title, source, start, confirmText, missingLabel, bloc
     onFinished?.();
   }, [last, missingLabel, onFinished]);
 
-  const run = async (full: boolean) => {
+  const run = async (starter: () => Promise<StartResult>) => {
     setNotice(null);
     setStarting(true);
-    const r = await start(full).catch((err: Error) => ({ started: false as const, reason: err.message }));
+    const r = await starter().catch((err: Error) => ({ started: false as const, reason: err.message }));
     setStarting(false);
     if (r.started) watchedRunId.current = Number(r.runId);
     else setNotice({ type: 'warning', message: 'Sync not started', description: r.reason });
@@ -63,7 +65,16 @@ export function SyncCard({ title, source, start, confirmText, missingLabel, bloc
       title: full ? offerFull!.label + '?' : `${title}: sync now?`,
       content: full ? offerFull!.confirmText : confirmText,
       okText: full ? offerFull!.label : 'Sync now',
-      onOk: () => run(full),
+      onOk: () => run(() => start(full)),
+    });
+
+  const confirmFresh = () =>
+    modal.confirm({
+      title: `${title}: delete all and sync fresh?`,
+      content: offerFresh!.confirmText,
+      okText: 'Delete all and sync',
+      okButtonProps: { danger: true },
+      onOk: () => run(offerFresh!.start),
     });
 
   return (
@@ -87,6 +98,11 @@ export function SyncCard({ title, source, start, confirmText, missingLabel, bloc
         {offerFull && (
           <Button disabled={!!running || !!blockedReason} onClick={() => confirm(true)}>
             {offerFull.label}
+          </Button>
+        )}
+        {offerFresh && (
+          <Button danger icon={<DeleteOutlined />} disabled={!!running || !!blockedReason} onClick={confirmFresh}>
+            Delete all and sync fresh
           </Button>
         )}
       </Space>

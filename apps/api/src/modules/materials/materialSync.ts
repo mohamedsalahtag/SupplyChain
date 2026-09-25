@@ -7,6 +7,7 @@ import { sql, type Kysely } from 'kysely';
 import type { Database } from '../../db/schema.js';
 import { fetchAllRows } from '../../sap/odata.js';
 import { finishRun } from '../sync/syncRun.js';
+import { refreshOrigins } from '../workflow/origins.js';
 import type { SapConnection } from '../../settings/sapConnection.js';
 import { buildSapFilter, mapSapMaterial, SAP_ORDER_BY, type MaterialRow } from './sapMaterial.js';
 
@@ -79,7 +80,13 @@ export async function runMaterialSync(
       numericCodes > 0 ? `${numericCodes} skipped because the code starts with a number` : '',
       otherSkipped > 0 ? `${otherSkipped} skipped as duplicate or outside the include rule` : '',
     ].filter(Boolean);
-    const note = notes.length ? `SAP rows: ${notes.join('; ')}.` : null;
+    // Logged step (spec 11): new origin names are added to the origin map and matched to countries.
+    // The materials are already saved, so a failure here is reported in the note, not as a failed run.
+    const originNote = await refreshOrigins(db).then(
+      (o) => `Origins: ${o.total} names, ${o.unmatched} not mapped to a country.`,
+      (err: unknown) => `Origin map not refreshed: ${err instanceof Error ? err.message : String(err)}.`,
+    );
+    const note = [notes.length ? `SAP rows: ${notes.join('; ')}.` : '', originNote].filter(Boolean).join(' ');
     await finishRun(db, runId, 'Succeeded', { read: rowsRead, ...counts }, note);
   } catch (err) {
     await finishRun(db, runId, 'Failed', { read: rowsRead }, err instanceof Error ? err.message : String(err));

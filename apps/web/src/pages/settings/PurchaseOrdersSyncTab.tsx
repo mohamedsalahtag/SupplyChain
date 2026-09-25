@@ -16,6 +16,7 @@ export function PurchaseOrdersSyncTab() {
   const save = trpc.purchaseOrders.saveInclude.useMutation();
   const refresh = trpc.purchaseOrders.refreshTypes.useMutation();
   const start = trpc.purchaseOrders.startSync.useMutation();
+  const startFresh = trpc.purchaseOrders.startFreshSync.useMutation();
   const [startDate, setStartDate] = useState<Dayjs | null>(null);
   const onFinished = useCallback(() => {
     void utils.purchaseOrders.invalidate();
@@ -69,6 +70,15 @@ export function PurchaseOrdersSyncTab() {
           start={(full) => start.mutateAsync({ full })}
           confirmText="Orders changed since the last sync are copied (the first sync copies everything after the start date). Only material lines without a deletion flag are kept."
           offerFull={{ label: 'Re-sync everything', confirmText: 'Re-reads every order after the start date. Takes longer; existing orders are updated in place, never duplicated.' }}
+          offerFresh={
+            can(P.configPoFresh)
+              ? {
+                  confirmText:
+                    'Every purchase order and its lines stored in this app are deleted, then every order of the chosen types after the start date is copied again from SAP. The list is incomplete until the sync finishes; if it fails, the next Sync now is a full one.',
+                  start: () => startFresh.mutateAsync().then((r) => (void utils.purchaseOrders.include.invalidate(), r)),
+                }
+              : undefined
+          }
           blockedReason={include.data && !ready ? 'Choose the order types and a start date, and save them first.' : null}
           extraInfo={
             include.data && (

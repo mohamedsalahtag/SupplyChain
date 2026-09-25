@@ -15,6 +15,12 @@ type Sort = { sortField: SortField; sortOrder: 'asc' | 'desc' };
 
 const DEFAULT_SORT: Sort = { sortField: 'Name', sortOrder: 'asc' };
 const orDash = (v: string) => v || '—';
+const BlockedTag = ({ row }: { row: Pick<Row, 'PurchasingIsBlocked' | 'PostingIsBlocked'> }) =>
+  row.PurchasingIsBlocked || row.PostingIsBlocked ? (
+    <Tag color="red" style={{ marginInlineEnd: 0 }}>{row.PurchasingIsBlocked && row.PostingIsBlocked ? 'Blocked' : row.PurchasingIsBlocked ? 'Purchasing' : 'Posting'}</Tag>
+  ) : (
+    <Typography.Text type="secondary">No</Typography.Text>
+  );
 const StatusTag = ({ inSap }: { inSap: boolean }) => (
   <Tag color={inSap ? 'green' : 'default'} style={{ marginInlineEnd: 0 }}>{inSap ? 'Active' : 'Not in SAP'}</Tag>
 );
@@ -50,6 +56,8 @@ export function SuppliersPage() {
     { title: 'City', key: 'City', dataIndex: 'City', width: 120, ...sortable('City') },
     { title: 'Address', key: 'Address', dataIndex: 'Address', width: 260 },
     { title: 'Email', key: 'Email', dataIndex: 'Email', width: 200 },
+    { title: 'Purchasing orgs', key: 'PurchasingOrgs', width: 130, render: (_: unknown, r) => r.PurchasingOrgs || '—' },
+    { title: 'Blocked', key: 'Blocked', width: 80, render: (_: unknown, r) => <BlockedTag row={r} /> },
     { title: 'Status', key: 'InSap', width: 90, render: (_: unknown, r) => <StatusTag inSap={r.InSap} /> },
   ];
 
@@ -115,6 +123,9 @@ export function SuppliersPage() {
               { label: 'Currency', children: orDash(s.Currency) },
               { label: 'Email', children: orDash(s.Email) },
               { label: 'Status', children: <StatusTag inSap={s.InSap} /> },
+              { label: 'Blocked', children: <BlockedTag row={s} /> },
+              { label: 'Purchasing orgs', children: orDash(s.PurchasingOrgs) },
+              { label: 'Payment terms · Incoterm (SAP)', children: orDash(s.SapTerms) },
             ]} />
             <Descriptions title="Address" column={1} size="small" bordered items={[
               { label: 'Street', children: orDash([s.Street, s.HouseNumber].filter(Boolean).join(' ')) },

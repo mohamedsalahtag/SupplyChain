@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stage 2 mockup</title>
+<style>
+  :root { --green:#1f6f43; --border:#d9d9d9; --bg:#f5f5f5; --text:#1f1f1f; --muted:#8c8c8c; --red:#cf1322; --amber:#d48806; --blue:#1677ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; font: 13px/1.5 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color:var(--text); background:var(--bg); }
+  header { height:40px; background:#001529; color:#fff; display:flex; align-items:center; padding:0 16px; gap:8px; }
+  header .logo { width:22px; height:22px; border-radius:4px; background:var(--green); }
+  header .site { font-weight:600; flex:1; }
+  .shell { display:flex; min-height:calc(100vh - 40px); }
+  nav { width:190px; background:#fff; border-right:1px solid #f0f0f0; padding:6px 0; flex-shrink:0; }
+  nav .grp { color:var(--muted); padding:6px 16px 2px; font-size:12px; }
+  nav a { display:flex; justify-content:space-between; padding:5px 16px 5px 28px; color:var(--text); cursor:pointer; }
+  nav a.active { background:#e6f4ea; color:var(--green); border-right:3px solid var(--green); }
+  nav .badge { background:#8c8c8c; color:#fff; border-radius:10px; padding:0 7px; font-size:11px; }
+  main { flex:1; padding:12px 16px; min-width:0; }
+  h5 { font-size:16px; margin:0; }
+  .sub, .note { color:var(--muted); } .note { font-size:12px; }
+  .card { background:#fff; border:1px solid #f0f0f0; border-radius:6px; padding:8px 12px; margin-bottom:10px; }
+  .inner { border:1px solid #f0f0f0; border-radius:6px; margin:6px 0; }
+  .inner-h { background:#fafafa; padding:4px 8px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; border-bottom:1px solid #f0f0f0; }
+  .tabs { display:flex; gap:2px; border-bottom:1px solid #f0f0f0; margin:8px 0; flex-wrap:wrap; }
+  .tab { padding:5px 12px; cursor:pointer; border:1px solid transparent; border-bottom:none; border-radius:6px 6px 0 0; color:#595959; }
+  .tab.active { background:#fff; border-color:#f0f0f0; color:var(--green); font-weight:600; margin-bottom:-1px; }
+  .pill { display:inline-block; min-width:18px; text-align:center; background:#8c8c8c; color:#fff; border-radius:9px; padding:0 6px; font-size:11px; margin-left:4px; }
+  table { width:100%; border-collapse:collapse; table-layout:fixed; background:#fff; }
+  th, td { border:1px solid #f0f0f0; padding:4px 8px; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  th { background:#fafafa; font-weight:600; } td.num, th.num { text-align:right; }
+  tr.click { cursor:pointer; } tr.click:hover td { background:#fafafa; }
+  tr.changed td { background:#fffbe6; } tr.added td { background:#f6ffed; } tr.removed td { background:#fff1f0; text-decoration:line-through; color:#8c8c8c; }
+  .chip { display:inline-block; border-radius:4px; padding:0 6px; font-size:12px; border:1px solid; }
+  .chip.red { color:var(--red); border-color:#ffa39e; background:#fff1f0; }
+  .chip.amber { color:var(--amber); border-color:#ffe58f; background:#fffbe6; }
+  .chip.grey { color:#595959; border-color:#d9d9d9; background:#fafafa; }
+  .chip.green { color:var(--green); border-color:#b7eb8f; background:#f6ffed; }
+  .chip.blue { color:var(--blue); border-color:#91caff; background:#e6f4ff; }
+  .chip.purple { color:#531dab; border-color:#d3adf7; background:#f9f0ff; }
+  button { font:inherit; border:1px solid var(--border); background:#fff; border-radius:4px; padding:1px 10px; cursor:pointer; }
+  button.primary { background:var(--green); color:#fff; border-color:var(--green); }
+  button.danger { color:var(--red); border-color:#ffa39e; }
+  button.link { border:none; background:none; color:var(--blue); padding:0 4px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  input, select, textarea { font:inherit; border:1px solid var(--border); border-radius:4px; padding:1px 6px; }
+  .banner { background:#e6f4ff; border:1px solid #91caff; border-radius:6px; padding:6px 10px; margin-bottom:10px; }
+  .info { background:#e6f4ff; border:1px solid #91caff; border-radius:6px; padding:6px 10px; margin:8px 0; }
+  .warn { background:#fffbe6; border:1px solid #ffe58f; border-radius:6px; padding:6px 10px; margin:8px 0; }
+  .err { background:#fff1f0; border:1px solid #ffa39e; border-radius:6px; padding:6px 10px; margin:8px 0; }
+  .page { display:none; } .page.active { display:block; }
+  .menu { position:absolute; background:#fff; box-shadow:0 6px 16px rgba(0,0,0,.12); border-radius:6px; padding:4px 0; display:none; z-index:5; min-width:200px; right:0; }
+  .menu div { padding:4px 12px; cursor:pointer; } .menu div:hover { background:#f5f5f5; }
+  .rel { position:relative; display:inline-block; }
+  .seg { display:inline-flex; border:1px solid var(--border); border-radius:4px; overflow:hidden; }
+  .seg span { padding:1px 10px; cursor:pointer; } .seg span.on { background:var(--green); color:#fff; }
+  .desc { display:grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap:4px 16px; }
+  .desc div span { color:var(--muted); }
+</style>
+</head>
+<body>
+<header><div class="logo"></div><div class="site">Supply Chain</div><span id="who">Sales planner (example) ▾</span></header>
+<div class="shell">
+  <nav>
+    <div class="grp">General</div>
+    <a data-page="work">My work <span class="badge">1</span></a>
+    <div class="grp">Master data</div>
+    <a>Materials</a><a>Suppliers</a>
+    <div class="grp">Purchasing</div>
+    <a data-page="demand" class="active">Demands</a><a data-page="list">Change requests</a><a>Purchase orders</a>
+    <div class="grp">Administration</div>
+    <a>Users</a><a>Security</a><a>Configuration</a>
+  </nav>
+  <main>
+    <div class="banner">Mockup: persona → <button onclick="persona('sales')">Sales</button> <button onclick="persona('proc')">Procurement</button>. Sales raises container changes; Procurement decides them. Procurement raises "Not sourced"; Sales decides it.</div>
+
+    <!-- DEMAND (accepted) -->
+    <section class="page active" id="page-demand">
+      <div class="row" style="justify-content:space-between">
+        <div class="row"><h5>D-000101</h5><span class="chip blue">Not started</span><span class="sub">1000 · KSA</span></div>
+        <div class="rel">
+          <button class="primary" onclick="toggleMenu(event,'reqMenu')">Request change ▾</button>
+          <div class="menu" id="reqMenu">
+            <div class="sales-only" onclick="go('edit')">Change containers…</div>
+            <div class="sales-only" onclick="go('edit')">Cancel week…</div>
+            <div class="sales-only" onclick="go('edit')">Cancel demand…</div>
+            <div class="proc-only" onclick="go('ns')">Not sourced…</div>
+          </div>
+        </div>
+      </div>
+      <div class="warn">⏸ <b>On hold:</b> 2026-W41 and 2 materials are in <a onclick="go('cr')" style="cursor:pointer;color:var(--blue)">CR-000012</a> (waiting for Procurement). No other change request can touch them until it is decided.</div>
+      <div class="card">
+        <div class="row"><b>2026-W41</b><span class="note">Mon 5 Oct 2026</span><span class="chip grey">3 containers</span><span class="note">Mixed Gala: 3 × 1,540 CT</span><span class="chip amber">⏸ On hold · CR-000012</span></div>
+        <table style="margin-top:6px">
+          <thead><tr><th>Material</th><th style="width:70px">Size</th><th style="width:90px">Class</th><th style="width:55px">Origin</th><th style="width:70px">Share</th><th class="num" style="width:90px">Per container</th><th class="num" style="width:100px">Requested (CT)</th><th class="num" style="width:80px">Open</th><th class="num" style="width:90px">In progress</th><th class="num" style="width:80px">Cancelled</th><th style="width:110px">Status</th></tr></thead>
+          <tbody>
+            <tr><td>Apples Royal Gala <span class="chip amber">⏸</span></td><td>S-100</td><td>Cat1</td><td>CL</td><td>40%</td><td class="num">616</td><td class="num"><b>1,848</b></td><td class="num">1,848</td><td class="num">—</td><td class="num">—</td><td><span class="chip blue">Not started</span></td></tr>
+            <tr><td>Apples Royal Gala <span class="chip amber">⏸</span></td><td>S-100</td><td>Extra Fancy</td><td>CL</td><td>60%</td><td class="num">924</td><td class="num"><b>2,772</b></td><td class="num">2,772</td><td class="num">—</td><td class="num">—</td><td><span class="chip blue">Not started</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="tabs"><div class="tab active">Change requests <span class="pill">1</span></div><div class="tab">Comments</div><div class="tab">Attachments</div><div class="tab">Versions</div><div class="tab">History</div></div>
+      <table>
+        <thead><tr><th style="width:110px">Number</th><th>Type</th><th style="width:150px">Raised by</th><th style="width:170px">Status</th></tr></thead>
+        <tbody><tr class="click" onclick="go('cr')"><td>CR-000012</td><td>Change containers · W41: 3 → 2 containers</td><td>Sales planner</td><td><span class="chip purple">Submitted</span></td></tr></tbody>
+      </table>
+    </section>
+
+    <!-- CHANGE EDITOR (Sales) -->
+    <section class="page" id="page-edit">
+      <a class="note" onclick="go('demand')" style="cursor:pointer">← D-000101</a>
+      <div class="row" style="justify-content:space-between"><h5>Request change · D-000101 · Change containers</h5>
+        <div class="row"><button onclick="go('demand')">Cancel</button><button class="primary" onclick="precheck()">Check &amp; send</button></div></div>
+      <div class="info">Edit the containers as they should be. Changes are highlighted; nothing changes until Procurement approves.</div>
+      <div class="card">
+        <div class="row"><b>2026-W41</b><span class="note">Mon 5 Oct 2026</span><span class="chip grey">2 containers <s>3</s></span></div>
+        <div class="inner"><div class="inner-h">Container group <input value="Mixed Gala" style="width:130px"> Capacity per container <input value="1540" style="width:70px"> CT · Number of containers <input value="2" style="width:50px;background:#fffbe6"> <span class="note">was 3</span> <span class="chip green">Shares 100%</span></div>
+          <table><thead><tr><th>Material</th><th style="width:70px">Size</th><th style="width:90px">Class</th><th style="width:55px">Origin</th><th style="width:70px">Share %</th><th class="num" style="width:90px">Per container</th><th class="num" style="width:90px">All 2</th></tr></thead>
+          <tbody><tr class="changed"><td>Apples Royal Gala</td><td>S-100</td><td>Cat1</td><td>CL</td><td>40</td><td class="num">616</td><td class="num">1,232 <span class="note">(−616)</span></td></tr>
+          <tr class="changed"><td>Apples Royal Gala</td><td>S-100</td><td>Extra Fancy</td><td>CL</td><td>60</td><td class="num">924</td><td class="num">1,848 <span class="note">(−924)</span></td></tr></tbody></table></div>
+        <div class="inner"><div class="inner-h" style="background:#f6ffed">New group · Container group <input value="Granny" style="width:130px"> Capacity per container <input value="1540" style="width:70px"> CT · Number of containers <input value="1" style="width:50px"> <span class="chip green">Shares 100%</span></div>
+          <table><tbody><tr class="added"><td>Apples Granny Smith</td><td style="width:70px">S-113</td><td style="width:90px">Cat1</td><td style="width:55px">CL</td><td style="width:70px">100</td><td class="num" style="width:90px">1,540</td><td class="num" style="width:90px">1,540 <span class="note">(new)</span></td></tr></tbody></table></div>
+        <button>+ Add container group</button>
+      </div>
+      <div class="card row"><span>Reason</span><select><option>CUST_CANCEL · Customer cancelled or reduced the order</option><option>FORECAST_CHG · Sales forecast changed</option></select><span>Comment</span><input style="flex:1" value="Customer reduced Gala by one container, wants one Granny instead"></div>
+      <div class="card" id="precheck" style="display:none">
+        <b>Pre-check: 2 items will be sent to Procurement</b>
+        <table style="margin-top:6px"><thead><tr><th style="width:40px">#</th><th>Change</th><th>Quantity effect</th><th style="width:150px">Check</th></tr></thead>
+        <tbody><tr><td>1</td><td>W41 · Mixed Gala: 3 → 2 containers</td><td>Gala S-100 Cat1 −616 CT · Gala S-100 EXF −924 CT</td><td><span class="chip green">OK · cancellable</span></td></tr>
+        <tr><td>2</td><td>W41 · new group Granny: 1 × 1,540 CT</td><td>Granny S-113 Cat1 CL +1,540 CT (new material)</td><td><span class="chip green">OK</span></td></tr></tbody></table>
+        <div class="row" style="margin-top:6px"><button class="primary" onclick="go('cr')">Send to Procurement</button><span class="note">Week W41 and its materials go on hold until the decision.</span></div>
+        <div class="err" style="margin-top:8px"><b>Example of a Blocked request</b> (shown instead when a check fails; nothing is held): "Gala S-100 Cat1: only 400 CT is still cancellable — 1,448 CT is already PO submitted." · "W41 is already in CR-000011".</div>
+      </div>
+    </section>
+
+    <!-- NOT SOURCED (Procurement) -->
+    <section class="page" id="page-ns">
+      <a class="note" onclick="go('demand')" style="cursor:pointer">← D-000101</a>
+      <h5>Request change · D-000101 · Not sourced</h5>
+      <div class="info">Only quantity that is still <b>Open</b> can be marked not sourced. Sales decides.</div>
+      <table><thead><tr><th style="width:90px">Week</th><th>Material</th><th class="num" style="width:110px">Open (CT)</th><th style="width:140px">Not sourced (CT)</th></tr></thead>
+      <tbody><tr><td>W41</td><td>Apples Royal Gala · S-100 · Extra Fancy · CL</td><td class="num">2,772</td><td><input value="924" style="width:100px;text-align:right"></td></tr>
+      <tr><td>W41</td><td>Apples Royal Gala · S-100 · Cat1 · CL</td><td class="num">1,848</td><td><input placeholder="0" style="width:100px;text-align:right"></td></tr></tbody></table>
+      <div class="card row" style="margin-top:8px"><span>Lower W41 containers to</span><input value="2" style="width:60px"><span class="note">optional</span><span>Reason</span><select><option>NO_SUPPLY · No supplier could supply in time</option></select><span>Comment</span><input style="flex:1" value="No EXF S-100 from Chile available for W41"><button class="primary" onclick="go('cr')">Check &amp; send to Sales</button></div>
+    </section>
+
+    <!-- CR PAGE (decide) -->
+    <section class="page" id="page-cr">
+      <div class="row"><a class="note" onclick="go('work')" style="cursor:pointer">← Back to My work</a><a class="note" onclick="go('demand')" style="cursor:pointer">D-000101</a></div>
+      <div class="row"><h5>CR-000012</h5><span class="chip purple">Submitted</span><span class="sub">Change containers · D-000101 · raised by Sales planner, 24 Sep 11:40</span></div>
+      <div class="card desc"><div><span>Reason</span><br>CUST_CANCEL · Customer cancelled or reduced the order</div><div style="grid-column: span 3"><span>Comment</span><br>Customer reduced Gala by one container, wants one Granny instead</div></div>
+      <div class="info sales-only">Waiting for Procurement to decide. You can <button class="danger">Withdraw…</button> until then.</div>
+      <div class="proc-only info"><b>Procurement decision:</b> decide each item. <b>Approve</b> applies it at once; <b>Reject</b> leaves it unchanged. For extra containers you may approve fewer. The requester cannot decide their own request.</div>
+      <table>
+        <thead><tr><th style="width:40px">#</th><th>Change</th><th>Quantity effect</th><th style="width:170px">At submit → now</th><th style="width:260px" class="proc-only">Decision</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>W41 · Mixed Gala: 3 → 2 containers</td><td>Gala S-100 Cat1 −616 · Gala S-100 EXF −924 CT</td><td>Open 4,620 → 4,620</td><td class="proc-only"><span class="seg"><span class="on">Approve</span><span>Reject</span></span></td></tr>
+          <tr><td>2</td><td>W41 · new group Granny: 1 × 1,540 CT</td><td>Granny S-113 Cat1 CL +1,540 CT</td><td>—</td><td class="proc-only"><span class="seg"><span>Approve</span><span class="on">Approve fewer</span><span>Reject</span></span> <input value="0" style="width:40px"> of 1</td></tr>
+        </tbody>
+      </table>
+      <div class="card row proc-only" style="margin-top:8px"><span>Decision comment</span><input style="flex:1" value="Gala reduction accepted; no Granny capacity this week"><button class="primary" onclick="alert('Result: Partially approved · Applied. W41 is now 2 containers; 1,540 CT cancelled (origin Sales); holds released; Sales notified.')">Decide</button></div>
+      <div class="tabs"><div class="tab active">Comments</div><div class="tab">Attachments</div><div class="tab">History</div></div>
+      <div class="card note">Result after the decision, e.g. <span class="chip green">Partially approved</span> <span class="chip green">Applied</span> — or <span class="chip amber">Partially applied</span>: "only 400 of 616 CT was still cancellable".</div>
+    </section>
+
+    <!-- MY WORK -->
+    <section class="page" id="page-work">
+      <div class="row"><h5>My work</h5></div>
+      <div class="tabs"><div class="tab active">Decide change request <span class="pill">1</span></div><div class="tab">Accept demand <span class="pill">2</span></div></div>
+      <table><thead><tr><th style="width:110px">Due</th><th style="width:100px">Number</th><th>What</th><th style="width:80px">Company</th><th style="width:130px">Raised by</th><th style="width:130px">Action</th></tr></thead>
+      <tbody><tr><td><span class="chip grey">Due in 22 h</span></td><td>CR-000012</td><td>Change containers · D-000101 · W41: 3 → 2 containers, +1 Granny group</td><td>1000</td><td>Sales planner</td><td><button class="primary" onclick="go('cr')">Decide</button></td></tr></tbody></table>
+      <div class="note" style="margin-top:6px">Shown to Procurement for Sales requests, and to Sales for "Not sourced". Never to the person who raised it.</div>
+    </section>
+
+    <!-- LIST -->
+    <section class="page" id="page-list">
+      <div class="row"><h5>Change requests</h5><span class="sub">Change requests of your companies</span></div>
+      <div class="row" style="margin:8px 0"><span class="seg"><span class="on">Raised by me</span><span>All in my companies</span></span><input placeholder="CR or demand number"><select><option>Type</option></select><select><option>Status</option></select></div>
+      <table><thead><tr><th style="width:100px">Number</th><th style="width:90px">Demand</th><th style="width:140px">Type</th><th style="width:120px">Raised by</th><th style="width:120px">Raised at</th><th>Reason</th><th style="width:150px">Status</th><th style="width:130px">Apply status</th><th style="width:120px">Decided by</th></tr></thead>
+      <tbody>
+        <tr class="click" onclick="go('cr')"><td>CR-000012</td><td>D-000101</td><td>Change containers</td><td>Sales planner</td><td>24 Sep 11:40</td><td>CUST_CANCEL</td><td><span class="chip purple">Submitted</span></td><td>—</td><td>—</td></tr>
+        <tr class="click"><td>CR-000011</td><td>D-000098</td><td>Cancel week</td><td>Sales planner</td><td>22 Sep 09:12</td><td>FORECAST_CHG</td><td><span class="chip green">Approved</span></td><td><span class="chip green">Applied</span></td><td>Buyer</td></tr>
+        <tr class="click"><td>CR-000010</td><td>D-000097</td><td>Change containers</td><td>Sales planner</td><td>21 Sep 15:03</td><td>CUST_CANCEL</td><td><span class="chip red">Blocked</span></td><td>—</td><td>—</td></tr>
+      </tbody></table>
+    </section>
+  </main>
+</div>
+<script>
+function go(p) {
+  document.querySelectorAll('.page').forEach(x => x.classList.toggle('active', x.id === 'page-' + p));
+  document.querySelectorAll('nav a').forEach(x => x.classList.toggle('active', x.dataset.page === (['demand','edit','ns','cr'].includes(p) ? (p === 'cr' ? 'list' : 'demand') : p)));
+  document.getElementById('precheck').style.display = 'none';
+  closeMenus();
+}
+document.querySelectorAll('nav a[data-page]').forEach(el => el.onclick = () => go(el.dataset.page));
+function persona(p) {
+  document.getElementById('who').textContent = (p === 'sales' ? 'Sales planner (example)' : 'Buyer (example)') + ' ▾';
+  document.querySelectorAll('.sales-only').forEach(e => e.style.display = p === 'sales' ? '' : 'none');
+  document.querySelectorAll('.proc-only').forEach(e => e.style.display = p === 'proc' ? '' : 'none');
+}
+function toggleMenu(e, id) { e.stopPropagation(); const m = document.getElementById(id); m.style.display = m.style.display === 'block' ? 'none' : 'block'; }
+function closeMenus() { document.querySelectorAll('.menu').forEach(m => m.style.display = 'none'); }
+document.addEventListener('click', closeMenus);
+function precheck() { document.getElementById('precheck').style.display = 'block'; }
+persona('sales');
+</script>
+</body>
+</html>

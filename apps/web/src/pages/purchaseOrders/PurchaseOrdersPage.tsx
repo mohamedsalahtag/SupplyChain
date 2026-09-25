@@ -49,6 +49,7 @@ export function PurchaseOrdersPage() {
     { title: 'Date', key: 'OrderDate', width: 100, render: (_: unknown, r) => dateText(r.OrderDate), ...sortable('OrderDate') },
     { title: 'Supplier', key: 'SupplierCode', dataIndex: 'SupplierCode', width: 100, ...sortable('SupplierCode') },
     { title: 'Supplier name', key: 'SupplierName', width: 260, render: (_: unknown, r) => r.SupplierName || <Typography.Text type="secondary">not in Suppliers</Typography.Text> },
+    { title: 'Company', key: 'CompanyCode', width: 75, render: (_: unknown, r) => r.CompanyCode || '—' },
     { title: 'Lines', key: 'LineCount', dataIndex: 'LineCount', width: 60, align: 'right' },
     { title: 'Currency', key: 'Currency', dataIndex: 'Currency', width: 75 },
   ];

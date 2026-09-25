@@ -14,6 +14,7 @@ export function SuppliersSyncTab() {
   const save = trpc.suppliers.saveInclude.useMutation();
   const refresh = trpc.suppliers.refreshGroups.useMutation();
   const start = trpc.suppliers.startSync.useMutation();
+  const startFresh = trpc.suppliers.startFreshSync.useMutation();
   const onFinished = useCallback(() => void utils.suppliers.invalidate(), [utils]);
 
   return (
@@ -31,7 +32,7 @@ export function SuppliersSyncTab() {
           saving={save.isPending}
           onRefresh={() => refresh.mutateAsync().then(() => utils.suppliers.include.invalidate())}
           onSave={(groups) => save.mutateAsync({ groups }).then(() => utils.suppliers.include.invalidate())}
-          note="Suppliers in groups you untick later are kept but marked “Not in SAP”."
+          note="Suppliers in groups you untick later are kept but marked “Not in SAP”. To remove them, use Delete all and sync fresh."
         />
       )}
       {can(P.configSuppliersRun) && (
@@ -40,6 +41,15 @@ export function SuppliersSyncTab() {
           source="sap.suppliers"
           start={() => start.mutateAsync()}
           confirmText="Suppliers in the chosen groups are added or updated (name, country, currency, address, email). Suppliers no longer returned are marked “Not in SAP” — nothing is deleted."
+          offerFresh={
+            can(P.configSuppliersFresh)
+              ? {
+                  confirmText:
+                    'Every supplier stored in this app is deleted, then the chosen groups are copied again from SAP — so suppliers of groups you unticked disappear. SAP is read first: if it fails, nothing is deleted.',
+                  start: () => startFresh.mutateAsync(),
+                }
+              : undefined
+          }
           blockedReason={include.data && include.data.groups.length === 0 ? 'Choose at least one supplier group and save it first.' : null}
           onFinished={onFinished}
         />

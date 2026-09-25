@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Award by containers</title>
+<style>
+  :root { --green:#1f6f43; --border:#d9d9d9; --line:#f0f0f0; --bg:#f5f5f5; --text:#1f1f1f; --muted:#8c8c8c; --amber:#d48806; --blue:#1677ff;
+          --s0:#1677ff; --s0bg:#e6f4ff; --s1:#722ed1; --s1bg:#f9f0ff; --s2:#13a8a8; --s2bg:#e6fffb; --none:#d9d9d9; }
+  * { box-sizing: border-box; }
+  body { margin:0; font: 13px/1.5 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color:var(--text); background:var(--bg); }
+  header { height:40px; background:#001529; color:#fff; display:flex; align-items:center; padding:0 16px; gap:8px; }
+  header .logo { width:22px; height:22px; border-radius:4px; background:var(--green); }
+  main { max-width:1280px; margin:0 auto; padding:12px 16px 40px; }
+  h5 { font-size:16px; margin:0; }
+  .muted { color:var(--muted); } .small { font-size:12px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:8px; margin-bottom:12px; }
+  .card-h { padding:8px 12px; border-bottom:1px solid var(--line); display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  button { font:inherit; border:1px solid var(--border); background:#fff; border-radius:4px; padding:2px 10px; cursor:pointer; }
+  button.primary { background:var(--green); color:#fff; border-color:var(--green); padding:4px 16px; }
+  button.link { border:none; background:none; color:var(--blue); padding:0 2px; font-size:12px; }
+  button.step { padding:0 7px; line-height:20px; }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  input { font:inherit; border:1px solid var(--border); border-radius:4px; padding:2px 6px; }
+  .chip { display:inline-block; border-radius:10px; padding:0 8px; font-size:12px; border:1px solid; }
+  .chip.amber { color:var(--amber); border-color:#ffe58f; background:#fffbe6; }
+
+  .grid-box { max-height:calc(100vh - 230px); min-height:320px; overflow:auto; user-select:none; }
+  table { border-collapse:separate; border-spacing:0; width:100%; }
+  th, td { padding:6px 10px; text-align:left; border-bottom:1px solid var(--line); background:#fff; }
+  thead th { position:sticky; top:0; z-index:3; background:#fafafa; border-bottom:2px solid var(--border); vertical-align:bottom; }
+  th.sup { text-align:center; min-width:200px; border-top:4px solid var(--sc); cursor:pointer; }
+  th.sup:hover { background:#f0f0f0; }
+  th.sup.brush { background:var(--sbg); box-shadow: inset 0 -3px 0 var(--sc); }
+  th.sup .nm { display:flex; align-items:center; justify-content:center; gap:6px; font-size:13px; }
+  th.sup .sw { width:12px; height:12px; border-radius:3px; background:var(--sc); }
+  th.sup .tot { font-weight:400; font-size:12px; color:#595959; }
+  th.sup .hint { font-weight:400; font-size:11px; color:var(--sc); }
+  td.first, th.first { position:sticky; left:0; z-index:2; min-width:300px; max-width:340px; border-right:1px solid var(--line); }
+  thead th.first { z-index:4; }
+  .c { text-align:center; } .num { text-align:right; }
+
+  tr.week td { background:#f5f5f5; border-top:2px solid var(--border); padding:6px 10px; }
+  .wk { font-weight:700; font-size:14px; }
+  .count { font-size:12px; }
+
+  tr.grp td { vertical-align:top; }
+  .gname { font-weight:600; }
+  .gicon { display:inline-block; width:8px; height:8px; border-radius:2px; background:#595959; margin-right:6px; vertical-align:middle; }
+  .mix { font-size:12px; color:#595959; margin-top:2px; }
+  .strip { margin-top:6px; display:flex; flex-wrap:wrap; gap:3px; max-width:320px; }
+  .box { width:18px; height:18px; border-radius:3px; background:var(--none); cursor:pointer; position:relative; }
+  .box:hover { outline:2px solid var(--brushc, #595959); outline-offset:1px; }
+  .box.x { outline:2px solid var(--amber); outline-offset:1px; }
+  .box.add::after { content:'+'; position:absolute; inset:0; color:#fff; font-size:11px; font-weight:700; text-align:center; line-height:18px; }
+  .prices { font-size:12px; line-height:1.5; color:#595959; }
+  .prices b { color:var(--text); font-weight:600; }
+  .prices .low { color:var(--green); }
+  .stepper { display:inline-flex; align-items:center; gap:4px; margin-top:4px; }
+  .stepper input { width:46px; text-align:center; padding:0 4px; }
+  .cell-on { background:var(--sbg) !important; }
+  .na-cell { color:#bfbfbf; font-size:12px; text-align:center; }
+
+  tfoot td { position:sticky; bottom:0; z-index:2; background:#fafafa; font-weight:600; border-top:2px solid var(--border); }
+  tfoot td.first { z-index:3; }
+  .brushbar { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .brushbar .opt { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--border); border-radius:14px; padding:1px 10px; cursor:pointer; font-size:12px; }
+  .brushbar .opt.on { border-color:var(--sc); background:var(--sbg); font-weight:600; }
+  .brushbar .sw { width:10px; height:10px; border-radius:3px; background:var(--sc); }
+  .legend { font-size:12px; color:var(--muted); display:flex; gap:12px; margin-left:auto; flex-wrap:wrap; align-items:center; }
+  .msg { border-radius:6px; padding:6px 10px; margin:8px 0; }
+  .msg.ok { background:#f6ffed; border:1px solid #b7eb8f; } .msg.warn { background:#fffbe6; border:1px solid #ffe58f; }
+</style>
+</head>
+<body>
+<header><div class="logo"></div><b>Supply chain</b></header>
+<main>
+  <div class="muted small">← RFQ-000031</div>
+  <div class="row" style="margin:2px 0 10px">
+    <h5>Award · RFQ-000031</h5><span class="muted">D-000044 · company 1000 · 4 weeks · 50 containers · 3 suppliers quoted · prices per CT in USD</span>
+  </div>
+
+  <div class="card">
+    <div class="card-h">
+      <button onclick="fillOffered()">As offered (cheapest first)</button>
+      <button onclick="allCheapest()">All to the cheapest</button>
+      <button onclick="clearAll()">Clear</button>
+      <div class="legend"><span>amber outline = above the supplier's offer (allowed, logged)</span></div>
+    </div>
+    <div class="card-h" style="background:#fafafa">
+      <b class="small">Squares go to:</b>
+      <div class="brushbar" id="brushbar"></div>
+      <span class="muted small">then click a square (or drag across several) — one click per container</span>
+    </div>
+    <div class="grid-box" id="gridbox"><table id="grid"></table></div>
+  </div>
+
+  <div class="card">
+    <div class="card-h"><b>Shipments</b><span class="muted small">one per supplier × week, from your picks</span></div>
+    <div style="overflow-x:auto"><table id="ships"></table></div>
+    <details style="padding:6px 12px"><summary class="muted small" style="cursor:pointer">Materials awarded</summary><div id="materials" style="margin-top:6px"></div></details>
+  </div>
+
+  <div class="row">
+    <input placeholder="Comment (optional)" style="width:380px">
+    <button class="primary" id="awardBtn" onclick="award()">Award</button>
+  </div>
+  <div id="result"></div>
+</main>
+<script>
+const SUP = [ { id: 'SUR', name: 'Frutícola Sur' }, { id: 'AND', name: 'Andes Export' }, { id: 'VAL', name: 'Valle Verde' } ];
+const GALA = (a, b, c, d, e, f) => [
+  { mat: 'Royal Gala S-100 Cat1', qty: 616, price: { SUR: a, AND: b, VAL: c } },
+  { mat: 'Royal Gala S-113 Cat1', qty: 924, price: { SUR: d, AND: e, VAL: f } } ];
+const WEEKS = [
+  { week: '2026-W40', monday: 'Mon 28 Sep', offered: { SUR: 8, AND: 6, VAL: 4 }, groups: [
+    { id: 'g1', name: 'Gala mix', capacity: 1540, containers: 12, items: GALA(18.5, 18.1, 18.3, 17.9, 17.6, 17.7) },
+    { id: 'g2', name: 'Fuji', capacity: 1540, containers: 3, items: [ { mat: 'Fuji S-100 Cat1', qty: 1540, price: { SUR: 16.2, AND: null, VAL: 16.0 } } ] } ] },
+  { week: '2026-W41', monday: 'Mon 5 Oct', offered: { SUR: 6, AND: 8, VAL: 4 }, groups: [
+    { id: 'g3', name: 'Gala mix', capacity: 1540, containers: 12, items: GALA(18.5, 18.3, 18.2, 17.9, 17.8, 17.7) } ] },
+  { week: '2026-W42', monday: 'Mon 12 Oct', offered: { SUR: 6, AND: 6, VAL: 3 }, groups: [
+    { id: 'g4', name: 'Gala mix', capacity: 1540, containers: 10, items: GALA(18.4, 18.3, 18.6, 17.9, 17.8, 18.0) },
+    { id: 'g5', name: 'Granny Smith', capacity: 1540, containers: 3, items: [ { mat: 'Granny Smith S-100 Cat1', qty: 1540, price: { SUR: 15.8, AND: 15.6, VAL: null } } ] } ] },
+  { week: '2026-W43', monday: 'Mon 19 Oct', offered: { SUR: 5, AND: 5, VAL: 5 }, groups: [
+    { id: 'g6', name: 'Gala mix', capacity: 1540, containers: 10, items: GALA(18.4, 18.4, 18.1, 17.9, 17.9, 17.6) } ] },
+];
+const pick = {}; const added = {};
+WEEKS.forEach((w) => w.groups.forEach((g) => { pick[g.id] = Array(g.containers).fill(null); added[g.id] = 0; }));
+let brush = 'SUR'; // the supplier a click on a square gives the container to (null = Not awarded)
+let dragging = false;
+const fmt = (n) => n.toLocaleString('en-GB', { maximumFractionDigits: 2 });
+const si = (id) => SUP.findIndex((s) => s.id === id);
+const priced = (g, s) => g.items.every((i) => i.price[s] != null);
+const value = (g, s) => g.items.reduce((t, i) => t + i.qty * i.price[s], 0);
+const inGroup = (g, s) => pick[g.id].filter((x) => x === s).length;
+const inWeek = (w, s) => w.groups.reduce((t, g) => t + inGroup(g, s), 0);
+function overFlags(w) { const n = {}; const out = {}; w.groups.forEach((g) => { out[g.id] = pick[g.id].map((s) => { if (!s) return false; n[s] = (n[s] ?? 0) + 1; return n[s] > w.offered[s]; }); }); return out; }
+
+function renderBrush() {
+  document.getElementById('brushbar').innerHTML = SUP.map((s, i) => `<span class="opt ${brush === s.id ? 'on' : ''}" style="--sc:var(--s${i});--sbg:var(--s${i}bg)" onclick="setBrush('${s.id}')"><span class="sw"></span>${s.name}</span>`).join('')
+    + `<span class="opt ${brush === null ? 'on' : ''}" style="--sc:#8c8c8c;--sbg:#f5f5f5" onclick="setBrush(null)"><span class="sw" style="background:var(--none)"></span>Not awarded</span>`;
+  document.getElementById('gridbox').style.setProperty('--brushc', brush ? `var(--s${si(brush)})` : '#8c8c8c');
+}
+function render() {
+  renderBrush();
+  const all = Object.values(pick).flat();
+  let h = `<thead><tr><th class="first">Week · container group</th>${SUP.map((s, i) => {
+    const n = all.filter((x) => x === s.id).length;
+    return `<th class="sup ${brush === s.id ? 'brush' : ''}" style="--sc:var(--s${i});--sbg:var(--s${i}bg)" onclick="setBrush('${s.id}')" title="Click: squares go to ${s.name}"><div class="nm"><span class="sw"></span>${s.name}</div><div class="tot">${n} container${n === 1 ? '' : 's'}</div>${brush === s.id ? '<div class="hint">squares go here</div>' : ''}</th>`;
+  }).join('')}<th class="c" style="min-width:110px">Not awarded<div class="tot small" style="font-weight:400">${all.filter((x) => !x).length} stay Quoted</div></th></tr></thead><tbody>`;
+
+  WEEKS.forEach((w, wi) => {
+    const total = w.groups.reduce((t, g) => t + pick[g.id].length, 0);
+    const flags = overFlags(w);
+    h += `<tr class="week"><td class="first"><span class="wk">${w.week}</span> <span class="muted small">${w.monday} · ${total} containers</span></td>${SUP.map((s) => {
+      const n = inWeek(w, s.id); const over = n - w.offered[s.id];
+      return `<td class="c count">${n} of ${w.offered[s.id]} offered ${over > 0 ? `<span class="chip amber">+${over}</span>` : ''} <button class="link" onclick="weekTo(${wi},'${s.id}')">whole week</button></td>`;
+    }).join('')}<td class="c"><button class="link" onclick="weekTo(${wi},null)">clear</button></td></tr>`;
+
+    w.groups.forEach((g) => {
+      const boxes = pick[g.id].map((s, i) => `<span class="box ${flags[g.id][i] ? 'x' : ''} ${i >= g.containers ? 'add' : ''}" style="${s ? `background:var(--s${si(s)})` : ''}" title="Container ${i + 1} of ${pick[g.id].length}${i >= g.containers ? ' (added)' : ''}: ${s ? SUP[si(s)].name : 'not awarded'}" onmousedown="paintStart('${g.id}',${i})" onmouseenter="paintOver('${g.id}',${i})"></span>`).join('');
+      h += `<tr class="grp"><td class="first"><span class="gicon"></span><span class="gname">${g.name}</span> <span class="muted small">· ${pick[g.id].length} × ${fmt(g.capacity)} CT${added[g.id] ? ` · <span style="color:var(--green)">${added[g.id]} added</span> <button class="link" onclick="removeAdded('${g.id}')">undo</button>` : ''}</span>
+        <div class="mix">${g.items.map((i) => `${i.mat} <b>${fmt(i.qty)}</b>`).join(' · ')} CT per container</div>
+        <div class="strip">${boxes}</div>
+        <button class="link" style="margin-top:4px" onclick="addContainer('${g.id}')">+ Add container</button></td>`;
+      SUP.forEach((s, k) => {
+        if (!priced(g, s.id)) { h += `<td class="na-cell">— not priced<div class="small">${g.items.filter((i) => i.price[s.id] == null).map((i) => i.mat).join(', ')}</div></td>`; return; }
+        const n = inGroup(g, s.id);
+        const prices = g.items.map((i) => { const vals = SUP.map((o) => i.price[o.id]).filter((v) => v != null); const low = Math.min(...vals);
+          return `<div>${i.mat.replace(/^(Royal Gala|Fuji|Granny Smith) /, '')}: <b class="${i.price[s.id] === low && vals.length > 1 ? 'low' : ''}">${i.price[s.id].toFixed(2)}</b></div>`; }).join('');
+        h += `<td class="c ${n ? 'cell-on' : ''}" style="--sbg:var(--s${k}bg)"><div class="prices">${prices}</div>
+          <div class="stepper"><button class="step" onclick="step('${g.id}','${s.id}',-1)" ${n ? '' : 'disabled'}>−</button><input value="${n}" onchange="setCount('${g.id}','${s.id}',this.value)"><button class="step" onclick="step('${g.id}','${s.id}',1)" ${pick[g.id].some((x) => !x) ? '' : 'disabled'}>+</button></div></td>`;
+      });
+      h += `<td class="c count">${inGroup(g, null)}</td></tr>`;
+    });
+  });
+  const tot = SUP.map((s) => { let v = 0; WEEKS.forEach((w) => w.groups.forEach((g) => { if (priced(g, s.id)) v += inGroup(g, s.id) * value(g, s.id); })); return v; });
+  h += `</tbody><tfoot><tr><td class="first">Total</td>${SUP.map((s, i) => `<td class="c">${all.filter((x) => x === s.id).length} containers · ${tot[i] ? fmt(tot[i]) + ' USD' : '—'}</td>`).join('')}<td class="c">${all.filter((x) => !x).length} Quoted</td></tr></tfoot>`;
+  document.getElementById('grid').innerHTML = h;
+
+  const ships = WEEKS.flatMap((w) => SUP.map((s) => ({ w, s, n: inWeek(w, s.id) })).filter((x) => x.n));
+  document.getElementById('ships').innerHTML = `<tr><th>Supplier</th><th>Week</th><th class="num">Containers</th><th>Confirmed ETD</th><th></th></tr>` + (ships.map((x) => {
+    const over = x.n - x.w.offered[x.s.id];
+    return `<tr><td>${x.s.name}</td><td>${x.w.week}</td><td class="num">${x.n}</td><td><input type="date"></td><td>${over > 0 ? `<span class="chip amber">${over} above the offer</span> <input placeholder="Note (optional)" style="width:200px">` : ''}</td></tr>`;
+  }).join('') || `<tr><td colspan="5" class="muted">Pick containers above.</td></tr>`);
+  const rows = [];
+  WEEKS.forEach((w) => w.groups.forEach((g) => SUP.forEach((s) => { const n = inGroup(g, s.id); if (n) g.items.forEach((it) => rows.push(`<tr><td>${s.name}</td><td>${w.week}</td><td>${it.mat}</td><td class="num">${fmt(it.qty * n)} CT</td><td class="num">${it.price[s.id].toFixed(2)} USD</td></tr>`)); })));
+  document.getElementById('materials').innerHTML = rows.length ? `<table><tr><th>Supplier</th><th>Week</th><th>Material</th><th class="num">Quantity</th><th class="num">Price per CT</th></tr>${rows.join('')}</table>` : '<span class="muted small">Nothing picked yet.</span>';
+  document.getElementById('awardBtn').disabled = !all.some((x) => x);
+  document.getElementById('result').innerHTML = '';
+}
+const findGroup = (id) => WEEKS.flatMap((w) => w.groups).find((g) => g.id === id);
+function setBrush(s) { brush = s; render(); }
+// one click on a square gives it to the chosen supplier; a second click on the same square takes it back
+function paint(id, i, toggle) {
+  const g = findGroup(id);
+  if (brush && !priced(g, brush)) return; // that supplier did not price this mix
+  pick[id][i] = toggle && pick[id][i] === brush ? null : brush;
+}
+function paintStart(id, i) { dragging = true; paint(id, i, true); render(); }
+function paintOver(id, i) { if (dragging) { paint(id, i, false); render(); } }
+document.addEventListener('mouseup', () => { dragging = false; });
+function setCount(id, s, v) {
+  const want = Math.max(0, parseInt(v, 10) || 0); const arr = pick[id];
+  let have = arr.filter((x) => x === s).length;
+  for (let i = arr.length - 1; i >= 0 && have > want; i--) if (arr[i] === s) { arr[i] = null; have--; }
+  for (let i = 0; i < arr.length && have < want; i++) if (!arr[i]) { arr[i] = s; have++; }
+  render();
+}
+function step(id, s, d) { setCount(id, s, inGroup(findGroup(id), s) + d); }
+function addContainer(id) { pick[id].push(null); added[id]++; render(); }
+function removeAdded(id) { if (added[id] > 0) { pick[id].pop(); added[id]--; render(); } }
+function weekTo(wi, s) { WEEKS[wi].groups.forEach((g) => { if (s && !priced(g, s)) return; pick[g.id] = pick[g.id].map(() => s); }); render(); }
+function clearAll() { Object.keys(pick).forEach((k) => (pick[k] = pick[k].map(() => null))); render(); }
+function order(g) { return SUP.map((s) => s.id).filter((s) => priced(g, s)).sort((a, b) => value(g, a) - value(g, b)); }
+function allCheapest() { WEEKS.forEach((w) => w.groups.forEach((g) => { const o = order(g); pick[g.id] = pick[g.id].map(() => o[0] ?? null); })); render(); }
+function fillOffered() { WEEKS.forEach((w) => { const left = { ...w.offered }; w.groups.forEach((g) => { const o = order(g); pick[g.id] = pick[g.id].map(() => { const s = o.find((x) => left[x] > 0); if (s) { left[s]--; return s; } return null; }); }); }); render(); }
+function award() {
+  const over = WEEKS.flatMap((w) => SUP.map((s) => ({ w, s, n: inWeek(w, s.id) })).filter((x) => x.n > x.w.offered[x.s.id]));
+  const add = WEEKS.flatMap((w) => w.groups.filter((g) => added[g.id]).map((g) => `${added[g.id]} × ${g.name}, ${w.week}`));
+  const log = [...over.map((x) => `above the offer: ${x.s.name}, ${x.w.week}, ${x.n} containers (offered ${x.w.offered[x.s.id]})`), ...add.map((a) => `added ${a}`)];
+  document.getElementById('result').innerHTML = (log.length ? `<div class="msg warn">Recorded in the award's Changes log: ${log.join('; ')}.</div>` : '') + '<div class="msg ok"><b>AB-000007 awarded</b> — opens the award page; Sales is asked to acknowledge.</div>';
+}
+render();
+</script>
+</body>
+</html>

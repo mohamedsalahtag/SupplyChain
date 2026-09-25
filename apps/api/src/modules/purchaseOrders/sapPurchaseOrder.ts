@@ -32,7 +32,7 @@ export function buildPoFilter(types: readonly string[], startDate: string, chang
 }
 
 export const PO_QUERY = {
-  select: 'PurchaseOrder,PurchaseOrderType,Supplier,PurchaseOrderDate,DocumentCurrency,LastChangeDateTime,PurchaseOrderDeletionCode',
+  select: 'PurchaseOrder,PurchaseOrderType,Supplier,PurchaseOrderDate,DocumentCurrency,CompanyCode,PurchasingOrganization,PurchasingGroup,LastChangeDateTime,PurchaseOrderDeletionCode',
   expand:
     '_PurchaseOrderItem($select=PurchaseOrderItem,Material,OrderQuantity,PurchaseOrderQuantityUnit,NetPriceAmount,NetPriceQuantity,PurchasingDocumentDeletionCode)',
   orderBy: 'PurchaseOrder',
@@ -44,6 +44,9 @@ export type PoHeader = {
   SupplierCode: string;
   OrderDate: string; // YYYY-MM-DD
   Currency: string;
+  CompanyCode: string;
+  PurchasingOrg: string;
+  PurchasingGroup: string;
   SapLastChangedAt: string | null; // ISO without zone, UTC, for datetime2
 };
 export type PoLine = {
@@ -88,6 +91,9 @@ export function mapPurchaseOrder(r: Row): MappedPo | null {
       SupplierCode: text(r.Supplier),
       OrderDate: text(r.PurchaseOrderDate).slice(0, 10),
       Currency: text(r.DocumentCurrency),
+      CompanyCode: text(r.CompanyCode),
+      PurchasingOrg: text(r.PurchasingOrganization),
+      PurchasingGroup: text(r.PurchasingGroup),
       SapLastChangedAt: changedAt ? changedAt.toISOString().slice(0, 23) : null,
     },
     lines,

@@ -40,10 +40,11 @@ export function UsersPage() {
 
   const columns: AppColumn<UserRow>[] = [
     { title: 'Name', key: 'DisplayName', dataIndex: 'DisplayName', width: 190, sorter: (a, b) => a.DisplayName.localeCompare(b.DisplayName) },
-    { title: 'Username', key: 'Username', dataIndex: 'Username', width: 150 },
+    { title: 'Username', key: 'Username', width: 150, render: (_: unknown, u) => <Space size={4}>{u.Username}{u.IsDemo && <Tag color="orange">Demo</Tag>}</Space> },
     { title: 'Email', key: 'Email', dataIndex: 'Email', width: 220 },
     { title: 'Department', key: 'Department', dataIndex: 'Department', width: 150 },
     { title: 'Roles', key: 'Roles', width: 170, render: (_: unknown, u) => u.roles.map((r) => <Tag key={r.RoleId}>{r.Name}</Tag>) },
+    { title: 'Companies', key: 'Companies', width: 110, render: (_: unknown, u) => (u.companies.length ? u.companies.join(', ') : <Tag color="warning">None</Tag>) },
     { title: 'Status', key: 'Status', width: 80, render: (_: unknown, u) => <Tag color={u.IsActive ? 'green' : 'default'}>{u.IsActive ? STATUS.active : STATUS.disabled}</Tag> },
     { title: 'Last sign-in', key: 'LastLoginAt', width: 140, render: (_: unknown, u) => formatDateTime(u.LastLoginAt) },
   ];

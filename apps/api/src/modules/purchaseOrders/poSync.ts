@@ -7,6 +7,10 @@
  * Each page is written in its own transaction and every write is keyed by the
  * order number, so running again — or re-running after a failure — never
  * duplicates anything. The watermark only moves after a fully successful run.
+ *
+ * "Delete all and sync fresh" clears the watermark, then deletes every order in
+ * the first page's transaction — so if SAP can't be reached nothing is deleted,
+ * and if the run fails later the next sync is a full one.
  */
 import { sql, type Kysely } from 'kysely';
 import { z } from 'zod';
@@ -16,6 +20,9 @@ import type { SapConnection } from '../../settings/sapConnection.js';
 import { readSetting, writeSetting } from '../../settings/store.js';
 import { storeCodeCounts } from '../sync/codeList.js';
 import { finishRun } from '../sync/syncRun.js';
+import { rebuildPurchaseHistory } from '../workflow/purchaseHistory.js';
+import { rebuildSupplierOrigins } from '../workflow/supplierOrigins.js';
+import { loadWfSettings } from '../workflow/settings.js';
 import { buildPoFilter, ISO_DATE, mapPurchaseOrder, PO_QUERY, Z_CODE, type PoHeader, type PoLine } from './sapPurchaseOrder.js';
 
 export const TYPES_KEY = 'sap.po.types';
@@ -61,9 +68,10 @@ export async function refreshPoTypes(db: Kysely<Database>, conn: SapConnection) 
 
 type PageCounts = { inserted: number; updated: number; removed: number; lines: number };
 
-/** Writes one page: upsert headers, replace their lines, remove orders that must not be kept. */
-async function applyPage(db: Kysely<Database>, headers: PoHeader[], lines: PoLine[], remove: string[]): Promise<PageCounts> {
+/** Writes one page: upsert headers, replace their lines, remove orders that must not be kept. `wipe` deletes every order first. */
+async function applyPage(db: Kysely<Database>, headers: PoHeader[], lines: PoLine[], remove: string[], wipe = false): Promise<PageCounts & { wiped: number }> {
   return db.transaction().execute(async (trx) => {
+    const wiped = wipe ? Number((await sql`DELETE FROM md.PurchaseOrder`.execute(trx)).numAffectedRows ?? 0) : 0; // lines cascade
     let inserted = 0;
     let updated = 0;
     if (headers.length) {
@@ -73,15 +81,17 @@ async function applyPage(db: Kysely<Database>, headers: PoHeader[], lines: PoLin
         MERGE md.PurchaseOrder AS t
         USING (SELECT * FROM OPENJSON(${JSON.stringify(headers)}) WITH (
           PurchaseOrder nvarchar(20), OrderType nvarchar(10), SupplierCode nvarchar(20), OrderDate date,
-          Currency nvarchar(5), SapLastChangedAt datetime2(3))) AS s
+          Currency nvarchar(5), CompanyCode nvarchar(10), PurchasingOrg nvarchar(10), PurchasingGroup nvarchar(10),
+          SapLastChangedAt datetime2(3))) AS s
         ON t.PurchaseOrder = s.PurchaseOrder
-        WHEN MATCHED AND EXISTS (SELECT s.OrderType, s.SupplierCode, s.OrderDate, s.Currency, s.SapLastChangedAt
-                                 EXCEPT SELECT t.OrderType, t.SupplierCode, t.OrderDate, t.Currency, t.SapLastChangedAt) THEN
+        WHEN MATCHED AND EXISTS (SELECT s.OrderType, s.SupplierCode, s.OrderDate, s.Currency, s.CompanyCode, s.PurchasingOrg, s.PurchasingGroup, s.SapLastChangedAt
+                                 EXCEPT SELECT t.OrderType, t.SupplierCode, t.OrderDate, t.Currency, t.CompanyCode, t.PurchasingOrg, t.PurchasingGroup, t.SapLastChangedAt) THEN
           UPDATE SET OrderType = s.OrderType, SupplierCode = s.SupplierCode, OrderDate = s.OrderDate, Currency = s.Currency,
+                     CompanyCode = s.CompanyCode, PurchasingOrg = s.PurchasingOrg, PurchasingGroup = s.PurchasingGroup,
                      SapLastChangedAt = s.SapLastChangedAt, SapChangedAt = SYSUTCDATETIME()
         WHEN NOT MATCHED THEN
-          INSERT (PurchaseOrder, OrderType, SupplierCode, OrderDate, Currency, SapLastChangedAt)
-          VALUES (s.PurchaseOrder, s.OrderType, s.SupplierCode, s.OrderDate, s.Currency, s.SapLastChangedAt)
+          INSERT (PurchaseOrder, OrderType, SupplierCode, OrderDate, Currency, CompanyCode, PurchasingOrg, PurchasingGroup, SapLastChangedAt)
+          VALUES (s.PurchaseOrder, s.OrderType, s.SupplierCode, s.OrderDate, s.Currency, s.CompanyCode, s.PurchasingOrg, s.PurchasingGroup, s.SapLastChangedAt)
         OUTPUT $action INTO @out;
         SELECT ISNULL(SUM(CASE WHEN Act = 'INSERT' THEN 1 ELSE 0 END), 0) AS inserted,
                ISNULL(SUM(CASE WHEN Act = 'UPDATE' THEN 1 ELSE 0 END), 0) AS updated FROM @out;`.execute(trx);
@@ -104,7 +114,7 @@ async function applyPage(db: Kysely<Database>, headers: PoHeader[], lines: PoLin
       const r = await sql`DELETE FROM md.PurchaseOrder WHERE PurchaseOrder IN (SELECT value FROM OPENJSON(${JSON.stringify(remove)}))`.execute(trx);
       removed = Number(r.numAffectedRows ?? 0); // lines go with them (ON DELETE CASCADE)
     }
-    return { inserted, updated, removed, lines: lines.length };
+    return { inserted, updated, removed, lines: lines.length, wiped };
   });
 }
 
@@ -124,11 +134,13 @@ export async function runPoSync(
   conn: SapConnection,
   include: { orderTypes: string[]; startDate: string },
   runId: number,
-  forceFull: boolean,
+  mode: 'changes' | 'full' | 'fresh',
 ): Promise<void> {
-  const totals = { read: 0, inserted: 0, updated: 0, removed: 0, lines: 0 };
+  const totals = { read: 0, inserted: 0, updated: 0, removed: 0, lines: 0, wiped: 0 };
+  let wipePending = mode === 'fresh';
   try {
-    const watermark = forceFull ? null : await loadWatermark(db);
+    if (wipePending) await saveWatermark(db, null); // before any delete: a failed fresh run is followed by a full one
+    const watermark = mode === 'changes' ? await loadWatermark(db) : null;
     const full = !watermark;
     let newest = watermark;
     const seen = new Set<string>();
@@ -150,7 +162,9 @@ export async function runPoSync(
         }
       }
       totals.read += rows.length;
-      const c = await applyPage(db, headers, lines, remove);
+      const c = await applyPage(db, headers, lines, remove, wipePending);
+      wipePending = false;
+      totals.wiped += c.wiped;
       totals.inserted += c.inserted;
       totals.updated += c.updated;
       totals.removed += c.removed;
@@ -159,11 +173,24 @@ export async function runPoSync(
 
     if (full) totals.removed += await removeOutsideRule(db, include, seen);
     await saveWatermark(db, newest); // only now: a failed run is simply repeated next time
-    const mode = full ? 'Full sync' : `Changes since ${watermark!.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+    // Logged step (spec 11): the purchase history summary is rebuilt from the synced orders.
+    const history = await rebuildPurchaseHistory(db, (await loadWfSettings(db)).historyLookbackMonths).then(
+      (n) => `History summary: ${n.toLocaleString('en-GB')} rows.`,
+      (err: unknown) => `History summary not rebuilt: ${err instanceof Error ? err.message : String(err)}.`,
+    ) + ' ' + await rebuildSupplierOrigins(db).then( // spec 18: origins supplied to us feed the RFQ shortlist
+      (n) => `Supplier origins: ${n.toLocaleString('en-GB')}.`,
+      (err: unknown) => `Supplier origins not rebuilt: ${err instanceof Error ? err.message : String(err)}.`,
+    );
+    const label =
+      mode === 'fresh' ? `Fresh copy (all ${totals.wiped.toLocaleString('en-GB')} stored orders deleted first)`
+      : full ? 'Full sync'
+      : `Changes since ${watermark!.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
     await finishRun(db, runId, 'Succeeded', { read: totals.read, inserted: totals.inserted, updated: totals.updated, missing: totals.removed },
-      `${mode}: ${totals.lines.toLocaleString('en-GB')} order lines written.`);
+      `${label}: ${totals.lines.toLocaleString('en-GB')} order lines written. ${history}`);
   } catch (err) {
     await finishRun(db, runId, 'Failed', { read: totals.read, inserted: totals.inserted, updated: totals.updated, missing: totals.removed },
-      `${err instanceof Error ? err.message : String(err)} — pages already written are kept; the next sync repeats this one safely.`);
+      `${err instanceof Error ? err.message : String(err)} — ${
+        mode === 'fresh' && wipePending ? 'nothing was deleted' : 'pages already written are kept'
+      }; the next sync repeats this one safely${mode === 'fresh' ? ' (as a full sync)' : ''}.`);
   }
 }

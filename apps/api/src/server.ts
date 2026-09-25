@@ -1,35 +1,56 @@
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import { fastifyTRPCPlugin, type CreateFastifyContextOptions } from '@trpc/server/adapters/fastify';
-import { loadAuthUser } from './auth/authUser.js';
+import { resolveSessionUser } from './auth/authUser.js';
 import { ensureBootstrapAdmin } from './auth/bootstrap.js';
-import { SESSION_COOKIE, verifySession } from './auth/session.js';
-import { loadConfig } from './config.js';
+import { SESSION_COOKIE } from './auth/session.js';
+import { loadConfig, productionProblems } from './config.js';
 import { createDb } from './db/db.js';
+import { registerFileRoutes } from './modules/workflow/filesRoute.js';
+import { escalateOverdue } from './modules/workflow/inbox.js';
+import { refreshAging } from './modules/rfq/aging.js';
+import { runOutbox } from './modules/po/outbox.js';
+import { workerId } from './modules/po/router.js';
+import { poAdapter } from './modules/po/sapAdapter.js';
 import { appRouter } from './trpc/router.js';
 import type { Context } from './trpc/trpc.js';
 
 const cfg = loadConfig();
+const unsafe = productionProblems(cfg);
+if (unsafe.length) throw new Error(`Refusing to start in production:\n  ${unsafe.join('\n  ')}`);
 const db = createDb(cfg);
 
 const app = Fastify({
   logger: { level: cfg.LOG_LEVEL, transport: { target: 'pino-pretty' } },
+  // tRPC batches calls into one path (/trpc/a,b,c…); Fastify's default limit of 100 characters
+  // rejected longer batches with 414, so a page failed depending on which queries were batched.
+  maxParamLength: 5000,
 });
 
+// Each ODBC call holds a Node worker thread; a transaction must always find a free one (see .env.example).
+const threads = Number(process.env.UV_THREADPOOL_SIZE ?? 4);
+if (threads <= cfg.DB_POOL_MAX) app.log.warn({ threads, pool: cfg.DB_POOL_MAX }, 'UV_THREADPOOL_SIZE should be above DB_POOL_MAX, or blocked reads can stall transactions');
 if (cfg.ALLOW_TEST_LOGIN) app.log.warn('ALLOW_TEST_LOGIN is on — for local testing only, never on a server');
 
 await app.register(cookie);
+// Basic security headers on every reply (the web app is served by the same origin through the proxy).
+app.addHook('onSend', async (_req, reply) => {
+  reply.header('X-Content-Type-Options', 'nosniff');
+  reply.header('X-Frame-Options', 'DENY');
+  reply.header('Referrer-Policy', 'same-origin');
+  reply.header('Cross-Origin-Opener-Policy', 'same-origin');
+});
+await registerFileRoutes(app, db, cfg);
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
   trpcOptions: {
     router: appRouter,
     createContext: async ({ req, res }: CreateFastifyContextOptions): Promise<Context> => {
-      const userId = await verifySession(req.cookies[SESSION_COOKIE], cfg.SESSION_SECRET);
-      const user = userId ? await loadAuthUser(db, userId) : null;
+      const user = await resolveSessionUser(db, cfg, req.cookies[SESSION_COOKIE]);
       return { db, cfg, user, encKey: cfg.SETTINGS_ENCRYPTION_KEY, log: app.log, req, res };
     },
     onError: ({ path, error }: { path?: string; error: { code: string } & Error }) => {
-      if (['UNAUTHORIZED', 'FORBIDDEN', 'TOO_MANY_REQUESTS'].includes(error.code)) return; // expected, not a fault
+      if (['UNAUTHORIZED', 'FORBIDDEN', 'TOO_MANY_REQUESTS', 'NOT_FOUND', 'CONFLICT', 'UNPROCESSABLE_CONTENT', 'BAD_REQUEST'].includes(error.code)) return; // expected, not a fault
       app.log.error({ path, err: error }, 'tRPC error');
     },
   },
@@ -40,4 +61,25 @@ app.addHook('onClose', async () => {
 });
 
 await ensureBootstrapAdmin(db, cfg, app.log);
+
+// Hourly job (spec 10): overdue work items are marked escalated once, and each is logged as a domain event.
+const escalate = () =>
+  escalateOverdue(db).then(
+    (n) => n > 0 && app.log.info({ escalated: n }, 'Overdue work items escalated'),
+    (err: unknown) => app.log.error({ err }, 'Escalation job failed'),
+  );
+// Hourly too (spec 18): Open quantity near ETD, and origins that now have a supplier.
+const aging = () => refreshAging(db).then((r) => r.opened + r.closed > 0 && app.log.info(r, 'Near-ETD exceptions refreshed'), (err: unknown) => app.log.error({ err }, 'Near-ETD check failed'));
+const escalationTimer = setInterval(() => { void escalate(); void aging(); }, 60 * 60 * 1000);
+app.addHook('onClose', async () => clearInterval(escalationTimer));
+// Every 30 seconds (spec 23): the SAP outbox — send due submissions, reconcile unknown outcomes.
+// runOutbox runs one pass at a time (a tick during a run, or "Process now", joins it).
+const outbox = async () => {
+  try { const r = await runOutbox(db, poAdapter(db), workerId()); if (r.sent + r.checked > 0) app.log.info(r, 'SAP outbox run'); }
+  catch (err: unknown) { app.log.error({ err }, 'SAP outbox run failed'); }
+};
+const outboxTimer = setInterval(() => { void outbox(); }, 30 * 1000);
+app.addHook('onClose', async () => clearInterval(outboxTimer));
+
 await app.listen({ port: cfg.API_PORT, host: '0.0.0.0' });
+void aging(); // once at start, then hourly

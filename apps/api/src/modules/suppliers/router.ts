@@ -11,6 +11,7 @@ import { GROUPS_KEY, loadSupplierInclude, refreshSupplierGroups, runSupplierSync
 const view = procedure.meta({ permission: P.suppliersOpen });
 const edit = procedure.meta({ permission: P.configSuppliersEdit });
 const run = procedure.meta({ permission: P.configSuppliersRun });
+const fresh = procedure.meta({ permission: P.configSuppliersFresh });
 
 const SORT_FIELDS = ['SupplierCode', 'Name', 'SupplierGroup', 'Country', 'City'] as const;
 const listInput = z.object({
@@ -42,9 +43,19 @@ export const suppliersRouter = router({
       ordered.offset((f.page - 1) * f.pageSize).fetch(f.pageSize).execute(),
       q.select((eb) => eb.fn.countAll<number>().as('n')).executeTakeFirstOrThrow(),
     ]);
+    // Purchasing organizations of this page's suppliers, as "1000, 2000 (blocked)" (spec 11).
+    // Joined here: the server is SQL Server 2016, which has no STRING_AGG.
+    const orgRows = rows.length
+      ? await ctx.db.selectFrom('md.SupplierPurchasingOrg').selectAll().where('SupplierCode', 'in', rows.map((r) => r.SupplierCode)).orderBy('PurchasingOrg').execute()
+      : [];
+    const orgsOf = (code: string) =>
+      orgRows.filter((o) => o.SupplierCode === code).map((o) => o.PurchasingOrg + (o.IsBlocked ? ' (blocked)' : '')).join(', ');
+    // Spec 22: the SAP payment terms and Incoterm per purchasing org (the handoff defaults)
+    const termsOf = (code: string) =>
+      orgRows.filter((o) => o.SupplierCode === code && (o.PaymentTerms || o.Incoterm)).map((o) => `${o.PurchasingOrg}: ${[o.PaymentTerms, o.Incoterm && `${o.Incoterm} ${o.IncotermLocation}`.trim()].filter(Boolean).join(' · ')}`).join(', ');
     return {
       total: Number(count.n),
-      rows: rows.map((r) => ({ ...r, Address: formatAddress(r), SapChangedAt: r.SapChangedAt.toISOString() })),
+      rows: rows.map((r) => ({ ...r, PurchasingOrgs: orgsOf(r.SupplierCode), SapTerms: termsOf(r.SupplierCode), Address: formatAddress(r), SapChangedAt: r.SapChangedAt.toISOString() })),
     };
   }),
 
@@ -80,4 +91,15 @@ export const suppliersRouter = router({
       return (runId) => runSupplierSync(ctx.db, conn, groups, runId);
     }),
   ),
+
+  /** Deletes every supplier and copies the chosen groups again (after SAP has been read). */
+  startFreshSync: fresh.mutation(async ({ ctx }) => {
+    const r = await launchSync(ctx, 'sap.suppliers', async (conn) => {
+      const { groups } = await loadSupplierInclude(ctx.db);
+      if (groups.length === 0) return 'Choose at least one supplier group and save it first.';
+      return (runId) => runSupplierSync(ctx.db, conn, groups, runId, true);
+    });
+    if (r.started) await audit(ctx.db, { userId: ctx.user.id, action: 'config.suppliers.freshSync', target: `SyncRun ${r.runId}` }, ctx.log);
+    return r;
+  }),
 });

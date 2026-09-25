@@ -7,6 +7,9 @@ const po = {
   Supplier: '80000214',
   PurchaseOrderDate: '2026-02-04',
   DocumentCurrency: 'USD',
+  CompanyCode: '1000',
+  PurchasingOrganization: '2000',
+  PurchasingGroup: 'Z04',
   LastChangeDateTime: '2026-02-17T11:49:54.630329Z',
   PurchaseOrderDeletionCode: '',
   _PurchaseOrderItem: [
@@ -23,6 +26,7 @@ describe('mapPurchaseOrder', () => {
     if (m?.kind !== 'keep') return;
     expect(m.header).toEqual({
       PurchaseOrder: '4100000000', OrderType: 'ZTFP', SupplierCode: '80000214', OrderDate: '2026-02-04', Currency: 'USD',
+      CompanyCode: '1000', PurchasingOrg: '2000', PurchasingGroup: 'Z04',
       SapLastChangedAt: '2026-02-17T11:49:54.630',
     });
     expect(m.lines).toEqual([

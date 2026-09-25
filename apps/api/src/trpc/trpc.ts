@@ -6,6 +6,7 @@ import type { Logger } from 'pino';
 import type { AuthUser } from '../auth/authUser.js';
 import type { Config } from '../config.js';
 import type { Database } from '../db/schema.js';
+import { DomainError, toTrpcError } from '../modules/workflow/errors.js';
 
 export type Context = {
   db: Kysely<Database>;
@@ -22,7 +23,14 @@ export type Context = {
 type Meta = { permission: string };
 
 // isDev false: error replies never include server stack traces (they stay in the log).
-const t = initTRPC.context<Context>().meta<Meta>().create({ isDev: false });
+// Workflow business-rule errors carry a stable code (and details) for the UI.
+const t = initTRPC.context<Context>().meta<Meta>().create({
+  isDev: false,
+  errorFormatter: ({ shape, error }) => {
+    const cause = error.cause;
+    return cause instanceof DomainError ? { ...shape, data: { ...shape.data, domainCode: cause.code, details: cause.details ?? null } } : shape;
+  },
+});
 
 /**
  * The single security gate. Every procedure declares a permission from the
@@ -41,9 +49,16 @@ const permissionGuard = t.middleware(({ ctx, meta, path, next }) => {
   return next({ ctx: { ...ctx, user: ctx.user } });
 });
 
+/** Turns a DomainError thrown by a service into the matching tRPC error (403 / 404 / 409 / 422). */
+const domainErrors = t.middleware(async ({ next }) => {
+  const result = await next();
+  if (!result.ok && result.error.cause instanceof DomainError) throw toTrpcError(result.error.cause);
+  return result;
+});
+
 export const router = t.router;
 /** Requires a signed-in user with the declared permission. */
-export const procedure = t.procedure.use(permissionGuard);
+export const procedure = t.procedure.use(permissionGuard).use(domainErrors);
 /** No sign-in needed. Only for sign-in itself and the health check. */
 export const publicProcedure = t.procedure;
 export const createCallerFactory = t.createCallerFactory;

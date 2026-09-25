@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stage 4b mockup</title>
+<style>
+  :root { --green:#1f6f43; --border:#d9d9d9; --bg:#f5f5f5; --text:#1f1f1f; --muted:#8c8c8c; --red:#cf1322; --amber:#d48806; --blue:#1677ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; font: 13px/1.5 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color:var(--text); background:var(--bg); }
+  header { height:40px; background:#001529; color:#fff; display:flex; align-items:center; padding:0 16px; gap:8px; }
+  header .logo { width:22px; height:22px; border-radius:4px; background:var(--green); }
+  header .site { font-weight:600; flex:1; }
+  .shell { display:flex; min-height:calc(100vh - 40px); }
+  nav { width:190px; background:#fff; border-right:1px solid #f0f0f0; padding:6px 0; flex-shrink:0; }
+  nav .grp { color:var(--muted); padding:6px 16px 2px; font-size:12px; }
+  nav a { display:flex; justify-content:space-between; padding:5px 16px 5px 28px; color:var(--text); cursor:pointer; }
+  nav a.active { background:#e6f4ea; color:var(--green); border-right:3px solid var(--green); }
+  nav .badge { background:#8c8c8c; color:#fff; border-radius:10px; padding:0 7px; font-size:11px; }
+  main { flex:1; padding:12px 16px; min-width:0; }
+  h5 { font-size:16px; margin:0; }
+  .sub, .note { color:var(--muted); } .note { font-size:12px; }
+  .card { background:#fff; border:1px solid #f0f0f0; border-radius:6px; padding:8px 12px; margin-bottom:10px; }
+  .inner { border:1px solid #f0f0f0; border-radius:6px; margin:6px 0; }
+  .inner-h { background:#fafafa; padding:4px 8px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; border-bottom:1px solid #f0f0f0; }
+  .tabs { display:flex; gap:2px; border-bottom:1px solid #f0f0f0; margin:8px 0; flex-wrap:wrap; }
+  .tab { padding:5px 12px; cursor:pointer; border:1px solid transparent; border-bottom:none; border-radius:6px 6px 0 0; color:#595959; }
+  .tab.active { background:#fff; border-color:#f0f0f0; color:var(--green); font-weight:600; margin-bottom:-1px; }
+  .pill { display:inline-block; min-width:18px; text-align:center; background:#8c8c8c; color:#fff; border-radius:9px; padding:0 6px; font-size:11px; margin-left:4px; }
+  table { width:100%; border-collapse:collapse; table-layout:fixed; background:#fff; }
+  th, td { border:1px solid #f0f0f0; padding:4px 8px; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  th { background:#fafafa; font-weight:600; } td.num, th.num { text-align:right; }
+  tr.click { cursor:pointer; } tr.click:hover td { background:#fafafa; }
+  tr.changed td { background:#fffbe6; } tr.added td { background:#f6ffed; } tr.removed td { background:#fff1f0; text-decoration:line-through; color:#8c8c8c; }
+  .chip { display:inline-block; border-radius:4px; padding:0 6px; font-size:12px; border:1px solid; }
+  .chip.red { color:var(--red); border-color:#ffa39e; background:#fff1f0; }
+  .chip.amber { color:var(--amber); border-color:#ffe58f; background:#fffbe6; }
+  .chip.grey { color:#595959; border-color:#d9d9d9; background:#fafafa; }
+  .chip.green { color:var(--green); border-color:#b7eb8f; background:#f6ffed; }
+  .chip.blue { color:var(--blue); border-color:#91caff; background:#e6f4ff; }
+  .chip.purple { color:#531dab; border-color:#d3adf7; background:#f9f0ff; }
+  button { font:inherit; border:1px solid var(--border); background:#fff; border-radius:4px; padding:1px 10px; cursor:pointer; }
+  button.primary { background:var(--green); color:#fff; border-color:var(--green); }
+  button.danger { color:var(--red); border-color:#ffa39e; }
+  button.link { border:none; background:none; color:var(--blue); padding:0 4px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  input, select, textarea { font:inherit; border:1px solid var(--border); border-radius:4px; padding:1px 6px; }
+  .banner { background:#e6f4ff; border:1px solid #91caff; border-radius:6px; padding:6px 10px; margin-bottom:10px; }
+  .info { background:#e6f4ff; border:1px solid #91caff; border-radius:6px; padding:6px 10px; margin:8px 0; }
+  .warn { background:#fffbe6; border:1px solid #ffe58f; border-radius:6px; padding:6px 10px; margin:8px 0; }
+  .err { background:#fff1f0; border:1px solid #ffa39e; border-radius:6px; padding:6px 10px; margin:8px 0; }
+  .page { display:none; } .page.active { display:block; }
+  .menu { position:absolute; background:#fff; box-shadow:0 6px 16px rgba(0,0,0,.12); border-radius:6px; padding:4px 0; display:none; z-index:5; min-width:200px; right:0; }
+  .menu div { padding:4px 12px; cursor:pointer; } .menu div:hover { background:#f5f5f5; }
+  .rel { position:relative; display:inline-block; }
+  .seg { display:inline-flex; border:1px solid var(--border); border-radius:4px; overflow:hidden; }
+  .seg span { padding:1px 10px; cursor:pointer; } .seg span.on { background:var(--green); color:#fff; }
+  .desc { display:grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap:4px 16px; }
+  .desc div span { color:var(--muted); }
+</style>
+</head>
+<body>
+<header><div class="logo"></div><div class="site">Supply Chain</div><span id="who">Procurement buyer (example) ▾</span></header>
+<div class="shell">
+  <nav>
+    <div class="grp">General</div>
+    <a onclick="go('decide')">My work <span class="badge">1</span></a>
+    <div class="grp">Purchasing</div>
+    <a>Demands</a><a class="active" onclick="go('rfq')">RFQs</a><a>Change requests</a>
+  </nav>
+  <main>
+    <div class="banner">Mockup · Stage 4b. Pages: <button onclick="go('rfq')">RFQ with pending requests</button> <button onclick="go('add')">Add quantity</button> <button onclick="go('shift')">Week shift</button> <button onclick="go('mix')">Mix change</button> <button onclick="go('decide')">Sales decides</button> <button onclick="go('demand')">Demand after</button></div>
+
+    <!-- RFQ -->
+    <section class="page active" id="page-rfq">
+      <div class="row" style="justify-content:space-between">
+        <div class="row"><h5>RFQ-000007</h5><span class="chip purple">Quoting</span><span class="sub">D-000101 · 1000 KSA</span></div>
+        <div class="row"><button onclick="go('add')">＋ Add quantity…</button><button onclick="go('mix')">⇄ Propose mix change…</button><button>Record quotes…</button></div>
+      </div>
+      <div class="card" style="margin-top:8px"><div class="inner-h"><b>2026-W42</b><span class="chip grey">10 containers</span></div>
+        <table><tr><th>Material</th><th style="width:60px">Origin</th><th class="num">Asked</th><th class="num">In RFQ</th><th class="num">Quoted</th><th style="width:190px">Status</th><th style="width:170px"></th></tr>
+          <tr><td>Apples Royal Gala S-100 Cat1</td><td>CL</td><td class="num">7,000</td><td class="num">—</td><td class="num">7,000</td><td><span class="chip green">Quoted</span></td><td><button class="link">Release…</button><button class="link" onclick="go('shift')">Week shift…</button></td></tr>
+          <tr class="added"><td>Apples Royal Gala S-113 Cat1 <span class="chip blue">proposed</span></td><td>CL</td><td class="num">1,000</td><td class="num">—</td><td class="num">—</td><td><span class="chip amber">⏸ Pending Sales · CR-000031</span></td><td></td></tr>
+        </table></div>
+      <div class="card"><div class="inner-h"><b>2026-W43</b> <span class="sub">proposed (from W42)</span><span class="chip grey">2 containers</span></div>
+        <table><tr><th>Material</th><th style="width:60px">Origin</th><th class="num">Asked</th><th class="num">In RFQ</th><th class="num">Quoted</th><th style="width:190px">Status</th><th style="width:170px"></th></tr>
+          <tr class="changed"><td>Pears Packham S-100</td><td>ZA</td><td class="num">1,000</td><td class="num">1,000</td><td class="num">—</td><td><span class="chip amber">⏸ Week shift · CR-000032</span></td><td></td></tr>
+        </table></div>
+      <div class="note">Supplier view shows the proposed 1,000 CT Gala S-113 (suppliers can quote it); award (Stage 5) waits for Sales.</div>
+    </section>
+
+    <!-- ADD -->
+    <section class="page" id="page-add">
+      <h5>Add quantity to D-000101 · RFQ-000007</h5>
+      <div class="info">A supplier offers more than asked? Propose it to Sales. The quantity joins this RFQ now (suppliers can quote it); it is added to the demand only if Sales approves.</div>
+      <div class="card">
+        <div class="row">Material <select><option>Apples</option></select><select><option>Apples Royal Gala</option></select> Size <select><option>S-113</option></select> Class <select><option>Cat1</option></select> Origin <select><option>CL</option></select> SKU <select><option>— specification —</option></select></div>
+        <div class="row" style="margin-top:6px">ETD week <select><option>2026-W42 · Mon 12 Oct</option></select> Quantity <input value="1000" style="width:90px"> CT &nbsp; Extra containers <input value="1" style="width:50px"> <span class="note">(optional; Sales decides it separately)</span></div>
+        <div class="row" style="margin-top:6px"><select style="width:330px"><option>MARKET_OPP · Market opportunity (extra quantity)</option></select><input style="width:420px" placeholder="Comment for Sales (required)" value="Agrisouth offers 1,000 CT more S-113 at 18.10 USD"></div>
+        <div class="row" style="margin-top:8px"><button class="primary" onclick="go('rfq')">Send to Sales</button></div>
+      </div>
+    </section>
+
+    <!-- SHIFT -->
+    <section class="page" id="page-shift">
+      <h5>Propose week shift · RFQ-000007 · Pears Packham S-100 ZA</h5>
+      <div class="card">
+        <div class="row">1,000 CT (nothing awarded) from <b>2026-W42</b> to <select><option>2026-W43 · Mon 19 Oct</option></select> Containers for 2026-W43 in this RFQ <input value="2" style="width:50px"> <span class="note">(default 1 = this line's share)</span></div>
+        <div class="row" style="margin-top:6px"><select style="width:330px"><option>WEEK_AVAIL · Supply available only in another week</option></select><input style="width:420px" placeholder="Comment for Sales (required)"></div>
+        <div class="row" style="margin-top:8px"><button class="primary" onclick="go('rfq')">Send to Sales</button><span class="note">Until Sales decides the line shows W43 and is on hold; rejected → back to W42.</span></div>
+      </div>
+    </section>
+
+    <!-- MIX -->
+    <section class="page" id="page-mix">
+      <h5>Propose mix change · RFQ-000007</h5>
+      <div class="info">Less of some materials and/or more of others, in the same weeks. Sales decides each item. Reductions are cancelled on the demand (origin Change, not counted against Procurement); additions land Open on the demand.</div>
+      <table><tr><th style="width:95px">Week</th><th>Material</th><th class="num" style="width:120px">In this RFQ</th><th class="num" style="width:140px">Less by</th></tr>
+        <tr class="changed"><td>2026-W42</td><td>Apples Royal Gala S-100 Cat1 CL</td><td class="num">7,000</td><td class="num"><input value="1540" style="width:80px"> CT</td></tr>
+      </table>
+      <div class="card" style="margin-top:8px"><b>Add material</b>
+        <div class="row" style="margin-top:6px"><select><option>2026-W42</option></select><select><option>Apples Royal Gala</option></select><select><option>S-125</option></select><select><option>Cat1</option></select><select><option>CL</option></select><input value="1540" style="width:80px"> CT <button>＋ Add row</button></div>
+        <table style="margin-top:6px"><tr class="added"><td>2026-W42 · Apples Royal Gala S-125 Cat1 CL</td><td class="num">+1,540 CT</td><td style="width:40px">✕</td></tr></table>
+      </div>
+      <div class="row" style="margin-top:6px"><select style="width:330px"><option>MARKET_OPP · Market opportunity</option></select><input style="width:420px" placeholder="Comment for Sales (required)" value="S-100 short this week; S-125 available"></div>
+      <div class="row" style="margin-top:8px"><button>Check</button><button class="primary" onclick="go('rfq')">Send to Sales</button></div>
+    </section>
+
+    <!-- SALES DECIDES -->
+    <section class="page" id="page-decide">
+      <div class="row"><h5>CR-000031</h5><span class="chip purple">Submitted</span><span class="sub">Add to demand · D-000101 · RFQ-000007 · 1000</span></div>
+      <div class="info">Sales decision: decide each item. Approve applies it at once; you may approve less; Reject leaves it unchanged. Everything is applied together, or nothing.</div>
+      <table><tr><th style="width:30px">#</th><th style="width:95px">Week</th><th>Change</th><th>Quantity effect</th><th style="width:260px">Decision</th></tr>
+        <tr><td>1</td><td>2026-W42</td><td>Add Apples Royal Gala S-113 Cat1 CL (RFQ-000007)</td><td>+1,000 CT (Procurement)</td><td><span class="seg"><span>Approve</span><span class="on">Less</span><span>Reject</span></span> <input value="600" style="width:70px"> CT</td></tr>
+        <tr><td>2</td><td>2026-W42</td><td>1 extra container</td><td>containers 10 → 11</td><td><span class="seg"><span>Approve</span><span>Reject</span></span> <span class="chip grey">Reject</span></td></tr>
+      </table>
+      <div class="row" style="margin-top:8px"><input style="width:520px" placeholder="Decision comment (required)" value="600 is enough; containers stay 10"><button class="primary" onclick="go('demand')">Decide</button></div>
+    </section>
+
+    <!-- DEMAND AFTER -->
+    <section class="page" id="page-demand">
+      <div class="row"><h5>D-000101</h5><span class="chip blue">Partially in execution</span><span class="sub">version 3 (CR applied: CR-000031)</span></div>
+      <div class="card" style="margin-top:8px"><div class="inner-h"><b>2026-W42</b><span class="chip grey">10 containers</span></div>
+        <table><tr><th>Material</th><th class="num">Requested</th><th class="num">Open</th><th class="num">In RFQ / quoted</th><th>Note</th></tr>
+          <tr><td>Apples Royal Gala S-100 Cat1 CL</td><td class="num">7,000</td><td class="num">—</td><td class="num">7,000</td><td></td></tr>
+          <tr class="added"><td>Apples Royal Gala S-113 Cat1 CL</td><td class="num">600</td><td class="num">—</td><td class="num">600</td><td class="note">600 CT Procurement · CR-000031 (RFQ-000007)</td></tr>
+          <tr><td>Pears Packham S-100 ZA</td><td class="num">1,000</td><td class="num">—</td><td class="num">1,000</td><td class="note">approved for 2026-W43 (CR-000032)</td></tr>
+        </table></div>
+    </section>
+  </main>
+</div>
+<script>
+function go(p) { document.querySelectorAll('.page').forEach(function (s) { s.classList.toggle('active', s.id === 'page-' + p); }); document.getElementById('who').textContent = p === 'decide' || p === 'demand' ? 'Sales planner (example) ▾' : 'Procurement buyer (example) ▾'; window.scrollTo(0, 0); }
+</script>
+</body>
+</html>

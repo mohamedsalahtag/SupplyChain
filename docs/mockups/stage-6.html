@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stage 6 handoff</title>
+<style>
+  :root { --green:#1f6f43; --line:#f0f0f0; --border:#d9d9d9; --bg:#f5f5f5; --text:#1f1f1f; --muted:#8c8c8c; --blue:#1677ff; --red:#cf1322; --amber:#d48806; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:13px/1.5 -apple-system,"Segoe UI",Roboto,Arial,sans-serif; color:var(--text); background:var(--bg); }
+  header { height:40px; background:#001529; color:#fff; display:flex; align-items:center; padding:0 16px; gap:8px; }
+  header .logo { width:22px; height:22px; border-radius:4px; background:var(--green); }
+  .shell { display:flex; min-height:calc(100vh - 40px); }
+  nav { width:200px; background:#fff; border-right:1px solid var(--line); padding:6px 0; flex-shrink:0; }
+  nav .grp { color:var(--muted); padding:8px 16px 2px; font-size:12px; }
+  nav a { display:block; padding:5px 16px 5px 28px; color:var(--text); cursor:pointer; }
+  nav a.active { background:#e6f4ea; color:var(--green); border-right:3px solid var(--green); }
+  main { flex:1; padding:12px 16px 40px; min-width:0; }
+  h5 { font-size:16px; margin:0; }
+  .muted { color:var(--muted); } .small { font-size:12px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:8px; margin-bottom:12px; }
+  .card-h { padding:8px 12px; border-bottom:1px solid var(--line); display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .pad { padding:10px 12px; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { padding:6px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+  th { background:#fafafa; font-size:12px; color:#595959; }
+  .num { text-align:right; }
+  .tag { display:inline-block; border-radius:4px; padding:0 7px; font-size:12px; border:1px solid; white-space:nowrap; }
+  .t-grey { color:#595959; border-color:#d9d9d9; background:#fafafa; } .t-blue { color:#0958d9; border-color:#91caff; background:#e6f4ff; }
+  .t-green { color:#389e0d; border-color:#b7eb8f; background:#f6ffed; } .t-gold { color:#d48806; border-color:#ffe58f; background:#fffbe6; }
+  .t-orange { color:#d46b08; border-color:#ffd591; background:#fff7e6; } .t-purple { color:#531dab; border-color:#d3adf7; background:#f9f0ff; }
+  .t-red { color:#cf1322; border-color:#ffa39e; background:#fff1f0; }
+  button { font:inherit; border:1px solid var(--border); background:#fff; border-radius:4px; padding:3px 12px; cursor:pointer; }
+  button.primary { background:var(--green); color:#fff; border-color:var(--green); }
+  button.danger { color:var(--red); border-color:#ffa39e; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  a { color:var(--blue); cursor:pointer; text-decoration:none; }
+  select, input, textarea { font:inherit; border:1px solid var(--border); border-radius:4px; padding:3px 6px; background:#fff; }
+  .page { display:none; } .page.active { display:block; }
+  .tabs { display:flex; gap:2px; border-bottom:1px solid var(--line); margin:0 0 10px; flex-wrap:wrap; }
+  .tab { padding:6px 14px; cursor:pointer; border-bottom:2px solid transparent; color:#595959; }
+  .tab.active { color:var(--green); border-bottom-color:var(--green); font-weight:600; }
+  .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+  @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+  .form { display:grid; grid-template-columns: 150px 1fr; gap:8px 10px; align-items:center; }
+  .form label { color:#595959; }
+  .src { font-size:11px; color:var(--muted); margin-left:6px; }
+  .check { display:flex; gap:8px; padding:3px 0; }
+  .ok { color:#389e0d; } .no { color:var(--red); } .warn { color:var(--amber); }
+  .banner { border-radius:6px; padding:8px 12px; margin-bottom:10px; }
+  .b-info { background:#e6f4ff; border:1px solid #91caff; } .b-warn { background:#fffbe6; border:1px solid #ffe58f; } .b-ok { background:#f6ffed; border:1px solid #b7eb8f; }
+  .modal-bg { display:none; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:20; align-items:center; justify-content:center; }
+  .modal-bg.open { display:flex; }
+  .modal { background:#fff; border-radius:8px; width:520px; max-width:calc(100% - 24px); padding:16px; }
+  .note { font-size:12px; color:var(--muted); margin-top:4px; }
+  .badge { background:#ff4d4f; color:#fff; border-radius:10px; padding:0 7px; font-size:11px; margin-left:6px; }
+</style>
+</head>
+<body>
+<header><div class="logo"></div><b>Supply chain</b><span style="margin-left:auto" class="small">Mockup — Stage 6 · switch screens in the menu</span></header>
+<div class="shell">
+<nav>
+  <div class="grp">General</div>
+  <a data-p="work" class="active">My work <span class="badge">3</span></a>
+  <div class="grp">Purchasing</div>
+  <a data-p="award">Awards → AB-000007</a>
+  <a data-p="handoffs">Handoffs</a>
+  <a data-p="handoff">Handoff HO-000003 (PO team)</a>
+  <div class="grp">Administration</div>
+  <a data-p="config">Configuration → Shipping terms</a>
+</nav>
+<main>
+
+<!-- ============ MY WORK ============ -->
+<section class="page active" id="p-work">
+  <h5>My work</h5>
+  <p class="muted small">New items in Stage 6. Procurement sees the first two kinds; the PO team sees the third.</p>
+  <div class="card"><table>
+    <tr><th>Item</th><th>What</th><th>Who</th><th>Due</th><th></th></tr>
+    <tr><td><span class="tag t-blue">Hand off</span></td><td><b>AB-000007 · Agrisouth (Chile) S.A.</b> — 3 containers, 2026-W39 · Sales acknowledged<div class="small muted">Complete shipping terms and the confirmed ETD, then hand off to the PO team</div></td><td>Procurement</td><td>in 2 days</td><td><button class="primary" onclick="go('award')">Hand off</button></td></tr>
+    <tr><td><span class="tag t-red">Handoff returned</span></td><td><b>HO-000002 · Andes Export</b> (AB-000006) returned by Lina (PO team) — <i>TERMS: "Port of discharge should be Dammam"</i><div class="small muted">Fix and hand off again</div></td><td>Procurement</td><td>overdue</td><td><button onclick="go('award')">Fix</button></td></tr>
+    <tr><td><span class="tag t-purple">Accept handoff</span></td><td><b>HO-000003 · Agrisouth (Chile) S.A.</b> — 3 containers, 2026-W39, FOB Valparaíso → Jeddah<div class="small muted">Check it, then accept (the PO is prepared in Stage 7) or return it to Procurement</div></td><td>PO team</td><td>today</td><td><button onclick="go('handoff')">Open</button></td></tr>
+  </table></div>
+</section>
+
+<!-- ============ AWARD PAGE: HANDOFF ============ -->
+<section class="page" id="p-award">
+  <div class="muted small">D-000230 · RFQ-000012 · Awards</div>
+  <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin:2px 0 8px"><h5>AB-000007</h5><span class="tag t-green">Acknowledged by Sales · revision 1</span></div>
+  <div class="tabs"><span class="tab">Containers &amp; materials</span><span class="tab active">Handoff (per supplier)</span><span class="tab">Acknowledgement</span><span class="tab">Changes</span><span class="tab">Comments</span></div>
+  <div class="banner b-info small">One handoff per supplier = one purchase order. Each supplier of this award is handed off on its own; the others are not affected.</div>
+
+  <div class="card">
+    <div class="card-h"><b>Agrisouth (Chile) S.A.</b><span class="muted">3 containers · 4,620 CT · 85,470 USD</span><span id="hoState" class="tag t-grey" style="margin-left:auto">Not handed off yet</span></div>
+    <div class="pad grid2">
+      <div>
+        <b>Shipping terms</b> <span class="small muted">— pre-filled from this supplier's last handoff (HO-000001, 12 Sep)</span>
+        <div class="form" style="margin-top:8px">
+          <label>Incoterm</label><div><select id="inc" onchange="upd()"><option></option><option selected>FOB</option><option>CFR</option><option>CIF</option><option>FCA</option><option>EXW</option></select><span class="src">Configuration list</span></div>
+          <label>Port of loading</label><div><select id="pol" onchange="upd()"><option></option><option selected>Valparaíso (CL)</option><option>San Antonio (CL)</option></select><span class="src">Configuration list · ports of CL first</span></div>
+          <label>Port of discharge</label><div><select id="pod" onchange="upd()"><option selected></option><option>Jeddah (SA)</option><option>Dammam (SA)</option></select><span class="src">Configuration list</span></div>
+          <label>Payment terms</label><div><select id="pay" onchange="upd()"><option></option><option selected>N030 · 30 days net</option><option>ME00 · immediate</option><option>N060 · 60 days net</option></select><span class="src">default from SAP (supplier, org 1000): N030</span></div>
+          <label>Currency</label><div><b>USD</b><span class="src">the award's currency — fixed</span></div>
+        </div>
+        <div style="margin-top:10px"><b>Shipments</b></div>
+        <table style="margin-top:4px"><tr><th>Week</th><th class="num">Containers</th><th>Confirmed ETD</th></tr>
+          <tr><td>2026-W39</td><td class="num">3</td><td><input type="date" id="etd" onchange="upd()"></td></tr></table>
+      </div>
+      <div>
+        <b>Ready to hand off?</b>
+        <div id="checks" style="margin-top:6px"></div>
+        <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button id="saveBtn">Save terms</button>
+          <button class="primary" id="hoBtn" onclick="handoff()">Hand off to PO team</button>
+        </div>
+        <div class="note">Saving terms is possible at any time; the handoff needs every check green. Sales' acknowledgement is only a warning.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h"><b>Andes Export</b><span class="muted">1 container · 1,540 CT · 27,720 USD</span><span class="tag t-orange" style="margin-left:auto">Returned to Procurement · TERMS</span></div>
+    <div class="pad small">HO-000002 returned by Lina (PO team) 24 Sep 16:10 — <i>"Port of discharge should be Dammam"</i>. Fix the terms and hand off again (a new handoff number is created; HO-000002 keeps what was sent).</div>
+  </div>
+</section>
+
+<!-- ============ HANDOFFS LIST ============ -->
+<section class="page" id="p-handoffs">
+  <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:8px"><h5>Handoffs</h5><span class="muted">Supplier awards handed to the PO team — one per future purchase order</span><span style="margin-left:auto"><button>What do the statuses mean?</button></span></div>
+  <div class="card"><table>
+    <tr><th>Handoff</th><th>Supplier</th><th>Award · demand</th><th>Containers · weeks</th><th>Terms</th><th>Status</th><th>Last step</th></tr>
+    <tr><td><a onclick="go('handoff')">HO-000003</a></td><td>Agrisouth (Chile) S.A.</td><td>AB-000007 · D-000230</td><td>3 · W39</td><td>FOB Valparaíso → Jeddah · N030 · USD</td><td><span class="tag t-purple">Waiting for the PO team to accept</span></td><td class="small">Handed off by Omar (Procurement) · 25 Sep 10:02</td></tr>
+    <tr><td>HO-000002</td><td>Andes Export</td><td>AB-000006 · D-000228</td><td>1 · W40</td><td>FOB San Antonio → Jeddah · N015 · USD</td><td><span class="tag t-orange">Returned to Procurement</span></td><td class="small">Returned by Lina (PO team) · 24 Sep 16:10 · TERMS</td></tr>
+    <tr><td>HO-000001</td><td>Agrisouth (Chile) S.A.</td><td>AB-000004 · D-000210</td><td>4 · W37</td><td>FOB Valparaíso → Jeddah · N030 · USD</td><td><span class="tag t-green">Accepted — PO being prepared</span> <span class="tag t-gold">without Sales acknowledgement</span></td><td class="small">Accepted by Lina (PO team) · 12 Sep 14:30</td></tr>
+  </table></div>
+</section>
+
+<!-- ============ HANDOFF (PO TEAM) ============ -->
+<section class="page" id="p-handoff">
+  <div class="muted small">Handoffs</div>
+  <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin:2px 0 8px"><h5>HO-000003</h5><span class="tag t-purple">Waiting for the PO team to accept</span><span class="muted">Agrisouth (Chile) S.A. · AB-000007 · D-000230 · company 1000</span>
+    <span style="margin-left:auto;display:flex;gap:8px"><button class="primary" onclick="alert('Accepted: the quantity moves to PO preparation (Stage 7 prepares the PO).')">Accept</button><button class="danger" onclick="document.getElementById('ret').classList.add('open')">Return to Procurement…</button></span></div>
+  <div class="banner b-ok small">Handed off by Omar (Procurement) on 25 Sep 10:02 · Sales acknowledged (revision 1). This page shows the handoff <b>exactly as it was sent</b> — later edits on the award do not change it.</div>
+  <div class="card"><div class="card-h"><b>Supplier</b><span class="muted small">as it was when handed off</span></div><div class="pad" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px 18px">
+    <div><span class="muted small">Supplier code</span><br><b>80000461</b></div>
+    <div><span class="muted small">Supplier name</span><br><b>Agrisouth (Chile) S.A.</b></div>
+    <div><span class="muted small">Country · origins</span><br>CL · CL</div>
+    <div><span class="muted small">Purchasing org (company 1000)</span><br>1000 · not blocked</div>
+    <div><span class="muted small">SAP payment terms · Incoterm</span><br>N030 · 30 days net · —</div>
+    <div><span class="muted small">City · e-mail</span><br>Santiago · exports@agrisouth.cl</div>
+  </div></div>
+  <div class="grid2">
+    <div class="card"><div class="card-h"><b>Shipping terms</b></div><div class="pad form">
+      <label>Incoterm</label><div>FOB</div><label>Port of loading</label><div>Valparaíso (CL)</div><label>Port of discharge</label><div>Jeddah (SA)</div>
+      <label>Payment terms</label><div>N030 · 30 days net</div><label>Currency</label><div>USD</div></div></div>
+    <div class="card"><div class="card-h"><b>Shipments</b><span class="muted">3 containers in total</span></div><table>
+      <tr><th>Week</th><th class="num">Containers</th><th>Confirmed ETD</th></tr><tr><td>2026-W39</td><td class="num">3</td><td>2026-09-23</td></tr></table></div>
+  </div>
+  <div class="card"><div class="card-h"><b>Materials</b></div><table>
+    <tr><th>Week</th><th>Material</th><th class="num">Quantity</th><th class="num">Price per CT</th><th class="num">Value</th><th>SKU</th></tr>
+    <tr><td>2026-W39</td><td>Apples Royal Gala S-100 Cat1 CL</td><td class="num">4,620 CT</td><td class="num">18.50 USD</td><td class="num">85,470 USD</td><td>pending — the PO team picks it (Stage 7)</td></tr>
+  </table></div>
+</section>
+
+<!-- ============ CONFIGURATION ============ -->
+<section class="page" id="p-config">
+  <h5>Configuration → Shipping terms</h5>
+  <p class="muted small">The choices buyers get on the handoff. Payment term codes come from SAP (each supplier's term is the default); Incoterms and ports are kept here because SAP does not have them for import suppliers.</p>
+  <div class="grid2">
+    <div class="card"><div class="card-h"><b>Incoterms</b><span class="muted small">the standard list, switch off what you don't use</span></div><table>
+      <tr><th>Code</th><th>Meaning</th><th>In use</th></tr>
+      <tr><td>FOB</td><td>Free on board</td><td><input type="checkbox" checked></td></tr><tr><td>CFR</td><td>Cost and freight</td><td><input type="checkbox" checked></td></tr>
+      <tr><td>CIF</td><td>Cost, insurance and freight</td><td><input type="checkbox" checked></td></tr><tr><td>FCA</td><td>Free carrier</td><td><input type="checkbox" checked></td></tr>
+      <tr><td>EXW</td><td>Ex works</td><td><input type="checkbox"></td></tr><tr><td colspan="3" class="small muted">… all 11 Incoterms 2020</td></tr></table></div>
+    <div class="card"><div class="card-h"><b>Ports</b><span style="margin-left:auto"><button>Add port</button></span></div><table>
+      <tr><th>Port</th><th>Country</th><th>Used for</th><th>In use</th></tr>
+      <tr><td>Valparaíso</td><td>CL</td><td>Loading</td><td><input type="checkbox" checked></td></tr><tr><td>San Antonio</td><td>CL</td><td>Loading</td><td><input type="checkbox" checked></td></tr>
+      <tr><td>Jeddah</td><td>SA</td><td>Discharge</td><td><input type="checkbox" checked></td></tr><tr><td>Dammam</td><td>SA</td><td>Discharge</td><td><input type="checkbox" checked></td></tr></table></div>
+    <div class="card"><div class="card-h"><b>Payment terms</b><span class="muted small">codes from SAP — add the description once</span></div><table>
+      <tr><th>SAP code</th><th>Description</th><th>Suppliers using it</th></tr>
+      <tr><td>ME00</td><td><input value="Immediate payment"></td><td class="num">1,730</td></tr><tr><td>N015</td><td><input value="15 days net"></td><td class="num">509</td></tr>
+      <tr><td>N030</td><td><input value="30 days net"></td><td class="num">110</td></tr><tr><td>S005</td><td><input placeholder="Description"></td><td class="num">262</td></tr></table></div>
+  </div>
+</section>
+
+</main>
+</div>
+
+<div class="modal-bg" id="noack"><div class="modal">
+  <b>Sales has not acknowledged AB-000007</b>
+  <p class="small">Acknowledging is a heads-up for Sales, not an approval. You can hand off anyway; the handoff is marked <span class="tag t-gold">without Sales acknowledgement</span> and Sales can still acknowledge later.</p>
+  <div class="form"><label>Reason</label><select><option>URGENT · supplier deadline before Sales could acknowledge</option><option>OTHER</option></select><label>Comment</label><input placeholder="Optional"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button onclick="document.getElementById('noack').classList.remove('open')">Cancel</button><button class="primary" onclick="document.getElementById('noack').classList.remove('open');sent(true)">Hand off anyway</button></div>
+</div></div>
+<div class="modal-bg" id="ret"><div class="modal">
+  <b>Return HO-000003 to Procurement</b>
+  <p class="small">The quantity goes back to Awarded; Procurement fixes it and hands off again (a new handoff).</p>
+  <div class="form"><label>Reason</label><select><option>SKU_ISSUE · SKU is wrong</option><option>TERMS · shipping terms wrong</option><option>SHIPMENT · containers or ETD wrong</option><option>DATA · other data problem</option><option>OTHER</option></select><label>Comment</label><textarea rows="2" placeholder="Required — what to fix"></textarea></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button onclick="document.getElementById('ret').classList.remove('open')">Cancel</button><button class="danger" onclick="document.getElementById('ret').classList.remove('open');alert('Returned: Procurement gets \'Handoff returned\' on My work.')">Return</button></div>
+</div></div>
+
+<script>
+function go(p) {
+  document.querySelectorAll('.page').forEach((x) => x.classList.toggle('active', x.id === 'p-' + p));
+  document.querySelectorAll('nav a').forEach((a) => a.classList.toggle('active', a.dataset.p === p));
+}
+document.querySelectorAll('nav a').forEach((a) => a.onclick = () => go(a.dataset.p));
+let ackMissing = false; // flip to see the "without acknowledgement" dialog
+function checks() {
+  const v = (id) => document.getElementById(id).value;
+  return [
+    ['Shipping terms complete', v('inc') && v('pol') && v('pod') && v('pay'), 'Incoterm, ports and payment terms'],
+    ['Terms currency = award currency (USD)', true, ''],
+    ['Confirmed ETD for every shipment', !!v('etd'), '2026-W39'],
+    ['No material on hold by a change request', true, ''],
+    ['All of this supplier\'s quantity is Awarded', true, '4,620 CT'],
+    ['Supplier usable in SAP (not blocked, set up for company 1000)', true, ''],
+  ];
+}
+function upd() {
+  const c = checks();
+  document.getElementById('checks').innerHTML = c.map(([t, ok, d]) => `<div class="check"><span class="${ok ? 'ok' : 'no'}">${ok ? '✓' : '✗'}</span><span>${t}${d ? ` <span class="small muted">· ${d}</span>` : ''}</span></div>`).join('')
+    + `<div class="check"><span class="${ackMissing ? 'warn' : 'ok'}">${ackMissing ? '!' : '✓'}</span><span>Sales acknowledged <span class="small muted">· ${ackMissing ? 'not yet — you can still hand off' : 'revision 1'}</span></span></div>`;
+  document.getElementById('hoBtn').disabled = !c.every(([, ok]) => ok);
+}
+function handoff() { if (ackMissing) document.getElementById('noack').classList.add('open'); else sent(false); }
+function sent(noAck) {
+  const s = document.getElementById('hoState');
+  s.className = 'tag t-purple'; s.textContent = 'HO-000003 · Waiting for the PO team to accept' + (noAck ? ' · without Sales acknowledgement' : '');
+  document.getElementById('hoBtn').disabled = true;
+}
+upd();
+</script>
+</body>
+</html>

@@ -12,6 +12,7 @@ import { loadPoInclude, loadWatermark, poIncludeSchema, refreshPoTypes, runPoSyn
 const view = procedure.meta({ permission: P.purchaseOrdersOpen });
 const edit = procedure.meta({ permission: P.configPoEdit });
 const run = procedure.meta({ permission: P.configPoRun });
+const fresh = procedure.meta({ permission: P.configPoFresh });
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const SORT_FIELDS = ['PurchaseOrder', 'OrderDate', 'OrderType', 'SupplierCode'] as const;
@@ -39,7 +40,7 @@ export const purchaseOrdersRouter = router({
     if (f.from) q = q.where('po.OrderDate', '>=', sql<Date>`${f.from}`);
     if (f.to) q = q.where('po.OrderDate', '<=', sql<Date>`${f.to}`);
     let ordered = q
-      .select(['po.PurchaseOrder', 'po.OrderType', 'po.SupplierCode', 'po.OrderDate', 'po.Currency', 's.Name as SupplierName'])
+      .select(['po.PurchaseOrder', 'po.OrderType', 'po.SupplierCode', 'po.OrderDate', 'po.Currency', 'po.CompanyCode', 's.Name as SupplierName'])
       .select((eb) =>
         eb.selectFrom('md.PurchaseOrderLine as l').whereRef('l.PurchaseOrder', '=', 'po.PurchaseOrder').select((e) => e.fn.countAll<number>().as('n')).as('LineCount'),
       )
@@ -95,7 +96,18 @@ export const purchaseOrdersRouter = router({
     launchSync(ctx, 'sap.purchaseOrders', async (conn) => {
       const { orderTypes, startDate } = await loadPoInclude(ctx.db);
       if (orderTypes.length === 0 || !startDate) return 'Choose the order types and a start date, and save them first.';
-      return (runId) => runPoSync(ctx.db, conn, { orderTypes, startDate }, runId, input.full);
+      return (runId) => runPoSync(ctx.db, conn, { orderTypes, startDate }, runId, input.full ? 'full' : 'changes');
     }),
   ),
+
+  /** Deletes every order (with its lines) and copies everything after the start date again. */
+  startFreshSync: fresh.mutation(async ({ ctx }) => {
+    const r = await launchSync(ctx, 'sap.purchaseOrders', async (conn) => {
+      const { orderTypes, startDate } = await loadPoInclude(ctx.db);
+      if (orderTypes.length === 0 || !startDate) return 'Choose the order types and a start date, and save them first.';
+      return (runId) => runPoSync(ctx.db, conn, { orderTypes, startDate }, runId, 'fresh');
+    });
+    if (r.started) await audit(ctx.db, { userId: ctx.user.id, action: 'config.po.freshSync', target: `SyncRun ${r.runId}` }, ctx.log);
+    return r;
+  }),
 });

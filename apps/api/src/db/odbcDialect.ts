@@ -65,9 +65,9 @@ class OdbcConnection implements DatabaseConnection {
 class OdbcDriver implements Driver {
   #pool: sql.ConnectionPool;
 
-  constructor(connectionString: string) {
+  constructor(connectionString: string, poolMax: number) {
     // msnodesqlv8 accepts a raw ODBC connection string; @types/mssql doesn't model it.
-    this.#pool = new sql.ConnectionPool({ connectionString } as unknown as sql.config);
+    this.#pool = new sql.ConnectionPool({ connectionString, pool: { min: 0, max: poolMax } } as unknown as sql.config);
   }
 
   async init(): Promise<void> {
@@ -100,10 +100,10 @@ class OdbcDriver implements Driver {
 }
 
 export class OdbcMssqlDialect implements Dialect {
-  constructor(private readonly connectionString: string) {}
+  constructor(private readonly connectionString: string, private readonly poolMax = 10) {}
 
   createDriver(): Driver {
-    return new OdbcDriver(this.connectionString);
+    return new OdbcDriver(this.connectionString, this.poolMax);
   }
   createQueryCompiler() {
     return new MssqlQueryCompiler();

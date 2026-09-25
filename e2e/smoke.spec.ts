@@ -15,8 +15,8 @@ const pickOption = async (page: Page, selectId: string, option: string) => {
   await dropdown.locator('.ant-select-item-option').filter({ hasText: new RegExp(`^${option}$`) }).click();
 };
 
-test('00 · Home shows the database is connected', async ({ page }) => {
-  await page.goto('/');
+test('00 · Configuration → General shows the database is connected', async ({ page }) => {
+  await page.goto('/settings?tab=general');
   await expect(page.getByText('Connected')).toBeVisible();
 });
 
@@ -89,6 +89,10 @@ test('05 · Table preferences (rows per page, hidden columns) survive a reload',
 test('03 · Appearance changes the font size of the whole app', async ({ page }) => {
   await page.goto('/settings?tab=appearance');
   const menuFont = () => page.locator('.ant-menu-item').first().evaluate((el) => getComputedStyle(el).fontSize);
+  if ((await menuFont()) !== '13px') { // a run that failed half-way may have left 15 px: put the default back first
+    await page.locator('#fontSize').getByText('13 px').click();
+    await page.getByRole('tabpanel').getByRole('button', { name: 'Save' }).click();
+  }
   await expect.poll(menuFont).toBe('13px');
 
   await page.locator('#fontSize').getByText('15 px').click();

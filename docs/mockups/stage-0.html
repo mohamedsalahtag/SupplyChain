@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stage 0 mockup</title>
+<style>
+  :root { --green:#1f6f43; --border:#d9d9d9; --bg:#f5f5f5; --text:#1f1f1f; --muted:#8c8c8c; --red:#cf1322; --amber:#d48806; --blue:#1677ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; font: 13px/1.5 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color:var(--text); background:var(--bg); }
+  header { height:40px; background:#001529; color:#fff; display:flex; align-items:center; padding:0 16px; gap:8px; }
+  header .logo { width:22px; height:22px; border-radius:4px; background:var(--green); }
+  header .site { font-weight:600; flex:1; }
+  .shell { display:flex; min-height:calc(100vh - 40px); }
+  nav { width:190px; background:#fff; border-right:1px solid #f0f0f0; padding:6px 0; flex-shrink:0; }
+  nav .grp { color:var(--muted); padding:6px 16px 2px; font-size:12px; }
+  nav a { display:flex; justify-content:space-between; padding:5px 16px 5px 28px; color:var(--text); text-decoration:none; cursor:pointer; }
+  nav a.active { background:#e6f4ea; color:var(--green); border-right:3px solid var(--green); }
+  nav .badge { background:var(--red); color:#fff; border-radius:10px; padding:0 7px; font-size:11px; }
+  main { flex:1; padding:12px 16px; min-width:0; }
+  h5 { font-size:16px; margin:0 0 2px; }
+  .sub { color:var(--muted); margin-bottom:10px; }
+  .card { background:#fff; border:1px solid #f0f0f0; border-radius:6px; padding:10px 12px; margin-bottom:10px; }
+  .tabs { display:flex; gap:2px; border-bottom:1px solid #f0f0f0; margin-bottom:8px; flex-wrap:wrap; }
+  .tab { padding:5px 12px; cursor:pointer; border:1px solid transparent; border-bottom:none; border-radius:6px 6px 0 0; color:#595959; }
+  .tab.active { background:#fff; border-color:#f0f0f0; color:var(--green); font-weight:600; margin-bottom:-1px; }
+  .pill { display:inline-block; min-width:18px; text-align:center; background:#f0f0f0; border-radius:9px; padding:0 6px; font-size:11px; margin-left:4px; }
+  .pill.red { background:var(--red); color:#fff; }
+  table { width:100%; border-collapse:collapse; table-layout:fixed; background:#fff; }
+  th, td { border:1px solid #f0f0f0; padding:4px 8px; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  th { background:#fafafa; font-weight:600; }
+  tr.overdue td { background:#fff1f0; }
+  .chip { display:inline-block; border-radius:4px; padding:0 6px; font-size:12px; border:1px solid; }
+  .chip.red { color:var(--red); border-color:#ffa39e; background:#fff1f0; }
+  .chip.amber { color:var(--amber); border-color:#ffe58f; background:#fffbe6; }
+  .chip.grey { color:#595959; border-color:#d9d9d9; background:#fafafa; }
+  .chip.green { color:var(--green); border-color:#b7eb8f; background:#f6ffed; }
+  .chip.blue { color:var(--blue); border-color:#91caff; background:#e6f4ff; }
+  button { font:inherit; border:1px solid var(--border); background:#fff; border-radius:4px; padding:1px 10px; cursor:pointer; }
+  button.primary { background:var(--green); color:#fff; border-color:var(--green); }
+  button.link { border:none; background:none; color:var(--blue); padding:0 4px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  input, select { font:inherit; border:1px solid var(--border); border-radius:4px; padding:1px 6px; }
+  .filters { display:none; padding:8px 0 4px; }
+  .filters.open { display:flex; }
+  .menu { position:absolute; background:#fff; box-shadow:0 6px 16px rgba(0,0,0,.12); border-radius:6px; padding:4px 0; display:none; z-index:5; min-width:180px; }
+  .menu div { padding:4px 12px; cursor:pointer; } .menu div:hover { background:#f5f5f5; }
+  .rel { position:relative; }
+  .note { color:var(--muted); font-size:12px; }
+  .banner { background:#e6f4ff; border:1px solid #91caff; border-radius:6px; padding:6px 10px; margin-bottom:10px; }
+  .drawer { position:fixed; top:0; right:0; width:380px; height:100vh; background:#fff; box-shadow:-6px 0 16px rgba(0,0,0,.12); padding:12px 16px; display:none; z-index:9; }
+  .drawer.open { display:block; }
+  .form label { display:block; margin:8px 0 2px; color:#595959; }
+  .form input, .form select { width:100%; }
+  .page { display:none; } .page.active { display:block; }
+  .check { display:flex; gap:6px; align-items:center; margin:3px 0; }
+</style>
+</head>
+<body>
+<header><div class="logo"></div><div class="site">Supply Chain</div><span>Mohamed Tag ▾</span></header>
+<div class="shell">
+  <nav>
+    <div class="grp">General</div>
+    <a data-page="work" class="active">My work <span class="badge" id="navBadge">6</span></a>
+    <div class="grp">Master data</div>
+    <a>Materials</a><a>Suppliers</a>
+    <div class="grp">Purchasing</div>
+    <a>Purchase orders</a>
+    <div class="grp">Administration</div>
+    <a data-page="users">Users</a><a>Security</a><a data-page="config">Configuration</a>
+  </nav>
+  <main>
+    <!-- MY WORK -->
+    <section class="page active" id="page-work">
+      <h5>My work</h5>
+      <div class="sub">Everything waiting on you, next step one click away.</div>
+      <div class="banner">Mockup note: Stage 0 creates only <b>Exceptions</b> (sync failures). The other tabs show what later stages add, so the layout can be judged now.</div>
+      <div class="row" style="justify-content:space-between">
+        <div class="tabs" id="workTabs">
+          <div class="tab active" data-t="accept">Accept demand <span class="pill">2</span></div>
+          <div class="tab" data-t="cr">Decide change request <span class="pill">1</span></div>
+          <div class="tab" data-t="ack">Acknowledge award <span class="pill">1</span></div>
+          <div class="tab" data-t="exc">Exceptions <span class="pill red">2</span></div>
+        </div>
+        <button onclick="document.getElementById('flt').classList.toggle('open')">Filters ▾</button>
+      </div>
+      <div class="filters row" id="flt">
+        <input placeholder="Search number or text" style="width:220px">
+        <select><option>Company: all</option><option>1000 · KSA</option><option>2000 · UAE</option></select>
+        <select><option>Due: all</option><option>Overdue</option><option>Due today</option><option>Later</option><option>No due date</option></select>
+      </div>
+      <table id="workTable">
+        <colgroup><col style="width:120px"><col style="width:110px"><col><col style="width:90px"><col style="width:130px"><col style="width:130px"><col style="width:190px"></colgroup>
+        <thead><tr><th>Due</th><th>Number</th><th>What</th><th>Company</th><th>Raised by</th><th>Raised at</th><th>Action</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="note" style="margin-top:6px">25 / 50 / 100 rows per page · Columns ▾ · overdue first, then due date, then oldest</div>
+    </section>
+
+    <!-- CONFIGURATION -->
+    <section class="page" id="page-config">
+      <h5>Configuration</h5>
+      <div class="tabs" id="cfgTabs">
+        <div class="tab">General</div><div class="tab">Appearance</div><div class="tab">SAP connection</div><div class="tab">Materials sync</div>
+        <div class="tab">Suppliers sync</div><div class="tab">Purchase orders sync</div>
+        <div class="tab active" data-c="companies">Companies</div>
+        <div class="tab" data-c="reasons">Reason codes</div>
+        <div class="tab" data-c="origins">Origins <span class="pill red">5</span></div>
+        <div class="tab" data-c="workflow">Workflow</div>
+        <div class="tab">Active Directory</div>
+      </div>
+
+      <div class="cfg" id="cfg-companies">
+        <div class="row" style="margin-bottom:6px"><button class="primary" onclick="openDrawer('companyDrawer')">+ Add company</button></div>
+        <table>
+          <thead><tr><th>Code</th><th>Name</th><th>Country</th><th>Time zone</th><th>Plant</th><th>Purchasing org</th><th>Purch. group</th><th>Active</th></tr></thead>
+          <tbody>
+            <tr onclick="openDrawer('companyDrawer')"><td>1000</td><td>KSA</td><td>SA</td><td>Asia/Riyadh</td><td>HO01</td><td>2000</td><td>Z04</td><td><span class="chip green">Active</span></td></tr>
+            <tr onclick="openDrawer('companyDrawer')"><td>2000</td><td>UAE</td><td>AE</td><td>Asia/Dubai</td><td>HO01</td><td><span class="chip amber">not set</span></td><td></td><td><span class="chip green">Active</span></td></tr>
+            <tr onclick="openDrawer('companyDrawer')"><td>3000</td><td>Bahrain</td><td>BH</td><td>Asia/Bahrain</td><td>HO01</td><td><span class="chip amber">not set</span></td><td></td><td><span class="chip green">Active</span></td></tr>
+          </tbody>
+        </table>
+        <div class="note" style="margin-top:6px">Seeded 1000 KSA, 2000 UAE, 3000 Bahrain with plant HO01. Hint in the drawer: \"Orgs used in this company's POs: 2000 (1,204)\".</div>
+      </div>
+
+      <div class="cfg" id="cfg-reasons" style="display:none">
+        <div class="row" style="margin-bottom:6px"><button class="primary">+ Add reason code</button></div>
+        <table>
+          <thead><tr><th>Code</th><th>Context</th><th>Description</th><th>Counts against Procurement</th><th>Active</th></tr></thead>
+          <tbody>
+            <tr><td>CUST_CANCEL</td><td>Sales CR</td><td>Customer cancelled the order</td><td>No</td><td><span class="chip green">Active</span></td></tr>
+            <tr><td>NO_SUPPLY</td><td>Procurement CR</td><td>No supplier could supply in time</td><td>Yes</td><td><span class="chip green">Active</span></td></tr>
+            <tr><td>PRICE_HIGH</td><td>Release</td><td>Quoted prices above budget</td><td>No</td><td><span class="chip green">Active</span></td></tr>
+            <tr><td>SKU_ISSUE</td><td>Handoff return</td><td>Provided SKU is wrong</td><td>No</td><td><span class="chip green">Active</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="cfg" id="cfg-origins" style="display:none">
+        <div class="row" style="margin-bottom:6px"><label class="check"><input type="checkbox" checked> Unmatched only</label><span class="note">97 origin names from Materials · 92 matched automatically · 5 need a choice</span></div>
+        <table>
+          <thead><tr><th>Origin name (SAP)</th><th>Materials</th><th>Country code</th><th>Country name</th><th>Source</th></tr></thead>
+          <tbody>
+            <tr><td>USA</td><td>463</td><td><select><option>— choose —</option><option>US</option></select></td><td></td><td><span class="chip amber">Unmatched</span></td></tr>
+            <tr><td>Turkey</td><td>421</td><td><select><option>— choose —</option><option>TR</option></select></td><td></td><td><span class="chip amber">Unmatched</span></td></tr>
+            <tr><td>Gulf</td><td>206</td><td><select><option>Not a country</option></select></td><td></td><td><span class="chip grey">Not a country</span></td></tr>
+            <tr><td>Palestine</td><td>1</td><td><select><option>— choose —</option><option>PS</option></select></td><td></td><td><span class="chip amber">Unmatched</span></td></tr>
+            <tr><td>(blank)</td><td>28</td><td><select><option>— choose —</option></select></td><td></td><td><span class="chip amber">Unmatched</span></td></tr>
+            <tr><td>Chile</td><td>1446</td><td>CL</td><td>Chile</td><td><span class="chip blue">Auto</span></td></tr>
+            <tr><td>Ecuador</td><td>57</td><td>EC</td><td>Ecuador</td><td><span class="chip blue">Auto</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="cfg card form" id="cfg-workflow" style="display:none; max-width:560px">
+        <b>Due times (hours; blank = no due date)</b>
+        <div class="row"><span style="width:260px">Sync failed (Exception)</span><input value="24" style="width:80px"></div>
+        <div class="row"><span style="width:260px">Accept demand</span><input value="48" style="width:80px"><span class="note">active from Stage 1</span></div>
+        <div class="row"><span style="width:260px">Decide change request</span><input value="24" style="width:80px"><span class="note">active from Stage 2</span></div>
+        <label>Open-quantity ageing alert (weeks before ETD)</label><input value="4">
+        <label>Master data maximum age (hours) — PO submission blocked above this</label><input value="26">
+        <label>Purchase history look-back (months)</label><input value="36">
+        <label>Minimum quantity increment per unit</label>
+        <div class="row"><span>CTN</span><input value="1" style="width:70px"><span>KG</span><input value="0.001" style="width:70px"><button class="link">+ unit</button></div>
+        <label>Attachment size limit (MB)</label><input value="20">
+        <div style="margin-top:10px"><button class="primary">Save</button></div>
+      </div>
+    </section>
+
+    <!-- USERS -->
+    <section class="page" id="page-users">
+      <h5>Users</h5>
+      <table>
+        <thead><tr><th>Name</th><th>Username</th><th>Roles</th><th>Companies</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr onclick="openDrawer('userDrawer')"><td>Mohamed Tag</td><td>mohamed.tag</td><td>Administrator</td><td>1000, 2000</td><td><span class="chip green">Active</span></td></tr>
+          <tr onclick="openDrawer('userDrawer')"><td>Sales planner (example)</td><td>sales.one</td><td>Sales</td><td>1000</td><td><span class="chip green">Active</span></td></tr>
+          <tr onclick="openDrawer('userDrawer')"><td>Buyer (example)</td><td>buyer.one</td><td>Procurement</td><td><span class="chip amber">None</span></td><td><span class="chip green">Active</span></td></tr>
+        </tbody>
+      </table>
+      <div class="note" style="margin-top:6px">Click a row to open the user drawer with the new Companies field.</div>
+    </section>
+  </main>
+</div>
+
+<div class="drawer" id="companyDrawer">
+  <div class="row" style="justify-content:space-between"><b>Company</b><button class="link" onclick="closeDrawers()">✕</button></div>
+  <div class="form">
+    <label>Company code</label><input value="1000">
+    <label>Name</label><input value="KSA">
+    <label>Country</label><input value="SA">
+    <label>Time zone (for confirmed ETD dates)</label><input value="Asia/Riyadh">
+    <label>Default plant</label><input value="HO01">
+    <label>Purchasing organization</label><input value="2000"><div class="note">Used in this company's POs: 2000 (1,204) · 1000 (37)</div>
+    <label>Purchasing group</label><input value="F01">
+    <label class="check"><input type="checkbox" checked style="width:auto"> Active</label>
+    <div style="margin-top:10px"><button class="primary">Save</button> <button onclick="closeDrawers()">Cancel</button></div>
+  </div>
+</div>
+<div class="drawer" id="userDrawer">
+  <div class="row" style="justify-content:space-between"><b>Mohamed Tag</b><button class="link" onclick="closeDrawers()">✕</button></div>
+  <div class="form">
+    <label>Roles</label><input value="Administrator">
+    <label>Companies</label>
+    <label class="check"><input type="checkbox" checked style="width:auto"> 1000 · KSA</label>
+    <label class="check"><input type="checkbox" checked style="width:auto"> 2000 · UAE</label>
+    <label class="check"><input type="checkbox" style="width:auto"> 3000 · Bahrain</label>
+    <div class="note">Without a company the user sees no workflow data.</div>
+    <label class="check"><input type="checkbox" checked style="width:auto"> Active</label>
+    <div style="margin-top:10px"><button class="primary">Save</button> <button onclick="closeDrawers()">Cancel</button></div>
+  </div>
+</div>
+
+<script>
+const rows = {
+  accept: [
+    { due:['red','Overdue 1 d'], no:'D-000118', what:'Demand · W14–W16 · 3 containers · Gala 80–88 CL', co:'1000', by:'Sales planner', at:'10 Mar 09:12', act:'Accept demand', more:['Return to Sales','Open demand'] },
+    { due:['grey','Due in 20 h'], no:'D-000121', what:'Demand · W18 · 2 containers · Granny Smith ZA', co:'1000', by:'Sales planner', at:'12 Mar 14:40', act:'Accept demand', more:['Return to Sales','Open demand'] },
+  ],
+  cr: [
+    { due:['grey','Due in 6 h'], no:'CR-000044', what:'CANCEL_QTY · D-000101 W14 · 500 CTN', co:'1000', by:'Sales planner', at:'13 Mar 08:05', act:'Decide', more:['Open demand'] },
+  ],
+  ack: [
+    { due:['grey','No due date'], no:'AB-000007', what:'Award · RFQ-000020 · Supplier A 5,000 CTN W14', co:'1000', by:'Buyer', at:'13 Mar 11:30', act:'Acknowledge', more:['Raise query','Open award'] },
+  ],
+  exc: [
+    { due:['red','Overdue 3 h'], no:'SYNC-412', what:'Suppliers sync failed: SAP returned 401 (login)', co:'—', by:'System', at:'13 Mar 06:00', act:'Open Suppliers sync', more:['Open run history'], esc:true },
+    { due:['grey','Due in 22 h'], no:'ORIGIN', what:'6 material origins not mapped to a country', co:'—', by:'System', at:'13 Mar 06:02', act:'Open Origins', more:[] },
+  ],
+};
+function renderWork(t) {
+  const tb = document.querySelector('#workTable tbody');
+  tb.innerHTML = rows[t].map((r, i) => `
+    <tr class="${r.due[0]==='red'?'overdue':''}">
+      <td><span class="chip ${r.due[0]}">${r.due[1]}</span>${r.esc?' <span class="chip red">Escalated</span>':''}</td>
+      <td><a style="color:var(--blue)">${r.no}</a></td><td title="${r.what}">${r.what}</td><td>${r.co}</td><td>${r.by}</td><td>${r.at}</td>
+      <td class="rel"><button class="primary" onclick="${t==='exc'&&r.act==='Open Origins'?"go('config');cfg('origins')":"alert('Opens the object screen with ← Back to My work')"}">${r.act}</button>
+        ${r.more.length?`<button class="link" onclick="toggleMenu(event,'m${t}${i}')">⋯</button><div class="menu" id="m${t}${i}">${r.more.map(m=>`<div>${m}</div>`).join('')}</div>`:''}</td>
+    </tr>`).join('');
+}
+function toggleMenu(e, id) { e.stopPropagation(); document.querySelectorAll('.menu').forEach(m => m.style.display = m.id===id && m.style.display!=='block' ? 'block' : 'none'); }
+document.addEventListener('click', () => document.querySelectorAll('.menu').forEach(m => m.style.display='none'));
+document.querySelectorAll('#workTabs .tab').forEach(el => el.onclick = () => {
+  document.querySelectorAll('#workTabs .tab').forEach(x => x.classList.remove('active')); el.classList.add('active'); renderWork(el.dataset.t);
+});
+function cfg(c) {
+  document.querySelectorAll('#cfgTabs .tab').forEach(x => x.classList.toggle('active', x.dataset.c===c));
+  document.querySelectorAll('.cfg').forEach(x => x.style.display = x.id==='cfg-'+c ? '' : 'none');
+}
+document.querySelectorAll('#cfgTabs .tab[data-c]').forEach(el => el.onclick = () => cfg(el.dataset.c));
+function go(p) {
+  document.querySelectorAll('.page').forEach(x => x.classList.toggle('active', x.id==='page-'+p));
+  document.querySelectorAll('nav a').forEach(x => x.classList.toggle('active', x.dataset.page===p));
+}
+document.querySelectorAll('nav a[data-page]').forEach(el => el.onclick = () => go(el.dataset.page));
+function openDrawer(id) { closeDrawers(); document.getElementById(id).classList.add('open'); }
+function closeDrawers() { document.querySelectorAll('.drawer').forEach(d => d.classList.remove('open')); }
+renderWork('accept');
+</script>
+</body>
+</html>
