@@ -12,6 +12,7 @@ const SOURCE: Record<string, { color: string; label: string }> = {
   COUNTRY: { color: 'default', label: 'country' },
   HISTORY: { color: 'blue', label: 'history' },
   MANUAL: { color: 'green', label: 'added' },
+  RFQ: { color: 'purple', label: 'added from an RFQ' },
 };
 
 /**
@@ -52,7 +53,7 @@ export function SupplierOriginsTab() {
         <Space size={4} wrap>
           {r.origins.length === 0 && <Typography.Text type="secondary">none known</Typography.Text>}
           {r.origins.map((o) => (
-            <Tag key={`${o.originCode}-${o.source}`} color={SOURCE[o.source].color} closable={editable && o.source === 'MANUAL'}
+            <Tag key={`${o.originCode}-${o.source}`} color={SOURCE[o.source].color} closable={editable && (o.source === 'MANUAL' || o.source === 'RFQ')}
               onClose={(e) => { e.preventDefault(); void change(r.supplierCode, o.originCode, false); }}>
               {o.originCode} · {SOURCE[o.source].label}
             </Tag>

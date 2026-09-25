@@ -8,6 +8,7 @@ import type { RouterOutputs } from '../../lib/format';
 import { trpc } from '../../lib/trpc';
 import { errorText, newCommandId, problemsOf } from '../../lib/workflow';
 import { MATCH_LABEL, n } from './rfqLabels';
+import { OutsideSuppliers, type Outside } from './OutsideSuppliers';
 
 type Builder = RouterOutputs['rfq']['builder'];
 type Row = Builder['rows'][number];
@@ -42,6 +43,7 @@ export function RfqBuilderPage() {
   const [ask, setAsk] = useState<Record<string, number | null>>({}); // cartons per row; null = not chosen
   const [containers, setContainers] = useState<Record<string, number>>({});
   const [suppliers, setSuppliers] = useState<string[]>([]);
+  const [outside, setOutside] = useState<Outside[]>([]); // invited outside the shortlist
   const [problems, setProblems] = useState<string[]>([]);
 
   useEffect(() => {
@@ -70,13 +72,13 @@ export function RfqBuilderPage() {
 
   const onCreate = () => modal.confirm({
     title: `Create an RFQ from ${b.demand.demandNo}?`,
-    content: `${chosen.length} line(s), ${suppliers.length} supplier(s). The quantity becomes In RFQ; you send it from the RFQ page.`,
+    content: `${chosen.length} line(s), ${suppliers.length + outside.length} supplier(s)${outside.length ? ` (${outside.length} not on the list: their origins are recorded)` : ''}. The quantity becomes In RFQ; you send it from the RFQ page.`,
     okText: 'Create RFQ',
     onOk: async () => {
       setProblems([]);
       try {
         const r = await create.mutateAsync({
-          commandId: newCommandId(), demandId, suppliers,
+          commandId: newCommandId(), demandId, suppliers, extraSuppliers: outside.map((o) => o.supplierCode),
           lines: chosen.map((x) => ({ lineId: x.lineId, week: x.week, qty: String(ask[rowKey(x)]) })),
           weeks: weeks.map((w) => ({ etdWeek: w.etdWeek, containerCount: w.count })),
         });
@@ -135,7 +137,7 @@ export function RfqBuilderPage() {
           {shortlist.isPending ? <Skeleton active /> : (shortlist.data ?? []).map((g) => (
             <div key={g.originCode} style={{ marginBottom: 10 }}>
               <Space style={{ marginBottom: 4 }}><Tag color="blue">{g.originCode}</Tag><Typography.Text strong>{chosen.filter((r) => r.originCode === g.originCode).map((r) => r.label.split(' ').slice(0, 2).join(' ')).filter((x, i, a) => a.indexOf(x) === i).join(', ')}</Typography.Text></Space>
-              {g.problem ? <Alert type="warning" showIcon message={g.problem} description="It is on My work as an exception: add the origin to a supplier (Configuration → Supplier origins) or extend a supplier in SAP." /> : (
+              {g.problem ? <Alert type="warning" showIcon message={g.problem} description="It is on My work as an exception. Invite a supplier below with “Add a supplier not on the list…”, add the origin to a supplier (Configuration → Supplier origins), or extend a supplier in SAP." /> : (
                 <Table size="small" bordered pagination={false} rowKey="supplierCode" dataSource={g.entries} tableLayout="fixed"
                   columns={[
                     { title: '', key: 'c', width: 40, render: (_: unknown, e) => <Checkbox checked={suppliers.includes(e.supplierCode)} aria-label={`Invite ${e.name}`} onChange={(ev) => setSuppliers(ev.target.checked ? [...suppliers, e.supplierCode] : suppliers.filter((s) => s !== e.supplierCode))} /> },
@@ -153,6 +155,8 @@ export function RfqBuilderPage() {
               )}
             </div>
           ))}
+          {!shortlist.isPending && <OutsideSuppliers demandId={demandId} lineIds={lineIds} value={outside} onChange={setOutside}
+            shortlisted={(shortlist.data ?? []).flatMap((g) => g.entries.map((e) => e.supplierCode))} />}
         </Card>
       )}
 
@@ -168,8 +172,8 @@ export function RfqBuilderPage() {
             ]} />
           {problems.length > 0 && <Alert type="error" showIcon style={{ marginTop: 8 }} message="The RFQ cannot be created" description={<ul style={{ margin: 0, paddingInlineStart: 18 }}>{problems.map((p) => <li key={p}>{p}</li>)}</ul>} />}
           <Space style={{ marginTop: 8 }}>
-            <Button type="primary" icon={<FileAddOutlined />} disabled={!suppliers.length} loading={create.isPending} onClick={onCreate}>Create RFQ</Button>
-            {!suppliers.length && <Typography.Text type="secondary">Choose at least one supplier.</Typography.Text>}
+            <Button type="primary" icon={<FileAddOutlined />} disabled={!suppliers.length && !outside.length} loading={create.isPending} onClick={onCreate}>Create RFQ</Button>
+            {!suppliers.length && !outside.length && <Typography.Text type="secondary">Choose at least one supplier.</Typography.Text>}
           </Space>
         </Card>
       )}

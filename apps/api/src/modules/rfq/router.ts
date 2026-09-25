@@ -10,6 +10,7 @@ import { flagMissingOrigin, refreshAging } from './aging.js';
 import { raiseAddQuantity, raiseMixChange, raiseWeekShift } from '../cr/procCr.js';
 import { recordQuotes } from './quotes.js';
 import { builderData, getRfq, listRfqs, rfqHistory, shortlistFor } from './rfqRead.js';
+import { searchOutsideSuppliers } from './outsideSuppliers.js';
 import { cancelRfq, createRfq, P_RFQ, releaseQty, sendRfq } from './rfqService.js';
 
 registerEntityAccess('RFQ', async (db, actor, entityId, write) => {
@@ -59,6 +60,9 @@ export const rfqRouter = router({
     ctx.db.selectFrom('scm.ReasonCode').select(['ReasonCode', 'Description']).where('Context', '=', input.context).where('IsActive', '=', true).orderBy('ReasonCode').execute()),
 
   builder: manage.input(z.object({ demandId: idOf })).query(async ({ ctx, input }) => builderData(ctx.db, await loadActor(ctx.db, ctx.user), input.demandId)),
+  /** Any supplier in SAP, for an invite outside the shortlist (a new supplier's first contact). */
+  searchSuppliers: manage.input(z.object({ demandId: idOf, lineIds: z.array(idOf).max(500), q: z.string().max(60) }))
+    .query(async ({ ctx, input }) => searchOutsideSuppliers(ctx.db, await loadActor(ctx.db, ctx.user), input.demandId, input.lineIds, input.q)),
   shortlist: manage.input(z.object({ demandId: idOf, lineIds: z.array(idOf).max(500) }))
     .query(async ({ ctx, input }) => shortlistFor(ctx.db, await loadActor(ctx.db, ctx.user), input.demandId, input.lineIds)),
   flagMissingOrigin: manage.input(z.object({ demandId: idOf, originCode: z.string().regex(/^[A-Z]{2}$/) })).mutation(async ({ ctx, input }) => {
@@ -71,7 +75,8 @@ export const rfqRouter = router({
     demandId: idOf,
     lines: z.array(z.object({ lineId: idOf, week, qty })).min(1).max(500),
     weeks: z.array(z.object({ etdWeek: week, containerCount: z.number().int().min(0).max(999) })).max(60),
-    suppliers: z.array(z.string().trim().min(1).max(20)).min(1).max(50),
+    suppliers: z.array(z.string().trim().min(1).max(20)).max(50),
+    extraSuppliers: z.array(z.string().trim().min(1).max(20)).max(20).default([]),
   })).mutation(async ({ ctx, input }) => {
     const r = await createRfq(ctx.db, await loadActor(ctx.db, ctx.user), input.commandId, input);
     afterwards(ctx.db);

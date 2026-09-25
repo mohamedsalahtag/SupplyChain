@@ -18,6 +18,7 @@ import { loadWfSettings } from '../workflow/settings.js';
 import { takeQty, transitionSlice, type SliceCtx } from '../workflow/slices.js';
 import { addThreadEntry } from '../workflow/threads.js';
 import { updateWithRowVer, rowVerHex, type Db, type Tx } from '../workflow/tx.js';
+import { recordRfqOrigins } from './outsideSuppliers.js';
 import { supplierShortlist, type ShortLine } from './shortlist.js';
 
 export const P_RFQ = { open: 'rfqs.open', manage: 'rfq.manage' } as const;
@@ -61,6 +62,8 @@ export type CreateRfqInput = {
   lines: { lineId: string; week: string; qty: string }[];
   weeks: { etdWeek: string; containerCount: number }[];
   suppliers: string[];
+  /** Suppliers invited outside the shortlist (e.g. a new supplier's first contact); their origins are recorded. */
+  extraSuppliers?: string[];
 };
 
 export async function createRfq(db: Db, actor: Actor, commandId: string, input: CreateRfqInput): Promise<{ rfqId: string; rfqNo: string }> {
@@ -69,7 +72,8 @@ export async function createRfq(db: Db, actor: Actor, commandId: string, input: 
     assertCan(actor, P_RFQ.manage, d.CompanyCode);
     if (d.WorkflowStatus !== 'ACCEPTED') throw new DomainError('BAD_STATE', `${d.DemandNo} is not accepted; only accepted demands can be sourced`, 409);
     if (!input.lines.length) throw new DomainError('NOTHING_TO_ASK', 'Choose at least one line');
-    if (!input.suppliers.length) throw new DomainError('NO_SUPPLIER', 'Choose at least one supplier');
+    const extras = [...new Set(input.extraSuppliers ?? [])].filter((s) => !input.suppliers.includes(s));
+    if (!input.suppliers.length && !extras.length) throw new DomainError('NO_SUPPLIER', 'Choose at least one supplier');
 
     const ids = [...new Set(input.lines.map((l) => l.lineId))];
     const lines = await tx.selectFrom('scm.DemandLine as l').innerJoin('scm.DemandWeek as w', 'w.DemandWeekId', 'l.DemandWeekId')
@@ -87,6 +91,13 @@ export async function createRfq(db: Db, actor: Actor, commandId: string, input: 
       if (!shortlist.some((g) => g.entries.some((e) => e.supplierCode === s))) {
         throw new DomainError('SUPPLIER_ORIGIN_MISMATCH', `Supplier ${s} cannot supply ${shortlist.map((g) => g.originCode).join(', ')}`);
       }
+    }
+    // Outside the shortlist: usable in SAP for the company; it is recorded as supplying the RFQ's origins.
+    const neededOrigins = [...new Set(lines.map((l) => l.OriginCode))].sort();
+    const outside = new Map<string, { origins: string[]; added: string[] }>();
+    for (const s of extras) {
+      await assertVendorUsable(tx, s, d.CompanyCode);
+      outside.set(s, await recordRfqOrigins(tx, actor, d.CompanyCode, s, neededOrigins));
     }
 
     const settings = await loadWfSettings(tx);
@@ -121,6 +132,11 @@ export async function createRfq(db: Db, actor: Actor, commandId: string, input: 
     }).output('inserted.RfqId').executeTakeFirstOrThrow()).RfqId);
     const ctx: SliceCtx = { actorUserId: actor.id, docType: 'RFQ', docId: rfqId };
 
+    for (const [s, o] of outside) {
+      await tx.insertInto('scm.RfqSupplier').values({
+        RfqId: rfqId, SupplierCode: s, OriginsAtInvite: o.origins.join(','), ShortlistRank: null, HintJson: null, InvitedBy: actor.id, OutsideShortlist: true,
+      }).execute();
+    }
     for (const s of suppliers) { // stores what the buyer saw when inviting (plan §4.4 rule 5)
       const seen = shortlist.flatMap((g) => g.entries.filter((e) => e.supplierCode === s).map((e) => ({ origin: g.originCode, rank: e.rank, hint: e.hint, origins: e.origins })));
       const ranks = seen.map((x) => x.rank).filter((r): r is number => r != null);
@@ -146,8 +162,12 @@ export async function createRfq(db: Db, actor: Actor, commandId: string, input: 
       await tx.insertInto('scm.RfqWeek').values({ RfqId: rfqId, EtdWeek: w, ContainerCount: chosen ?? defaults.get(w)!, DefaultCount: defaults.get(w)! }).execute();
     }
 
-    const eventId = await recordEvent(tx, { type: 'RFQ_CREATED', entityType: 'RFQ', entityId: rfqId, demandId: d.DemandId, payload: { rfqNo, lines: asks.size, suppliers: suppliers.length }, actorUserId: actor.id });
-    await addThreadEntry(tx, { entityType: 'RFQ', entityId: rfqId, kind: 'SYSTEM', body: `Created from ${d.DemandNo}: ${asks.size} line(s), ${suppliers.length} supplier(s)`, authorUserId: actor.id, eventId });
+    const eventId = await recordEvent(tx, { type: 'RFQ_CREATED', entityType: 'RFQ', entityId: rfqId, demandId: d.DemandId, payload: { rfqNo, lines: asks.size, suppliers: suppliers.length + outside.size, outsideShortlist: Object.fromEntries(outside) }, actorUserId: actor.id });
+    await addThreadEntry(tx, { entityType: 'RFQ', entityId: rfqId, kind: 'SYSTEM', body: `Created from ${d.DemandNo}: ${asks.size} line(s), ${suppliers.length + outside.size} supplier(s)`, authorUserId: actor.id, eventId });
+    for (const [s, o] of outside) {
+      await addThreadEntry(tx, { entityType: 'RFQ', entityId: rfqId, kind: 'SYSTEM', authorUserId: actor.id, eventId,
+        body: `${s} invited outside the shortlist (first contact)${o.added.length ? ` — now recorded as supplying ${o.added.join(', ')}` : ''}` });
+    }
     await addThreadEntry(tx, { entityType: 'DEMAND', entityId: d.DemandId, kind: 'SYSTEM', body: `${rfqNo} created (${weeks.join(', ')})`, authorUserId: actor.id, eventId });
     for (const a of asks.values()) await closeInbox(tx, 'OPEN_QTY_AGING', 'LINE', a.lineId, actor.id);
     return { rfqId, rfqNo };

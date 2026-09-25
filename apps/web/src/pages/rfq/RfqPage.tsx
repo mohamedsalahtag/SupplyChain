@@ -156,7 +156,7 @@ export function RfqPage() {
         { key: 'suppliers', label: 'Suppliers', children: (
           <Table size="small" bordered pagination={false} rowKey="supplierCode" dataSource={r.suppliers} tableLayout="fixed"
             columns={[
-              { title: 'Supplier', key: 's', width: 280, ellipsis: true, render: (_: unknown, s) => `${s.supplierCode} · ${s.name}` },
+              { title: 'Supplier', key: 's', width: 280, ellipsis: true, render: (_: unknown, s) => <>{s.supplierCode} · {s.name}{s.outsideShortlist && <Tag color="purple" style={{ marginInlineStart: 6 }}>first contact</Tag>}</> },
               { title: 'Origins when invited', key: 'o', width: 160, render: (_: unknown, s) => s.originsAtInvite.join(', ') },
               { title: 'Rank', key: 'r', width: 70, render: (_: unknown, s) => s.rank ?? '—' },
               { title: 'History shown when invited', key: 'h', render: (_: unknown, s) => Object.entries(s.hints).map(([o, h]) => (

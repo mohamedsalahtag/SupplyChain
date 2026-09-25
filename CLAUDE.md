@@ -60,7 +60,7 @@ Built stage by stage from `Demand_to_PO_Execution_Plan_v5.md`; one stage at a ti
 - **Separation of duties:** the creator of a demand can't accept it; whoever handed off can't accept the handoff; nobody decides their own CR (admins excepted). Non-admin user/role editors can only give what they hold (`assertMayGrant`, `assertMayEditRole`).
 - **Reports (spec 24)** read the ledger directly (`modules/reports`): never add across units, a zero denominator is N/A, and the From/To filter applies to every section.
 - **Git:** `https://github.com/mohamedsalahtag/SupplyChain.git`, branch `main`. Commit only when the user asks.
-- **Next migration number: 0023.** 0021 = PO and SAP outbox, 0022 = `reports.open` grants.
+- **Next migration number: 0024.** 0021 = PO and SAP outbox, 0022 = `reports.open` grants, 0023 = RFQ to a supplier outside the shortlist.
 
 ## UI conventions
 

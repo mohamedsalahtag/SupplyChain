@@ -79,7 +79,7 @@ export async function getRfq(db: Db, actor: Actor, rfqId: string) {
       GROUP BY l.RfqLineId, l.ProposedEtdWeek, l.LineKey, l.AskedQty, l.IsCancelled`.execute(db).then((x) => x.rows),
     db.selectFrom('scm.RfqWeek').select(['EtdWeek', 'ContainerCount', 'DefaultCount']).where('RfqId', '=', rfqId).orderBy('EtdWeek').execute(),
     db.selectFrom('scm.RfqSupplier as rs').innerJoin('md.Supplier as s', 's.SupplierCode', 'rs.SupplierCode')
-      .select(['rs.SupplierCode', 's.Name', 's.Currency', 'rs.OriginsAtInvite', 'rs.ShortlistRank', 'rs.HintJson', 'rs.InvitedAt']).where('rs.RfqId', '=', rfqId).orderBy('s.Name').execute(),
+      .select(['rs.SupplierCode', 's.Name', 's.Currency', 'rs.OriginsAtInvite', 'rs.ShortlistRank', 'rs.HintJson', 'rs.InvitedAt', 'rs.OutsideShortlist']).where('rs.RfqId', '=', rfqId).orderBy('s.Name').execute(),
     db.selectFrom('scm.SupplierQuote as q').leftJoin('app.User as u', 'u.UserId', 'q.RecordedBy').selectAll('q').select('u.DisplayName as RecordedByName')
       .where('q.RfqId', '=', rfqId).orderBy('q.QuoteId', 'desc').execute(),
   ]);
@@ -141,7 +141,7 @@ export async function getRfq(db: Db, actor: Actor, rfqId: string) {
     supplierView,
     suppliers: suppliers.map((s) => ({
       supplierCode: s.SupplierCode, name: s.Name, currency: s.Currency || 'USD', originsAtInvite: s.OriginsAtInvite.split(',').filter(Boolean), rank: s.ShortlistRank,
-      hints: (s.HintJson ? JSON.parse(s.HintJson) : {}) as Record<string, Hint>, invitedAt: s.InvitedAt.toISOString(),
+      hints: (s.HintJson ? JSON.parse(s.HintJson) : {}) as Record<string, Hint>, invitedAt: s.InvitedAt.toISOString(), outsideShortlist: !!s.OutsideShortlist,
       quotedRows: quotes.filter((q) => q.IsCurrent && q.SupplierCode === s.SupplierCode).length,
     })),
     quotes: quotes.filter((q) => q.IsCurrent).map(quoteView),

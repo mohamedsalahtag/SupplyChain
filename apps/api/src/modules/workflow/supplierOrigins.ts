@@ -63,5 +63,6 @@ export async function addManualOrigin(db: Db, supplierCode: string, originCode: 
 }
 
 export async function removeManualOrigin(db: Db, supplierCode: string, originCode: string): Promise<void> {
-  await db.deleteFrom('scm.SupplierOrigin').where('SupplierCode', '=', supplierCode).where('OriginCode', '=', originCode).where('Source', '=', 'MANUAL').execute();
+  // Added by hand or from an RFQ (a first contact); RFQs already sent keep what they recorded at invite.
+  await db.deleteFrom('scm.SupplierOrigin').where('SupplierCode', '=', supplierCode).where('OriginCode', '=', originCode).where('Source', 'in', ['MANUAL', 'RFQ']).execute();
 }

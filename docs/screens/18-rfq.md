@@ -10,9 +10,28 @@ Procurement asks suppliers for prices. An **RFQ** takes all or part of an accept
 - **Sales** sees on the demand how much of each line is in an RFQ or quoted (the ledger columns); RFQ screens are Procurement's.
 
 ## Supplier origins (decision 2026-09-24)
-A supplier can supply an origin when it is (1) its **SAP country**, (2) an origin it **has supplied to us** (PO history, refreshed after every PO sync), or (3) **added by hand** in Configuration → Supplier origins (for a new supplier with no history). The shortlist, invitations and quotes all use this list. Why: many suppliers are traders or packers registered elsewhere (e.g. of 9 suppliers who shipped PH fruit, 2 are registered in PH).
+A supplier can supply an origin when it is (1) its **SAP country**, (2) an origin it **has supplied to us** (PO history, refreshed after every PO sync), (3) **added by hand** in Configuration → Supplier origins (for a new supplier with no history), or (4) **added from an RFQ** when a supplier not on the list is invited (below). The shortlist, invitations and quotes all use this list. Why: many suppliers are traders or packers registered elsewhere (e.g. of 9 suppliers who shipped PH fruit, 2 are registered in PH).
 
 **Units in the history (found while building):** the PO API gives SAP's commercial unit codes (CAR, BAG, OCT…) and the material API the ISO-style ones (CT, BG, CTO…) for the same units — every PO unit pairs with exactly one material unit. The purchase history is therefore kept in the material's base unit, so it matches demand lines (before, no carton history matched).
+
+## Supplier not on the list: first contact (added 2026-09-25)
+A new supplier often has its first contact with us through an RFQ. It has no recorded origin and no history, so it is not on the shortlist. In step 3, **Add a supplier not on the list…** searches **every supplier in SAP** by code or name.
+
+Each result shows:
+- country and city
+- the origins the supplier already supplies
+- why it can't be invited, if so: blocked in SAP, or not set up for the company's purchasing organization
+
+A supplier created in SAP only today appears after the **suppliers sync**.
+
+The picked supplier is listed with a **first contact** tag and what will happen: *recorded as supplying CL*.
+
+**Create RFQ** then does three things:
+1. It records the missing origin(s) for that supplier, as source **"RFQ"** with who added it. They are visible under Configuration → Supplier origins, and can be removed there. RFQs already sent keep what was recorded at invite.
+2. It invites the supplier, marked **first contact**, and writes a line in the RFQ history.
+3. From then on the supplier quotes, is awarded and is handed off like any other supplier, and appears on later shortlists for that origin.
+
+An RFQ may have only suppliers from outside the list. Permission: `rfq.manage`. Migration 0023: the `RFQ` origin source and `RfqSupplier.OutsideShortlist`.
 
 ## Main path
 1. **Create RFQ** — from the accepted demand's Procurement panel (**Create RFQ…**) or Purchasing → RFQs → **New RFQ** (pick the demand).

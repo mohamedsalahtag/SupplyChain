@@ -282,13 +282,13 @@ export interface Database {
     Status: Generated<'EXECUTED' | 'UNMERGED'>; Comment: Generated<string>; ExecutedBy: number; ExecutedAt: Generated<Date>;
     UnmergedBy: number | null; UnmergedAt: Date | null; UnmergeReason: string | null; RowVer: Generated<Buffer>;
   };
-  'scm.SupplierOrigin': { SupplierCode: string; OriginCode: string; Source: 'COUNTRY' | 'HISTORY' | 'MANUAL'; AddedBy: number | null; AddedAt: Generated<Date> };
+  'scm.SupplierOrigin': { SupplierCode: string; OriginCode: string; Source: 'COUNTRY' | 'HISTORY' | 'MANUAL' | 'RFQ'; AddedBy: number | null; AddedAt: Generated<Date> };
   'scm.Rfq': {
     RfqId: Generated<string>; RfqNo: string; DemandId: string; CompanyCode: string; ManualStatus: Generated<'DRAFT' | 'SENT' | 'CANCELLED'>;
     CreatedBy: number; CreatedAt: Generated<Date>; SentBy: number | null; SentAt: Date | null; CancelledBy: number | null; CancelledAt: Date | null;
     CancelReason: string | null; CancelComment: string | null; RowVer: Generated<Buffer>;
   };
-  'scm.RfqSupplier': { RfqId: string; SupplierCode: string; OriginsAtInvite: string; ShortlistRank: number | null; HintJson: string | null; InvitedBy: number; InvitedAt: Generated<Date> };
+  'scm.RfqSupplier': { RfqId: string; SupplierCode: string; OriginsAtInvite: string; ShortlistRank: number | null; HintJson: string | null; InvitedBy: number; InvitedAt: Generated<Date>; OutsideShortlist: Generated<boolean> };
   'scm.RfqWeek': { RfqId: string; EtdWeek: string; ContainerCount: number; DefaultCount: number; RowVer: Generated<Buffer> };
   'scm.RfqLine': {
     RfqLineId: Generated<string>; RfqId: string; DemandLineId: string | null; Origin: Generated<'DEMAND' | 'PROCUREMENT'>;
