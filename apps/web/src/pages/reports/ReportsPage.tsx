@@ -4,7 +4,7 @@ import { DownloadOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import type { Dayjs } from 'dayjs';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AppTable, type AppColumn } from '../../components/AppTable';
-import { downloadCsv } from '../../lib/csv';
+import { downloadXlsx } from '../../lib/excel';
 import { useTablePrefs } from '../../lib/useTablePrefs';
 import { formatDateTime, type RouterOutputs } from '../../lib/format';
 import { trpc } from '../../lib/trpc';
@@ -59,9 +59,8 @@ function Execution({ filter }: { filter: Filter }) {
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState<string>();
   const rows = q.data ?? [];
-  const exportCsv = () => downloadCsv(`demand-execution-${today()}.csv`,
-    ['Demand', 'Company', 'Unit', 'Accepted', 'Committed', 'Executed (PO created)', 'Not sourced', 'Cancelled by Sales', 'Outstanding', 'Procurement added', 'Procurement ordered', 'Execution %', 'Not sourced %'],
-    rows.map((r) => [r.demandNo, r.companyCode, r.unit, r.acceptedAt?.slice(0, 10), r.committed, r.executed, r.notSourced, r.salesCancelled, r.outstanding, r.procApproved, r.procOrdered, r.executionRate ?? 'N/A', r.notSourcedRate ?? 'N/A']));
+  const exportXlsx = () => downloadXlsx(`demand-execution-${today()}`, [{ name: 'Demand execution', header: ['Demand', 'Company', 'Unit', 'Accepted', 'Committed', 'Executed (PO created)', 'Not sourced', 'Cancelled by Sales', 'Outstanding', 'Procurement added', 'Procurement ordered', 'Execution %', 'Not sourced %'],
+    rows: rows.map((r) => [r.demandNo, r.companyCode, r.unit, r.acceptedAt?.slice(0, 10), r.committed, r.executed, r.notSourced, r.salesCancelled, r.outstanding, r.procApproved, r.procOrdered, r.executionRate ?? 'N/A', r.notSourcedRate ?? 'N/A']) }]);
   const columns: AppColumn<Exec>[] = [
     { title: 'Demand', key: 'd', dataIndex: 'demandNo', width: 100 }, { title: 'Company', key: 'co', dataIndex: 'companyCode', width: 75 }, { title: 'Unit', key: 'u', dataIndex: 'unit', width: 55 },
     { title: 'Committed', key: 'c', width: 100, align: 'right', render: (_: unknown, r) => n(r.committed) },
@@ -81,7 +80,7 @@ function Execution({ filter }: { filter: Filter }) {
       <AppTable<Exec> prefs={prefs} itemName="demand × unit rows (accepted demands)" rowKey={(r) => `${r.demandId}|${r.unit}`} columns={columns} loading={!prefs.ready || q.isFetching}
         dataSource={rows.slice((page - 1) * prefs.pageSize, page * prefs.pageSize)} page={page} total={rows.length} onPageChange={setPage}
         onRow={(r) => ({ onClick: () => setOpen(r.demandId), style: { cursor: 'pointer' } })}
-        toolbar={<Button icon={<DownloadOutlined />} disabled={!rows.length} onClick={exportCsv}>Export CSV</Button>} />
+        toolbar={<Button icon={<DownloadOutlined />} disabled={!rows.length} onClick={() => void exportXlsx()}>Export to Excel</Button>} />
       <DemandDrawer demandId={open} onClose={() => setOpen(undefined)} />
     </>
   );
@@ -90,13 +89,13 @@ function Execution({ filter }: { filter: Filter }) {
 function DemandDrawer({ demandId, onClose }: { demandId?: string; onClose: () => void }) {
   const q = trpc.reports.demand.useQuery({ demandId: demandId ?? '0' }, { enabled: !!demandId });
   const d = q.data;
-  const exportCsv = () => d && downloadCsv(`${d.demandNo}-execution.csv`,
-    ['Week', 'Material', 'Unit', 'Baseline (v1)', 'Requested now', 'Open', 'In RFQ', 'Awarded', 'Handed off', 'PO submitted', 'PO created', 'Cancelled by Sales', 'Not sourced', 'Cancelled by change', 'Merged in', 'Merged out', 'Procurement added', 'SAP POs'],
-    d.lines.map((l) => [l.week, l.label, l.unit, l.baseline ?? '', l.requested, l.open, l.inRfq, l.awarded, l.handedOff, l.poSubmitted, l.poCreated, l.cancelledSales, l.notSourced, l.cancelledChange, l.mergedIn, l.mergedOut, l.procurementAdded, l.sapPos.join(' ')]));
+  const exportXlsx = () => d && downloadXlsx(`${d.demandNo}-execution`, [{ name: 'Lines', title: `${d.demandNo} · company ${d.companyCode}`, header: ['Week', 'Material', 'Unit', 'Baseline (v1)', 'Requested now', 'Open', 'In RFQ', 'Awarded', 'Handed off', 'PO submitted', 'PO created', 'Cancelled by Sales', 'Not sourced', 'Cancelled by change', 'Merged in', 'Merged out', 'Procurement added', 'SAP POs'],
+    rows: d.lines.map((l) => [l.week, l.label, l.unit, l.baseline ?? '', l.requested, l.open, l.inRfq, l.awarded, l.handedOff, l.poSubmitted, l.poCreated, l.cancelledSales, l.notSourced, l.cancelledChange, l.mergedIn, l.mergedOut, l.procurementAdded, l.sapPos.join(' ')]) },
+    { name: 'Containers per week', header: ['Week', 'Baseline (v1)', 'Now', 'Awarded', 'Ordered (SAP PO)'], rows: d.weeks.map((w) => [w.week, w.baseline, w.current, w.awarded, w.ordered]) }]);
   return (
     <Drawer open={!!demandId} onClose={onClose} width={Math.min(1200, window.innerWidth - 40)} destroyOnHidden
       title={d ? <Space>{d.demandNo}<Link to={`/demands/${d.demandId}`}><Button size="small" type="link">Open the demand</Button></Link></Space> : 'Demand'}
-      extra={<Button size="small" icon={<DownloadOutlined />} disabled={!d} onClick={exportCsv}>Export CSV</Button>}>
+      extra={<Button size="small" icon={<DownloadOutlined />} disabled={!d} onClick={() => void exportXlsx()}>Export to Excel</Button>}>
       {q.error && <Alert type="error" showIcon message={q.error.message} />}
       {d && <Space direction="vertical" size={10} style={{ width: '100%' }}>
         <Typography.Text type="secondary">Company {d.companyCode} · accepted {formatDateTime(d.acceptedAt)} · baseline = version 1 as accepted{d.baselineAvailable ? '' : ' (not available)'}</Typography.Text>
@@ -128,10 +127,9 @@ function CrRegister({ filter }: { filter: Filter }) {
   const prefs = useTablePrefs('report-cr-register', []);
   const [page, setPage] = useState(1);
   const rows = q.data ?? [];
-  const exportCsv = () => downloadCsv(`change-requests-${today()}.csv`,
-    ['CR', 'Demand', 'Company', 'Type', 'Raised by', 'Department', 'Submitted', 'Reason', 'Comment', 'Status', 'Applied', 'Decided by', 'Decided', 'Response hours', 'Decision comment', 'Requested', 'Approved', 'Applied qty', 'Unit'],
-    rows.map((r) => [r.crNo, r.demandNo, r.companyCode, crType(r.type), r.raisedBy, DEPT[r.raisedByDept] ?? r.raisedByDept, r.submittedAt.slice(0, 16), r.reason, r.comment, crStatus(r.status), applyStatus(r.applyStatus),
-      r.decidedBy, r.decidedAt?.slice(0, 16), r.responseHours, r.decisionComment, r.requested, r.approved, r.applied, r.unit]));
+  const exportXlsx = () => downloadXlsx(`change-requests-${today()}`, [{ name: 'Change requests', header: ['CR', 'Demand', 'Company', 'Type', 'Raised by', 'Department', 'Submitted', 'Reason', 'Comment', 'Status', 'Applied', 'Decided by', 'Decided', 'Response hours', 'Decision comment', 'Requested', 'Approved', 'Applied qty', 'Unit'],
+    rows: rows.map((r) => [r.crNo, r.demandNo, r.companyCode, crType(r.type), r.raisedBy, DEPT[r.raisedByDept] ?? r.raisedByDept, r.submittedAt.slice(0, 16), r.reason, r.comment, crStatus(r.status), applyStatus(r.applyStatus),
+      r.decidedBy, r.decidedAt?.slice(0, 16), r.responseHours, r.decisionComment, r.requested, r.approved, r.applied, r.unit]) }]);
   const columns: AppColumn<Cr>[] = [
     { title: 'CR', key: 'no', width: 105, render: (_: unknown, r) => <Link to={`/change-requests/${r.crId}`} onClick={(e) => e.stopPropagation()}>{r.crNo}</Link> },
     { title: 'Demand', key: 'd', width: 100, render: (_: unknown, r) => <Link to={`/demands/${r.demandId}`}>{r.demandNo}</Link> },
@@ -147,7 +145,7 @@ function CrRegister({ filter }: { filter: Filter }) {
       {q.error && <Alert type="error" showIcon message={q.error.message} />}
       <AppTable<Cr> prefs={prefs} itemName="change requests" rowKey="crId" columns={columns} loading={!prefs.ready || q.isFetching}
         dataSource={rows.slice((page - 1) * prefs.pageSize, page * prefs.pageSize)} page={page} total={rows.length} onPageChange={setPage}
-        toolbar={<Button icon={<DownloadOutlined />} disabled={!rows.length} onClick={exportCsv}>Export CSV</Button>} />
+        toolbar={<Button icon={<DownloadOutlined />} disabled={!rows.length} onClick={() => void exportXlsx()}>Export to Excel</Button>} />
     </>
   );
 }
@@ -157,8 +155,23 @@ function Performance({ filter }: { filter: Filter }) {
   const p = q.data;
   if (q.error) return <Alert type="error" showIcon message={q.error.message} />;
   if (!p) return <Card loading />;
+  const exportXlsx = () => downloadXlsx(`performance-${today()}`, [
+    { name: 'Headline', header: ['Unit', 'Committed', 'Executed', 'Outstanding', 'Execution %', 'Not sourced %', `On time % (≥ ${p.onTimeDays} days before ETD)`, 'Accepted → PO created (h)', 'Procurement added', 'Procurement ordered'],
+      rows: p.headline.map((u) => [u.unit, u.committed, u.executed, u.outstanding, u.executionRate ?? 'N/A', u.notSourcedRate ?? 'N/A', u.onTimeRate ?? 'N/A', u.endToEndHours ?? 'N/A', u.procApproved, u.procOrdered]) },
+    { name: 'Stage times', header: ['Unit', 'Stage', 'Hours (quantity-weighted)'], rows: p.headline.flatMap((u) => u.stages.map((st) => [u.unit, st.label, st.hours ?? 'N/A'])) },
+    { name: 'Other KPIs', header: ['Area', 'Measure', 'Value'], rows: [
+      ...p.crResponse.map((c) => ['Change requests', `Decided by ${c.decidedBy} · average hours`, c.avgHours ?? 'N/A']),
+      ['Acknowledgement', 'Award batches', p.acknowledgement.batches], ['Acknowledgement', 'Average hours to acknowledge', p.acknowledgement.avgHoursToAck ?? 'N/A'],
+      ['Acknowledgement', 'Resets by award changes', p.acknowledgement.resets], ['Acknowledgement', 'Handed off without it', p.acknowledgement.handedOffWithoutAck],
+      ['Handoffs', 'Handoffs', p.handoffs.handoffs], ['Handoffs', 'Returned by the PO team', p.handoffs.returnedByPoTeam], ['Handoffs', 'Return rate %', p.handoffs.returnRate ?? 'N/A'],
+      ['Handoffs', 'Returned automatically', p.handoffs.returnedAutomatically], ['Handoffs', 'SKU issues', p.handoffs.skuIssues], ['Handoffs', 'Sent without acknowledgement', p.handoffs.sentWithoutAck],
+      ['SAP', 'Submitted', p.sap.submitted], ['SAP', 'Created on the first reply', p.sap.createdFirstReply], ['SAP', 'First-reply rate %', p.sap.firstReplyRate ?? 'N/A'],
+      ['SAP', 'Created after a lookup', p.sap.createdAfterReconcile], ['SAP', 'Resolved by hand', p.sap.manualResolutions], ['SAP', 'Rejected', p.sap.rejected], ['SAP', 'Unknown now', p.sap.unknownNow],
+    ] },
+  ]);
   return (
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
+      <div style={{ textAlign: 'right' }}><Button icon={<DownloadOutlined />} disabled={!p.headline.length} onClick={() => void exportXlsx()}>Export to Excel</Button></div>
       {p.headline.length === 0 && <Empty description="No accepted demands in this period" />}
       {p.headline.map((u) => (
         <Card key={u.unit} size="small" title={<>Unit {u.unit} <Typography.Text type="secondary" style={{ fontWeight: 400, fontSize: 12 }}>— rates are quantity-weighted; not combined with other units</Typography.Text></>}>

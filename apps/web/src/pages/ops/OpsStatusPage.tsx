@@ -30,7 +30,7 @@ export function OpsStatusPage() {
         <>
           <Row gutter={[12, 12]}>
             <Col xs={24} lg={12}>
-              <Card size="small" title={<>{ok(s.sap.unknown + s.sap.manual === 0 && (s.sap.oldestPendingMinutes ?? 0) < 10)} SAP outbox <Tag>{s.sap.adapter === 'stub' ? 'simulated SAP (stub)' : 'SAP'}</Tag></>}
+              <Card size="small" title={<>{ok(s.sap.unknown + s.sap.manual === 0 && (s.sap.oldestPendingMinutes ?? 0) < 10)} SAP outbox <Tag color={s.sap.adapter === 'stub' ? 'orange' : s.sap.apiProblems.length ? 'red' : 'green'}>{s.sap.adapter === 'stub' ? 'simulator' : s.sap.apiProblems.length ? 'PO API incomplete' : 'PO API'}</Tag></>}
                 extra={<Link to="/po-drafts">PO drafts &amp; SAP</Link>}>
                 <Row gutter={12}>
                   <Col span={6}><Statistic title="Waiting to send" value={s.sap.pending} /></Col>

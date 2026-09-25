@@ -7,6 +7,7 @@ import { sql } from 'kysely';
 import type { Config } from '../../config.js';
 import { lastSuccessfulSyncs, MASTER_DATA_SOURCES, staleSources } from '../workflow/masterData.js';
 import { loadWfSettings } from '../workflow/settings.js';
+import { loadSapPoApi, sapPoApiProblems } from '../../settings/sapPoApi.js';
 import type { Db } from '../workflow/tx.js';
 
 /** Pairs one person should not hold together (plan v5 §0.4 separation of duties). */
@@ -34,8 +35,9 @@ export function sodConflicts(rows: { UserId: number | string; DisplayName: strin
   });
 }
 
-export async function opsStatus(db: Db, config: Config) {
+export async function opsStatus(db: Db, config: Config, encKey: string) {
   const settings = await loadWfSettings(db);
+  const poApi = await loadSapPoApi(db, encKey);
   const now = new Date();
   const [outbox, lastRun, syncs, overdue, sod, noCompany, files] = await Promise.all([
     sql<{ Status: string; N: number; Oldest: Date | null }>`SELECT Status, COUNT(*) AS N, MIN(CreatedAt) AS Oldest FROM scm.SapSubmission
@@ -60,7 +62,7 @@ export async function opsStatus(db: Db, config: Config) {
     checkedAt: now.toISOString(),
     sap: {
       pending: Number(by('PENDING')?.N ?? 0), oldestPendingMinutes: ageMin(by('PENDING')?.Oldest), inFlight: Number(by('IN_FLIGHT')?.N ?? 0),
-      unknown: Number(by('UNKNOWN')?.N ?? 0), manual: Number(by('MANUAL')?.N ?? 0), lastAttemptMinutes: ageMin(lastRun.rows[0]?.At), adapter: 'stub',
+      unknown: Number(by('UNKNOWN')?.N ?? 0), manual: Number(by('MANUAL')?.N ?? 0), lastAttemptMinutes: ageMin(lastRun.rows[0]?.At), adapter: poApi.mode, apiProblems: sapPoApiProblems(poApi),
     },
     masterData: {
       maxAgeHours: settings.masterDataMaxAgeHours,

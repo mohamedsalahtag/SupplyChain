@@ -1,6 +1,6 @@
 # 23 · PO preparation, PO draft and the SAP outbox (Stage 7)
 
-**Status:** Built 2026-09-25 under the standing instruction "finish all remaining stages" (no separate mockup approval): waiting for acceptance. Stage 7 of the Demand-to-PO plan v5. SAP is a **durable stub** until the SAP (ZCON) adapter (Stage 9).
+**Status:** Built 2026-09-25 under the standing instruction "finish all remaining stages" (no separate mockup approval): waiting for acceptance. Stage 7 of the Demand-to-PO plan v5. Where purchase orders go is set in **Configuration → SAP purchase orders**: the built-in simulator, or the company's PO API.
 
 ## Purpose
 The PO team turns an **accepted handoff** into **one SAP purchase order**: it picks SKUs where none was provided, builds and validates a PO draft, and submits it. The SAP call runs through an **outbox**. At most one SAP PO is ever created per draft, and quantity is never unlocked while the SAP outcome is unknown.
@@ -31,6 +31,34 @@ The PO team turns an **accepted handoff** into **one SAP purchase order**: it pi
    - **Confirmed absent:** the same payload is resent with the same key, up to 3 attempts.
    - **SAP can't be asked** after 5 checks: the draft goes to **manual** and a *SAP outcome unknown* exception is raised. The PO team checks SAP, attaches the **evidence** (uploaded after the submission), and chooses **Resolve**. They either record "SAP has the PO" with its number, or "SAP has no PO", which unlocks the quantity. SAP is asked once more when it is reachable, so a wrong answer is refused.
 
+## Configuration → SAP purchase orders (added 2026-09-25)
+Administrators (`configuration.sap.edit`) choose where submitted purchase orders go:
+
+- **Simulator (test only).** This is the default. A production server refuses to submit to it unless `ALLOW_SAP_STUB=true`.
+- **PO API (SAP).** The company's API, called by a generic HTTP adapter (`modules/po/sapHttpAdapter.ts`):
+
+  | Setting | Meaning |
+  |---|---|
+  | Base URL | The address of the API |
+  | Create path (POST) | Receives the frozen draft, plus the reference field |
+  | Lookup path (GET) | Must contain `{reference}` |
+  | SAP field for the portal reference | Required |
+  | PO number in the reply | Dot path to the PO number, e.g. `d.PurchaseOrder` |
+  | SAP client | |
+  | Sign-in | Basic user and password (stored encrypted), or none |
+  | CSRF token fetch | For SAP Gateway |
+  | Self-signed certificate | Allow or not |
+  | Timeout | Under the 5-minute lease |
+
+  **Test lookup** asks for a reference that can't exist, and never creates anything. An incomplete setting sends nothing and lists what is missing.
+
+  How replies are read:
+  - 2xx with a PO number → created
+  - 4xx → refused, with SAP's message
+  - anything else (5xx, timeout, no reply, 2xx without a number) → **unknown**, which is then looked up and never resent blindly
+
+When the API's contract arrives, only the field mapping (`toSapBody`) is expected to change.
+
 ## Rules
 | Rule | Detail |
 |---|---|
@@ -40,7 +68,7 @@ The PO team turns an **accepted handoff** into **one SAP purchase order**: it pi
 | Late replies | A SAP answer for a draft that is already settled changes nothing. It raises a *late SAP reply* exception so a person can check for a duplicate. |
 | Return | A handoff can be returned until its PO is submitted. Returning it voids any unsubmitted draft. Submit and return lock the handoff in the same order, so they never overlap. |
 | One run at a time | The timer and **Process now** share one run per server. Reconcile claims its rows, so two servers never ask about the same draft at once. |
-| Stub safety | Fault injection needs `configuration.sap.edit`. A production server (`NODE_ENV=production`) refuses to start on the stub unless `ALLOW_SAP_STUB=true`. |
+| Stub safety | Fault injection needs `configuration.sap.edit`. A production server (`NODE_ENV=production`) refuses to **submit** to the simulator unless `ALLOW_SAP_STUB=true`, so it can start, and the administrator can then enter the PO API. |
 
 ## Statuses (spec 21 style, `PO_STATUS`)
 | Draft | Label | Who has it · next |

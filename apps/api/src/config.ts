@@ -31,10 +31,21 @@ const schema = z.object({
   ALLOW_TEST_LOGIN: bool,
   /** Administrators may switch into demo accounts (View as, spec 16) to test other departments. Off on the live server. */
   ALLOW_VIEW_AS: bool,
-  /** Where PO drafts are sent. Only the stub exists until the SAP (ZCON) adapter (plan v5 Stage 9). */
-  SAP_PO_ADAPTER: z.enum(['stub']).default('stub'),
-  /** A production server (NODE_ENV=production) refuses the stub unless this is set, e.g. for a UAT server. */
+  /** Where PO drafts go is chosen in Configuration → SAP purchase orders. On a production server (NODE_ENV=production)
+   *  the simulator is refused at submit unless this is true — set it only on a UAT/test server. */
   ALLOW_SAP_STUB: bool,
+  /** Address the API listens on. Behind a reverse proxy use 127.0.0.1. */
+  HOST: z.string().default('0.0.0.0'),
+  /** HTTPS directly in the API: a .pfx/.p12 file (+ passphrase), or a PEM certificate + key. Paths on the server. */
+  TLS_PFX_FILE: z.string().default(''),
+  TLS_PFX_PASSPHRASE: z.string().default(''),
+  TLS_CERT_FILE: z.string().default(''),
+  TLS_KEY_FILE: z.string().default(''),
+  /** true when an HTTPS reverse proxy (IIS ARR, nginx) is in front: the proxy's https is trusted for secure cookies. */
+  TRUST_PROXY: bool,
+  /** Production: the API also serves the built web app (npm run build) from this folder; empty = <repo>/apps/web/dist. */
+  SERVE_WEB: bool,
+  WEB_DIST: z.string().default(''),
   /** Folder for workflow attachments; empty = <repo>/data/attachments. */
   ATTACHMENTS_DIR: z.string().default(''),
 });
@@ -47,7 +58,8 @@ export function productionProblems(cfg: Config, env = process.env.NODE_ENV): str
   return [
     cfg.ALLOW_TEST_LOGIN && 'ALLOW_TEST_LOGIN must be false',
     cfg.ALLOW_VIEW_AS && 'ALLOW_VIEW_AS must be false',
-    cfg.SAP_PO_ADAPTER === 'stub' && !cfg.ALLOW_SAP_STUB && 'SAP_PO_ADAPTER is the stub: purchase orders would not reach SAP (set ALLOW_SAP_STUB=true only on a test server)',
+    !(cfg.TLS_PFX_FILE || (cfg.TLS_CERT_FILE && cfg.TLS_KEY_FILE) || cfg.TRUST_PROXY) &&
+      'no HTTPS: set TLS_PFX_FILE (or TLS_CERT_FILE + TLS_KEY_FILE), or TRUST_PROXY=true behind an HTTPS reverse proxy — passwords must never cross the network in clear text',
   ].filter((x): x is string => !!x);
 }
 

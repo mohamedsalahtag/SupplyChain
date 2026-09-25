@@ -11,8 +11,8 @@ test('24 · reports: execution with drill-down and CSV, change request register,
   const row = page.locator('.ant-table-tbody tr.ant-table-row').first();
   await expect(row).toBeVisible();
   const download = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Export CSV' }).first().click();
-  expect((await download).suggestedFilename()).toMatch(/^demand-execution-\d{4}-\d{2}-\d{2}\.csv$/);
+  await page.getByRole('button', { name: 'Export to Excel' }).first().click();
+  expect((await download).suggestedFilename()).toMatch(/^demand-execution-\d{4}-\d{2}-\d{2}\.xlsx$/);
   await row.click();
   await expect(page.getByText('Containers per week')).toBeVisible();
   await expect(page.getByText('Lines — where the quantity is now')).toBeVisible();

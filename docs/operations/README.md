@@ -4,6 +4,8 @@ These are the documents for running the Demand-to-PO app beyond the developers' 
 
 | Document | For | What it covers |
 |---|---|---|
+| [production-setup.md](production-setup.md) | IT | Installing the server: HTTPS, `.env`, Windows service, first configuration, updates |
+| [../roadmap.md](../roadmap.md) | Everyone | Stage 9 in detail, what is needed from the business / IT / SAP, next steps |
 | [runbooks.md](runbooks.md) | Support (PO team lead, IT) | SAP outcome unknown, SAP rejected, late SAP reply, master data missing or stale, overdue work, worker stopped, sign-in problems |
 | [backup-restore.md](backup-restore.md) | IT / DBA | What to back up, the restore drill, and what the outbox does after a restore |
 | [cutover.md](cutover.md) | Project team | Go-live checklist, opening balances, the pilot, rollback |

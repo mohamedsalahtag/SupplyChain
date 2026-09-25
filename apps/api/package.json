@@ -7,10 +7,12 @@
     "db:migrate": "tsx --env-file-if-exists=../../.env src/scripts/migrate.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:db": "node scripts/test-db.mjs"
+    "test:db": "node scripts/test-db.mjs",
+    "start": "node scripts/start.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",
+    "@fastify/static": "^8.3.0",
     "@supplychain/shared": "*",
     "@trpc/server": "^11.0.0",
     "fastify": "^5.1.0",

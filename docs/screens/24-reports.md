@@ -26,7 +26,7 @@ One row per accepted demand and unit:
 - **Procurement added · ordered:** shown apart and not part of the rate.
 - **Execution %.**
 
-**Export CSV.** Click a row to open the **demand drawer**:
+**Export to Excel.** Click a row to open the **demand drawer**:
 - **Containers per week:** baseline (version 1), now, awarded, ordered (SAP PO).
 - **Lines:**
   - baseline (v1) and requested now
@@ -34,7 +34,7 @@ One row per accepted demand and unit:
   - cancelled by Sales, not sourced, cancelled by change
   - merged in and out, Procurement added
   - the SAP PO numbers
-- **Export CSV.**
+- **Export to Excel**, with two sheets: *Lines* and *Containers per week*.
 
 ### Change request register
 Every change request shows:
@@ -45,7 +45,7 @@ Every change request shows:
 - who decided it and after how long
 - requested · approved · applied quantities. They are summed only when all items share one unit; otherwise the column shows "several units".
 
-**Export CSV.**
+**Export to Excel.**
 
 ### Performance
 Per unit:
@@ -62,6 +62,10 @@ Also:
 - **Sales acknowledgement:** batches, average hours to acknowledge (real acknowledgements only), resets, handed off without it.
 - **Handoffs:** returned by the PO team (rate), returned automatically, SKU issues, sent without acknowledgement.
 - **SAP:** submitted, created on the first reply (rate), after a lookup, resolved by hand, rejected, unknown now.
+
+**Export to Excel** (three sheets: headline, stage times, other KPIs).
+
+All exports are real `.xlsx` files: numbers are numbers, the header row is frozen and filtered, and the columns are sized.
 
 ## Rules
 | Rule | Detail |
@@ -97,7 +101,6 @@ flowchart LR
 - No report tables: queries run on the ledger (`apps/api/src/modules/reports/reports.ts`).
 
 ## Out of scope
-- An Excel (.xlsx) export; CSV opens in Excel.
 - Container comparison across demands.
 - A Submit → Accept KPI.
 - On-time in each company's own time zone.

@@ -3,7 +3,7 @@
 From the full review of 2026-09-25 (`docs/review/2026-09-full-review.md`). Items marked **fixed** are in the code. The others must be done on the server or remain open.
 
 ## Server
-- [ ] **HTTPS.** Put a TLS reverse proxy (IIS ARR or nginx) in front of the web and API. Bind the API to `127.0.0.1` and serve the **built** web bundle, not the Vite dev server. The session cookie is marked `secure` once the request comes over HTTPS through the proxy. *(Review High 1, open: infrastructure.)*
+- [ ] **HTTPS.** Either give the API the certificate (`TLS_PFX_FILE` + `TLS_PFX_PASSPHRASE`), or put an HTTPS reverse proxy in front with `HOST=127.0.0.1` and `TRUST_PROXY=true`. The API serves the **built** web app (`SERVE_WEB=true`, `npm run build`), never the Vite dev server. Cookies are `secure`, and HSTS is sent. **Built (2026-09-25):** a production server refuses to start without HTTPS. What remains is IT supplying the certificate (production-setup.md).
 - [ ] `.env`:
   - `NODE_ENV=production`
   - `ALLOW_TEST_LOGIN=false`
@@ -11,7 +11,7 @@ From the full review of 2026-09-25 (`docs/review/2026-09-full-review.md`). Items
   - a 32+ byte `SESSION_SECRET`
   - a separate `SETTINGS_ENCRYPTION_KEY` kept in the IT vault
 
-  The server refuses to start in production with a test switch on, or with the SAP stub. **Fixed.**
+  The server refuses to start in production with a test switch on or without HTTPS, and refuses to submit purchase orders to the SAP simulator. **Fixed.**
 - [ ] The Windows service account running the API has read/write access only to the attachments folder and the logs.
 - [ ] SQL login with the least rights needed: `db_datareader`, `db_datawriter` and EXECUTE. Migrations run under a separate deploy login.
 

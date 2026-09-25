@@ -1,16 +1,16 @@
 # Cutover, pilot and rollback
 
 ## Go-live gate: all must be true
-- [ ] **The real SAP (ZCON) adapter** is built and tested against the SAP test system with the Stage 7 fault suite. The field that stores the portal reference (POD-…) on the SAP PO is agreed with the SAP team. *(Stage 9, open.)*
+- [ ] **The company's PO API** is entered in Configuration → SAP purchase orders, with the field mapping adapted to its contract, and tested against the SAP test system with the Stage 7 fault suite. The field that stores the portal reference (POD-…) on the SAP PO is agreed with the SAP team. *(Stage 9.1/9.2: waiting for the API details.)*
 - [ ] `.env` on the live server:
   - `NODE_ENV=production`
   - `ALLOW_TEST_LOGIN=false`
   - `ALLOW_VIEW_AS=false`
-  - `SAP_PO_ADAPTER` set to the real adapter
+  - `SERVE_WEB=true`
+  - HTTPS (`TLS_PFX_FILE`, or `TRUST_PROXY=true` behind a proxy)
   - `ALLOW_SAP_STUB` unset
 
-  The server refuses to start otherwise.
-- [ ] HTTPS in front of the app (see the security checklist). Nobody signs in over plain HTTP.
+  The server refuses to start otherwise, and refuses to submit POs to the simulator. See production-setup.md.
 - [ ] Restore drill done (backup-restore.md).
 - [ ] UAT signed off by Sales, Procurement and the PO team (uat-script.md).
 - [ ] The users are registered, each with **roles and companies**. Operations status shows no separation-of-duties conflicts and no users without a company.

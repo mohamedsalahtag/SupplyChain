@@ -4,7 +4,10 @@
  * on the PO and searchable, and faults can be injected (reject, timeout before/after create, lookup unknown).
  */
 import { sql } from 'kysely';
+import { loadSapPoApi, sapPoApiProblems } from '../../settings/sapPoApi.js';
+import { DomainError } from '../workflow/errors.js';
 import type { Db } from '../workflow/tx.js';
+import { httpSapAdapter } from './sapHttpAdapter.js';
 
 export type CreateResult =
   | { kind: 'CREATED'; poNumber: string }
@@ -54,7 +57,29 @@ export function stubSapAdapter(db: Db): SapPoAdapter {
   };
 }
 
-/** The adapter in use. Only the stub exists until the ZCON adapter (Stage 9); a real system must not run on the stub. */
-export function poAdapter(db: Db): SapPoAdapter {
-  return stubSapAdapter(db);
+/**
+ * The adapter in use, chosen in Configuration → SAP purchase orders on every call (a change applies at once):
+ * the stub, or the company's PO API through the HTTP adapter. An incomplete API setting never sends anything.
+ */
+export function poAdapter(db: Db, encKey: string): SapPoAdapter {
+  const current = async (): Promise<SapPoAdapter | string> => {
+    const c = await loadSapPoApi(db, encKey);
+    if (c.mode === 'stub') return stubSapAdapter(db);
+    const missing = sapPoApiProblems(c);
+    return missing.length ? `SAP PO API not configured: ${missing.join(', ')}` : httpSapAdapter(c);
+  };
+  return {
+    async createPo(...args) { const a = await current(); return typeof a === 'string' ? { kind: 'REJECTED', errors: [a] } : a.createPo(...args); },
+    async findPoByReference(ref) { const a = await current(); return typeof a === 'string' ? { kind: 'UNKNOWN', detail: a } : a.findPoByReference(ref); },
+  };
+}
+
+/** A production server does not send purchase orders to the simulator unless ALLOW_SAP_STUB=true (a test server). */
+export async function assertSapTargetAllowed(db: Db, encKey: string): Promise<void> {
+  const c = await loadSapPoApi(db, encKey);
+  if (c.mode === 'stub' && process.env.NODE_ENV === 'production' && process.env.ALLOW_SAP_STUB !== 'true') {
+    throw new DomainError('SAP_NOT_CONFIGURED', 'Purchase orders cannot be sent: SAP is still the simulator. An administrator sets up Configuration → SAP purchase orders.', 422);
+  }
+  const missing = sapPoApiProblems(c);
+  if (missing.length) throw new DomainError('SAP_NOT_CONFIGURED', `The SAP PO API is not fully configured: ${missing.join(', ')}`, 422);
 }

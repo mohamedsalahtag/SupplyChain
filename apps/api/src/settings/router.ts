@@ -7,6 +7,10 @@ import { includeSchema, loadAvailableTypes, loadInclude, refreshAvailableTypes, 
 import { procedure, publicProcedure, router } from '../trpc/trpc.js';
 import { loadSapConnection, sapConnectionSchema, saveSapConnection } from './sapConnection.js';
 import { appearanceSchema, brandingSchema, loadUi, saveAppearance, saveBranding } from './uiSettings.js';
+import { loadSapPoApi, saveSapPoApi, sapPoApiProblems, sapPoApiSchema } from './sapPoApi.js';
+import { httpSapAdapter } from '../modules/po/sapHttpAdapter.js';
+import { OUTBOX } from '../modules/po/outbox.js';
+import { audit } from '../auth/audit.js';
 
 const edit = procedure.meta({ permission: P.configSapEdit });
 const configOpen = procedure.meta({ permission: P.configOpen });
@@ -58,6 +62,37 @@ export const settingsRouter = router({
     await saveSapConnection(ctx.db, ctx.encKey, { ...input, password });
     ctx.log.info({ user: ctx.user.displayName }, 'SAP connection saved');
     return { saved: true };
+  }),
+
+  /** Configuration → SAP purchase orders: where the PO outbox sends (simulator or the company's PO API). Password never leaves. */
+  getSapPo: edit.query(async ({ ctx }) => {
+    const { password, ...rest } = await loadSapPoApi(ctx.db, ctx.encKey);
+    return { ...rest, hasPassword: password.length > 0, problems: sapPoApiProblems({ ...rest, password }), leaseMinutes: OUTBOX.leaseMinutes };
+  }),
+
+  /** An empty password keeps the saved one — only for the same address and user. */
+  saveSapPo: edit.input(sapPoApiSchema).mutation(async ({ ctx, input }) => {
+    const current = await loadSapPoApi(ctx.db, ctx.encKey);
+    if (!input.password && current.password && (input.baseUrl !== current.baseUrl || input.user !== current.user)) {
+      throw new TRPCError({ code: 'BAD_REQUEST', message: 'The address or user changed: enter the password again.' });
+    }
+    if (input.timeoutSeconds * 1000 >= OUTBOX.leaseMinutes * 60_000) throw new TRPCError({ code: 'BAD_REQUEST', message: `The timeout must stay below ${OUTBOX.leaseMinutes} minutes.` });
+    await saveSapPoApi(ctx.db, ctx.encKey, { ...input, password: input.password || current.password });
+    await audit(ctx.db, { userId: ctx.user.id, action: 'config.sapPo.save', details: { mode: input.mode, baseUrl: input.baseUrl, createPath: input.createPath, lookupPath: input.lookupPath, user: input.user } }, ctx.log);
+    return { saved: true };
+  }),
+
+  /** Asks the saved API for a reference that cannot exist: "not found" (or found) proves the address, login and lookup work. Creates nothing. */
+  testSapPo: edit.mutation(async ({ ctx }) => {
+    const c = await loadSapPoApi(ctx.db, ctx.encKey);
+    if (c.mode !== 'api') return { ok: false as const, message: 'Mode is the simulator — nothing to test.' };
+    const missing = sapPoApiProblems(c);
+    if (missing.length) return { ok: false as const, message: `Missing: ${missing.join(', ')}` };
+    const t0 = Date.now();
+    const r = await httpSapAdapter(c).findPoByReference('POD-TEST-000000');
+    return r.kind === 'UNKNOWN'
+      ? { ok: false as const, message: r.detail }
+      : { ok: true as const, message: `Lookup answered in ${Date.now() - t0} ms (${r.kind === 'FOUND' ? 'found a PO' : 'no PO for the test reference, as expected'}).` };
   }),
 
   /** Uses the saved settings, never unsaved form values. */

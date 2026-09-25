@@ -10,7 +10,7 @@ import { listThread } from '../workflow/threads.js';
 import { runOutbox } from './outbox.js';
 import { getDraft, listDrafts, listMdr, preparation, skuCandidates } from './poRead.js';
 import { buildDraft, closeMasterDataRequest, markMasterDataMissing, P_PO, resolveUnknown, selectSkus, submitDraft, validateDraft } from './poService.js';
-import { poAdapter } from './sapAdapter.js';
+import { assertSapTargetAllowed, poAdapter } from './sapAdapter.js';
 
 registerEntityAccess('PO_DRAFT', async (db, actor, entityId, write) => {
   if (!/^\d+$/.test(entityId)) return null;
@@ -55,13 +55,13 @@ export const poRouter = router({
   validate: manage.input(command.extend({ poDraftId: idOf, rowVer: z.string() }))
     .mutation(async ({ ctx, input }) => validateDraft(ctx.db, await loadActor(ctx.db, ctx.user), input.commandId, input.poDraftId, input.rowVer)),
   submit: manage.input(command.extend({ poDraftId: idOf, rowVer: z.string() }))
-    .mutation(async ({ ctx, input }) => submitDraft(ctx.db, await loadActor(ctx.db, ctx.user), input.commandId, input.poDraftId, input.rowVer)),
+    .mutation(async ({ ctx, input }) => { await assertSapTargetAllowed(ctx.db, ctx.encKey); return submitDraft(ctx.db, await loadActor(ctx.db, ctx.user), input.commandId, input.poDraftId, input.rowVer); }),
   resolve: manage.input(command.extend({
     poDraftId: idOf, rowVer: z.string(), outcome: z.enum(['CREATED', 'NOT_CREATED']), sapPoNumber: z.string().trim().max(20).default(''), comment: z.string().trim().min(1).max(2000),
-  })).mutation(async ({ ctx, input }) => resolveUnknown(ctx.db, await loadActor(ctx.db, ctx.user), poAdapter(ctx.db), input.commandId, input.poDraftId, input.rowVer,
+  })).mutation(async ({ ctx, input }) => resolveUnknown(ctx.db, await loadActor(ctx.db, ctx.user), poAdapter(ctx.db, ctx.encKey), input.commandId, input.poDraftId, input.rowVer,
     input.outcome === 'CREATED' ? { outcome: 'CREATED', sapPoNumber: input.sapPoNumber } : { outcome: 'NOT_CREATED' }, input.comment)),
   /** Runs the SAP outbox now (it also runs every 30 seconds). */
-  processNow: manage.mutation(({ ctx }) => runOutbox(ctx.db, poAdapter(ctx.db), workerId())),
+  processNow: manage.mutation(({ ctx }) => runOutbox(ctx.db, poAdapter(ctx.db, ctx.encKey), workerId())),
 
   /** The stub SAP adapter (until the real ZCON adapter): inject a fault for the next submission — administrators (SAP settings) only. */
   faults: stubAdmin.query(({ ctx }) => ctx.db.selectFrom('scm.StubSapFault').select(['FaultId', 'Reference', 'Mode', 'Remaining', 'CreatedAt']).orderBy('FaultId', 'desc').execute()),

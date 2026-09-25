@@ -4,5 +4,5 @@ import { procedure, router } from '../../trpc/trpc.js';
 import { opsStatus } from './opsStatus.js';
 
 export const opsRouter = router({
-  status: procedure.meta({ permission: P.operationsOpen }).query(({ ctx }) => opsStatus(ctx.db, ctx.cfg)),
+  status: procedure.meta({ permission: P.operationsOpen }).query(({ ctx }) => opsStatus(ctx.db, ctx.cfg, ctx.encKey)),
 });

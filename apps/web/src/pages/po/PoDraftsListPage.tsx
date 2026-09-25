@@ -107,7 +107,7 @@ function Stub() {
   const run = async (fn: () => Promise<unknown>, ok: string) => { try { await fn(); message.success(ok); await utils.po.invalidate(); } catch (err) { message.error(errorText(err)); } };
   return (
     <Space direction="vertical" size={10} style={{ width: '100%' }}>
-      <Alert type="warning" showIcon message="SAP is simulated (stub)" description="Purchase orders are not created in the real SAP yet — the SAP (ZCON) adapter comes later. The stub behaves like SAP (one PO per key, the portal reference is searchable) and can inject faults to rehearse rejections and unknown outcomes." />
+      <Alert type="warning" showIcon message="SAP simulator" description={<>While Configuration → <Link to="/settings?tab=sappo">SAP purchase orders</Link> is set to the simulator, purchase orders are not created in SAP. The simulator behaves like SAP (one PO per key, the portal reference is searchable) and can inject faults to rehearse rejections and unknown outcomes.</>} />
       <Card size="small" title="Inject a fault for the next submission">
         <Space wrap>
           <Input style={{ width: 150 }} value={ref} onChange={(e) => setRef(e.target.value)} placeholder="* or POD-000001" aria-label="Reference" />

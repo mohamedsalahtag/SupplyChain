@@ -15,9 +15,9 @@
 | Permissions | **Every procedure is gated; company scope holds.** Separation of duties was only enforced for change requests. | Server-side separation of duties for demand accept and handoff accept; Operations status lists conflicts | — |
 | Gap vs plan v5 | **Stages 0–8 and 10 built; Stage 9 deferred by design.** | Stage 10 docs, Operations status, negative-authorization test, specs 23–25 | ZCON adapter (**blocks production**), worked-example test, 5 invariants, CI |
 
-**Production readiness:** the app is ready for **UAT on a test server with the SAP stub**. It is **not ready for production**. Two things block it:
-1. The real SAP (ZCON) PO adapter, including the SAP field for the portal reference (backlog 26).
-2. HTTPS in front of the app (security checklist).
+**Production readiness:** the app is ready for **UAT on a test server with the SAP simulator**.
+
+*Update 2026-09-25:* HTTPS is now built in, and production refuses to start without it. **Configuration → SAP purchase orders** and a generic PO API adapter are built. What still blocks production is **the company's PO API details and the SAP reference field** (backlog 26; see `docs/roadmap.md`). The code is on GitHub (`mohamedsalahtag/SupplyChain`, `main`).
 
 ## 2. What was built in this round
 | Stage | Built | Evidence |

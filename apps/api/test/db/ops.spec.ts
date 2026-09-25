@@ -14,13 +14,13 @@ describe('operations status (spec 25)', () => {
     await db.insertInto('app.RolePermission').values([{ RoleId: Number(role.RoleId), PermissionKey: 'demand.submit' }, { RoleId: Number(role.RoleId), PermissionKey: 'demand.accept' }]).execute();
     await db.insertInto('app.UserRole').values({ UserId: userId, RoleId: Number(role.RoleId) }).execute();
 
-    const s = await opsStatus(db, loadConfig());
+    const s = await opsStatus(db, loadConfig(), loadConfig().SETTINGS_ENCRYPTION_KEY);
     expect(s.masterData.sources.map((x) => x.source)).toEqual(['sap.materials', 'sap.suppliers', 'sap.purchaseOrders']);
     expect(typeof s.sap.unknown).toBe('number');
     expect(s.separationOfDuties.find((u) => u.userId === userId)?.conflicts).toEqual(['raises and accepts the same demand']);
     expect(s.usersWithoutCompany.map((u) => u.userId)).toContain(userId);
 
     await db.insertInto('scm.UserCompany').values({ UserId: userId, CompanyCode: '1000' }).execute();
-    expect((await opsStatus(db, loadConfig())).usersWithoutCompany.map((u) => u.userId)).not.toContain(userId);
+    expect((await opsStatus(db, loadConfig(), loadConfig().SETTINGS_ENCRYPTION_KEY)).usersWithoutCompany.map((u) => u.userId)).not.toContain(userId);
   });
 });

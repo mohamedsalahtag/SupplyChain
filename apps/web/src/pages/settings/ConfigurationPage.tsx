@@ -9,6 +9,7 @@ import { MaterialsSyncSection } from './MaterialsSyncSection';
 import { MaterialTypesSection } from './MaterialTypesSection';
 import { PurchaseOrdersSyncTab } from './PurchaseOrdersSyncTab';
 import { SapConnectionSection } from './SapConnectionSection';
+import { SapPoApiSection } from './SapPoApiSection';
 import { ShippingTermsTab } from './ShippingTermsTab';
 import { SuppliersSyncTab } from './SuppliersSyncTab';
 import { CompaniesTab } from './workflow/CompaniesTab';
@@ -27,6 +28,7 @@ export function ConfigurationPage() {
     can(P.configGeneralEdit) && { key: 'general', label: 'General', children: <GeneralSection /> },
     can(P.configAppearanceEdit) && { key: 'appearance', label: 'Appearance', children: <AppearanceSection /> },
     can(P.configSapEdit) && { key: 'sap', label: 'SAP connection', children: <SapConnectionSection /> },
+    can(P.configSapEdit) && { key: 'sappo', label: 'SAP purchase orders', children: <SapPoApiSection /> },
     (can(P.configSyncTypesEdit) || can(P.configSyncRun)) && {
       key: 'sync',
       label: 'Materials sync',

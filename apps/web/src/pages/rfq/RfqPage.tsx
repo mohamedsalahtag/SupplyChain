@@ -9,7 +9,7 @@ import { AttachmentsPanel } from '../../components/AttachmentsPanel';
 import { BackToWork } from '../../components/BackToWork';
 import { ThreadPanel } from '../../components/ThreadPanel';
 import { formatDateTime, type RouterOutputs } from '../../lib/format';
-import { downloadCsv } from '../../lib/csv';
+import { downloadXlsx } from '../../lib/excel';
 import { trpc } from '../../lib/trpc';
 import { errorText, newCommandId, problemsOf } from '../../lib/workflow';
 import { MATCH_LABEL, n, RFQ_LINE_STATUS, RFQ_STATUS } from './rfqLabels';
@@ -20,10 +20,10 @@ import { LoadError } from '../../components/LoadError';
 type Rfq = RouterOutputs['rfq']['get'];
 type Line = Rfq['lines'][number];
 
-/** The supplier view as a CSV file Excel opens (spec 18): week, material, origin, quantity, containers — no demand numbers. */
+/** The supplier view as an Excel file (spec 18): week, material, origin, quantity, containers — no demand numbers. */
 function downloadSupplierView(r: Rfq) {
-  downloadCsv(`${r.rfqNo}-supplier-view.csv`, ['ETD week', 'Material', 'Origin', 'Quantity', 'Unit', 'Containers in the week'],
-    r.supplierView.map((v) => [v.week, v.label, v.originCode, Number(v.qty), v.unit, v.weekContainers]));
+  void downloadXlsx(`${r.rfqNo}-supplier-view`, [{ name: 'Supplier view', title: `${r.rfqNo} — request for quotation`, header: ['ETD week', 'Material', 'Origin', 'Quantity', 'Unit', 'Containers in the week'],
+    rows: r.supplierView.map((v) => [v.week, v.label, v.originCode, Number(v.qty), v.unit, v.weekContainers]) }]);
 }
 
 /** One RFQ (spec 18): lines by week, quotes, suppliers, and its actions. */

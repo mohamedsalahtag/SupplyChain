@@ -55,9 +55,11 @@ Built stage by stage from `Demand_to_PO_Execution_Plan_v5.md`; one stage at a ti
   - External calls never run inside a transaction or under a lock (`resolveUnknown` asks SAP first).
   - Every outcome write is conditional on the draft still being open (`markCreated` / `markRejected` return false otherwise, and the outbox raises a "late SAP reply" exception).
   - `runOutbox` runs one pass at a time per process; reconcile claims its rows.
-  - The adapter is `poAdapter()`: the stub only until ZCON (Stage 9). Fault injection needs `configuration.sap.edit`.
+  - The adapter is `poAdapter(db, encKey)`, chosen on every call from **Configuration → SAP purchase orders** (`settings/sapPoApi.ts`): the simulator or the company's PO API through the generic HTTP adapter (`modules/po/sapHttpAdapter.ts`; only `toSapBody` should change when the API contract arrives). A production server refuses to submit to the simulator unless `ALLOW_SAP_STUB=true`. Fault injection needs `configuration.sap.edit`.
+- **Exports are Excel** (`lib/excel.ts`, ExcelJS loaded on demand): numbers stay numbers, header frozen and filtered. No CSV.
 - **Separation of duties:** the creator of a demand can't accept it; whoever handed off can't accept the handoff; nobody decides their own CR (admins excepted). Non-admin user/role editors can only give what they hold (`assertMayGrant`, `assertMayEditRole`).
 - **Reports (spec 24)** read the ledger directly (`modules/reports`): never add across units, a zero denominator is N/A, and the From/To filter applies to every section.
+- **Git:** `https://github.com/mohamedsalahtag/SupplyChain.git`, branch `main`. Commit only when the user asks.
 - **Next migration number: 0023.** 0021 = PO and SAP outbox, 0022 = `reports.open` grants.
 
 ## UI conventions
@@ -78,7 +80,7 @@ Built stage by stage from `Demand_to_PO_Execution_Plan_v5.md`; one stage at a ti
 - The Administrator role (`IsAdmin`) holds every permission, including future ones. Nobody can disable themselves or remove their own admin role, and the last active admin can't be removed.
 - **In the UI**, use `useCan()` (`apps/web/src/lib/auth.ts`) to hide menu items, tabs and buttons. The server enforces permissions anyway.
 - Security-relevant actions write to `app.AuditLog` (`auth/audit.ts`): sign-ins, users, roles, AD config.
-- **`ALLOW_TEST_LOGIN=true` is for this PC's browser tests only** (sign-in without a password, from localhost). It must never be set on a server. With `NODE_ENV=production` the API **refuses to start** if `ALLOW_TEST_LOGIN` or `ALLOW_VIEW_AS` is on, or if the SAP PO adapter is the stub without `ALLOW_SAP_STUB=true` (`productionProblems` in `config.ts`).
+- **`ALLOW_TEST_LOGIN=true` is for this PC's browser tests only** (sign-in without a password, from localhost). It must never be set on a server. With `NODE_ENV=production` the API **refuses to start** if `ALLOW_TEST_LOGIN` or `ALLOW_VIEW_AS` is on, or without HTTPS (`productionProblems` in `config.ts`).
 - Every reply carries `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy` and `COOP`. The public health check never returns error text. Saved AD/SAP passwords are never reused for a changed address or account.
 - **Operations status** (Administration, `operations.open`, spec 25) is the daily check. The runbooks, restore drill, cutover, UAT script and security checklist are in `docs/operations/`. The full review of 2026-09-25 is in `docs/review/`.
 - **Runtime settings that matter (found 2026-09-24):** the API starts through `apps/api/scripts/dev.mjs`, which sets `UV_THREADPOOL_SIZE` (32) before Node starts — the ODBC driver runs each query on a worker thread, and with Node's default 4 threads, reads blocked behind a transaction's locks stalled that transaction until the 15 s query timeout. Keep `DB_POOL_MAX` below it. Fastify runs with `maxParamLength: 5000` (tRPC batch paths), and the Vite proxy targets `127.0.0.1` (Windows `localhost` tries IPv6 first: +200 ms per call).
@@ -90,6 +92,7 @@ Built stage by stage from `Demand_to_PO_Execution_Plan_v5.md`; one stage at a ti
 - `npm install` — install all workspaces
 - `npm run db:migrate` — apply pending migrations to the `supplychain` DB
 - `npm run dev` — API on :4300 and web on :5300
+- `npm run build` then `npm start` — production: one process serves the built web app and the API (`SERVE_WEB=true`, HTTPS via `TLS_PFX_FILE` or `TRUST_PROXY`); see `docs/operations/production-setup.md`. With `NODE_ENV=production` it refuses to start without HTTPS or with a test switch on
 - `npm run typecheck` / `npm test` / `npx playwright test` (smoke tests; needs `npm run dev` running)
 - `npm run test:db` — service tests and `tests/invariants/*.sql` against a throw-away `supplychain_test` database (recreated and migrated each run; never the real one). It runs through `apps/api/scripts/test-db.mjs` (sets `UV_THREADPOOL_SIZE`, like dev.mjs); run only one at a time (they share the test database). Over a slow link to SQL Server (VPN, ~100 ms ping) the full run takes ~20 min; e2e then needs `E2E_EXPECT_TIMEOUT=20000`
 - `start-supplychain.bat`: starts the app and logs to `logs\app.log`. `install-autostart.bat` / `remove-autostart.bat` add or remove the Windows Startup shortcut, which runs at logon as that user; the database uses their Windows login.
