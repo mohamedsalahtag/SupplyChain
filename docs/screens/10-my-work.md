@@ -19,6 +19,7 @@ Everyone with `work.open`. Each person sees only items whose **action permission
    - the **due chip**: "Due in 6 h", or red "Overdue 2 d"
    - a **note** saying what is missing
 4. The row's main button is the **next step** (for example *Accept demand*). The ⋯ menu lists the other actions the server allows for that item; it appears once an item type has more than one action (from Stage 1). The page never works out actions itself (hard rule 2).
+- **Sorting (2026-09-27):** every column except Action sorts when its header is clicked (ascending → descending → back to the default order: overdue first, then by due date). The list is sorted on the server before paging, so the order covers every page; empty values come last; a new sort returns to page 1.
 5. Clicking the button opens the object's screen with a **"← Back to My work"** link that returns to the same tab.
 6. When the step is done, the item closes on the server. It disappears from the list and the count drops.
 

@@ -153,11 +153,20 @@ export async function workTabs(db: Db, actor: Actor) {
   return { tabs: list, total: list.reduce((s, t) => s + t.count, 0) };
 }
 
+export const WORK_SORT_FIELDS = ['due', 'number', 'title', 'company', 'raisedBy', 'createdAt', 'note'] as const;
+export type WorkSortField = (typeof WORK_SORT_FIELDS)[number];
+/** The SQL each sortable column orders by (a fixed list: the input never reaches SQL as text). */
+const SORT_SQL: Record<WorkSortField, string> = {
+  due: 'i.DueAt', number: 'i.Number', title: 'i.Title', company: 'i.CompanyCode', raisedBy: "ISNULL(u.DisplayName, 'System')", createdAt: 'i.CreatedAt', note: 'i.Note',
+};
+
 export type WorkFilter = {
   tab?: string;
   q?: string;
   company?: string[];
   due?: 'overdue' | 'today' | 'later' | 'none';
+  /** A column header the user clicked; without it: overdue first, then by due date. */
+  sort?: { field: WorkSortField; dir: 'asc' | 'desc' };
   page: number;
   pageSize: number;
 };
@@ -180,17 +189,26 @@ export async function listWork(db: Db, actor: Actor, f: WorkFilter) {
   if (f.due === 'later') q = q.where(sql<SqlBool>`i.DueAt >= DATEADD(day, 1, CAST(CAST(SYSUTCDATETIME() AS date) AS datetime2))`);
   if (f.due === 'none') q = q.where('i.DueAt', 'is', null);
 
-  const [rows, count] = await Promise.all([
-    q
+  let sorted = q
       .select([
         'i.InboxItemId', 'i.ItemType', 'i.Category', 'i.CompanyCode', 'i.Number', 'i.Title', 'i.Note', 'i.Link',
         'i.CreatedAt', 'i.DueAt', 'i.EscalatedAt', 'u.DisplayName as RaisedByName',
       ])
-      .select(sql<number>`CASE WHEN i.DueAt < SYSUTCDATETIME() THEN 1 ELSE 0 END`.as('Overdue'))
+      .select(sql<number>`CASE WHEN i.DueAt < SYSUTCDATETIME() THEN 1 ELSE 0 END`.as('Overdue'));
+  if (f.sort) {
+    const col = sql.raw(SORT_SQL[f.sort.field]);
+    const dir = sql.raw(f.sort.dir === 'desc' ? 'DESC' : 'ASC');
+    sorted = sorted.orderBy(sql`CASE WHEN ${col} IS NULL THEN 1 ELSE 0 END`).orderBy(sql`${col} ${dir}`); // empty values last either way
+  } else {
+    sorted = sorted
       .orderBy(sql`CASE WHEN i.DueAt < SYSUTCDATETIME() THEN 0 ELSE 1 END`)
       .orderBy(sql`CASE WHEN i.DueAt IS NULL THEN 1 ELSE 0 END`)
-      .orderBy('i.DueAt')
-      .orderBy('i.CreatedAt')
+      .orderBy('i.DueAt');
+  }
+  // Ties: oldest first (SQL Server refuses a column twice in ORDER BY, so not when sorting by Raised at).
+  if (f.sort?.field !== 'createdAt') sorted = sorted.orderBy('i.CreatedAt');
+  const [rows, count] = await Promise.all([
+    sorted
       .orderBy('i.InboxItemId')
       .offset((f.page - 1) * f.pageSize)
       .fetch(f.pageSize)

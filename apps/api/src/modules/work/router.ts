@@ -3,7 +3,7 @@ import { DEFAULT_TABLE_PAGE_SIZE, P, TABLE_PAGE_SIZES } from '@supplychain/share
 import { z } from 'zod';
 import { procedure, router } from '../../trpc/trpc.js';
 import { loadActor } from '../workflow/access.js';
-import { listWork, workTabs } from '../workflow/inbox.js';
+import { listWork, WORK_SORT_FIELDS, workTabs } from '../workflow/inbox.js';
 
 const open = procedure.meta({ permission: P.workOpen });
 
@@ -12,6 +12,7 @@ const listInput = z.object({
   q: z.string().trim().max(100).optional(),
   company: z.array(z.string().max(10)).max(20).optional(),
   due: z.enum(['overdue', 'today', 'later', 'none']).optional(),
+  sort: z.object({ field: z.enum(WORK_SORT_FIELDS), dir: z.enum(['asc', 'desc']) }).optional(),
   page: z.number().int().min(1).default(1),
   pageSize: z.number().int().refine((n) => (TABLE_PAGE_SIZES as readonly number[]).includes(n)).default(DEFAULT_TABLE_PAGE_SIZE),
 });

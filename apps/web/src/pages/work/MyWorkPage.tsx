@@ -12,6 +12,8 @@ import { withFrom } from '../../components/BackToWork';
 type Row = RouterOutputs['work']['list']['rows'][number];
 type Due = 'overdue' | 'today' | 'later' | 'none';
 type Filters = { q?: string; company?: string[]; due?: Due };
+type SortField = 'due' | 'number' | 'title' | 'company' | 'raisedBy' | 'createdAt' | 'note';
+type Sort = { field: SortField; dir: 'asc' | 'desc' } | undefined;
 
 /** "Due in 6 h", "Overdue 2 d" — whole hours below two days, whole days above. */
 function dueText(iso: string | null, overdue: boolean): string {
@@ -30,13 +32,14 @@ export function MyWorkPage() {
   const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<Sort>(); // none: overdue first, then by due date (server order)
 
   const tabs = trpc.work.tabs.useQuery(undefined, { refetchInterval: 60_000 });
   const companies = trpc.workflowSetup.companyOptions.useQuery();
   const tabList = tabs.data?.tabs ?? [];
   const tab = tabList.some((t) => t.key === params.get('tab')) ? params.get('tab')! : tabList[0]?.key;
   const list = trpc.work.list.useQuery(
-    { tab, page, pageSize: prefs.pageSize, ...filters },
+    { tab, page, pageSize: prefs.pageSize, sort, ...filters },
     { enabled: prefs.ready && !!tab, placeholderData: (p) => p, refetchInterval: 60_000 },
   );
 
@@ -46,9 +49,11 @@ export function MyWorkPage() {
   };
   const open = (r: Row) => navigate(withFrom(r.action.link, `/work?tab=${tab}`));
 
+  // Every column but Action sorts on the server (the list is paged there), empty values last.
+  const sortable = (key: SortField) => ({ sorter: true, sortOrder: sort?.field === key ? (sort.dir === 'asc' ? 'ascend' as const : 'descend' as const) : null });
   const columns: AppColumn<Row>[] = [
     {
-      title: 'Due', key: 'due', width: 150,
+      title: 'Due', key: 'due', width: 150, ...sortable('due'),
       render: (_: unknown, r) => (
         <Space size={4}>
           <Tag color={r.overdue ? 'red' : r.dueAt ? 'default' : undefined} style={{ marginInlineEnd: 0 }}>{dueText(r.dueAt, r.overdue)}</Tag>
@@ -56,12 +61,12 @@ export function MyWorkPage() {
         </Space>
       ),
     },
-    { title: 'Number', key: 'number', dataIndex: 'number', width: 110 },
-    { title: 'What', key: 'title', dataIndex: 'title', width: 340 },
-    { title: 'Company', key: 'company', width: 80, render: (_: unknown, r) => r.companyCode ?? '—' },
-    { title: 'Raised by', key: 'raisedBy', dataIndex: 'raisedBy', width: 120 },
-    { title: 'Raised at', key: 'createdAt', width: 130, render: (_: unknown, r) => formatDateTime(r.createdAt) },
-    { title: 'Note', key: 'note', width: 260, render: (_: unknown, r) => r.note ?? '' },
+    { title: 'Number', key: 'number', dataIndex: 'number', width: 110, ...sortable('number') },
+    { title: 'What', key: 'title', dataIndex: 'title', width: 340, ...sortable('title') },
+    { title: 'Company', key: 'company', width: 80, ...sortable('company'), render: (_: unknown, r) => r.companyCode ?? '—' },
+    { title: 'Raised by', key: 'raisedBy', dataIndex: 'raisedBy', width: 120, ...sortable('raisedBy') },
+    { title: 'Raised at', key: 'createdAt', width: 130, ...sortable('createdAt'), render: (_: unknown, r) => formatDateTime(r.createdAt) },
+    { title: 'Note', key: 'note', width: 260, ...sortable('note'), render: (_: unknown, r) => r.note ?? '' },
     {
       title: 'Action', key: 'action', width: 140, ellipsis: false,
       render: (_: unknown, r) => (
@@ -110,6 +115,12 @@ export function MyWorkPage() {
             page={page}
             total={list.data?.total ?? 0}
             onPageChange={setPage}
+            onChange={(_p, _f, sorter, extra) => {
+              if (extra.action !== 'sort') return;
+              const s = Array.isArray(sorter) ? sorter[0] : sorter;
+              setSort(s?.order && s.columnKey ? { field: s.columnKey as SortField, dir: s.order === 'ascend' ? 'asc' : 'desc' } : undefined);
+              setPage(1);
+            }}
             onRow={(r) => ({ onClick: () => open(r), style: { cursor: 'pointer' } })}
             toolbar={
               showFilters && (
