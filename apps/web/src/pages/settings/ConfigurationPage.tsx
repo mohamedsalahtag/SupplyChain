@@ -12,6 +12,7 @@ import { SapConnectionSection } from './SapConnectionSection';
 import { SapPoApiSection } from './SapPoApiSection';
 import { ShippingTermsTab } from './ShippingTermsTab';
 import { SuppliersSyncTab } from './SuppliersSyncTab';
+import { SyncScheduleSection } from './SyncScheduleSection';
 import { CompaniesTab } from './workflow/CompaniesTab';
 import { OriginsTab } from './workflow/OriginsTab';
 import { SupplierOriginsTab } from './workflow/SupplierOriginsTab';
@@ -47,6 +48,7 @@ export function ConfigurationPage() {
     },
     (can(P.configSuppliersEdit) || can(P.configSuppliersRun)) && { key: 'suppliers', group: 'SAP', label: 'Suppliers sync', children: <SuppliersSyncTab /> },
     (can(P.configPoEdit) || can(P.configPoRun)) && { key: 'po', group: 'SAP', label: 'Purchase orders sync', children: <PurchaseOrdersSyncTab /> },
+    can(P.configOpen) && { key: 'sync-schedule', group: 'SAP', label: 'Sync schedule', children: <SyncScheduleSection /> },
     can(P.configWfCompaniesEdit) && { key: 'companies', group: 'Workflow', label: 'Companies', children: <CompaniesTab /> },
     can(P.configWfReasonsEdit) && { key: 'reasons', group: 'Workflow', label: 'Reason codes', children: <ReasonCodesTab /> },
     can(P.configWfOriginsEdit) && { key: 'origins', group: 'Workflow', label: 'Origins', children: <OriginsTab /> },

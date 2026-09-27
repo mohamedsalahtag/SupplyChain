@@ -8,6 +8,7 @@ import type { AuthUser } from '../../auth/authUser.js';
 import { procedure, router, type Context } from '../../trpc/trpc.js';
 import { loadActor } from '../workflow/access.js';
 import { loadCodeCounts } from '../sync/codeList.js';
+import { SYNC_JOBS } from '../sync/jobs.js';
 import { launchSync } from '../sync/launch.js';
 import { loadPoInclude, loadWatermark, poIncludeSchema, refreshPoTypes, runPoSync, savePoInclude, TYPES_KEY } from './poSync.js';
 
@@ -110,10 +111,10 @@ export const purchaseOrdersRouter = router({
 
   /** full: ignore the watermark and re-read everything ("Re-sync everything"). */
   startSync: run.input(z.object({ full: z.boolean().default(false) })).mutation(({ ctx, input }) =>
-    launchSync(ctx, 'sap.purchaseOrders', async (conn) => {
+    launchSync(ctx, 'sap.purchaseOrders', !input.full ? SYNC_JOBS['sap.purchaseOrders'](ctx.db) : async (conn) => {
       const { orderTypes, startDate } = await loadPoInclude(ctx.db);
       if (orderTypes.length === 0 || !startDate) return 'Choose the order types and a start date, and save them first.';
-      return (runId) => runPoSync(ctx.db, conn, { orderTypes, startDate }, runId, input.full ? 'full' : 'changes');
+      return (runId) => runPoSync(ctx.db, conn, { orderTypes, startDate }, runId, 'full');
     }),
   ),
 

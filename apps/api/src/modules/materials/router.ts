@@ -1,9 +1,8 @@
 import { DEFAULT_TABLE_PAGE_SIZE, MATERIAL_SORT_FIELDS, P, TABLE_PAGE_SIZES } from '@supplychain/shared';
 import { z } from 'zod';
-import { loadInclude } from '../../settings/materialsInclude.js';
 import { procedure, router } from '../../trpc/trpc.js';
+import { SYNC_JOBS } from '../sync/jobs.js';
 import { launchSync } from '../sync/launch.js';
-import { runMaterialSync } from './materialSync.js';
 import { filterOptions, listMaterials } from './materialsRepo.js';
 
 const view = procedure.meta({ permission: P.materialsOpen });
@@ -39,9 +38,6 @@ export const materialsRouter = router({
 
   /** Starts a sync in the background; the UI follows it through sync.status. */
   startSync: sync.mutation(({ ctx }) =>
-    launchSync(ctx, 'sap.materials', async (conn) => {
-      const { materialTypes } = await loadInclude(ctx.db);
-      return (runId) => runMaterialSync(ctx.db, conn, materialTypes, runId);
-    }),
+    launchSync(ctx, 'sap.materials', SYNC_JOBS['sap.materials'](ctx.db)),
   ),
 });

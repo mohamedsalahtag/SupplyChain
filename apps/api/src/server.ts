@@ -14,6 +14,7 @@ import { registerFileRoutes } from './modules/workflow/filesRoute.js';
 import { escalateOverdue } from './modules/workflow/inbox.js';
 import { refreshAging } from './modules/rfq/aging.js';
 import { runOutbox } from './modules/po/outbox.js';
+import { runScheduledSyncs } from './modules/sync/schedule.js';
 import { workerId } from './modules/po/router.js';
 import { poAdapter } from './modules/po/sapAdapter.js';
 import { newErrorId } from './trpc/errorId.js';
@@ -133,6 +134,10 @@ const outbox = async () => {
 };
 const outboxTimer = setInterval(() => { void outbox(); }, 30 * 1000);
 app.addHook('onClose', async () => clearInterval(outboxTimer));
+// Every minute (sync schedule): start the SAP syncs whose scheduled day and hour have come (Configuration → Sync schedule).
+const scheduled = () => runScheduledSyncs({ db, encKey: cfg.SETTINGS_ENCRYPTION_KEY, log: app.log }).catch((err: unknown) => app.log.error({ err }, 'Sync schedule check failed'));
+const scheduleTimer = setInterval(() => { void scheduled(); }, 60 * 1000);
+app.addHook('onClose', async () => clearInterval(scheduleTimer));
 
 await app.listen({ port: cfg.API_PORT, host: cfg.HOST });
 void aging(); // once at start, then hourly

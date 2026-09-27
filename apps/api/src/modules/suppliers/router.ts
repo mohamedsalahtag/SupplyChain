@@ -4,6 +4,7 @@ import { audit } from '../../auth/audit.js';
 import { loadSapConnection } from '../../settings/sapConnection.js';
 import { procedure, router } from '../../trpc/trpc.js';
 import { loadCodeCounts } from '../sync/codeList.js';
+import { SYNC_JOBS } from '../sync/jobs.js';
 import { launchSync } from '../sync/launch.js';
 import { formatAddress } from './sapSupplier.js';
 import { GROUPS_KEY, loadSupplierInclude, refreshSupplierGroups, runSupplierSync, saveSupplierInclude, supplierIncludeSchema } from './supplierSync.js';
@@ -84,13 +85,7 @@ export const suppliersRouter = router({
     return refreshSupplierGroups(ctx.db, conn);
   }),
 
-  startSync: run.mutation(({ ctx }) =>
-    launchSync(ctx, 'sap.suppliers', async (conn) => {
-      const { groups } = await loadSupplierInclude(ctx.db);
-      if (groups.length === 0) return 'Choose at least one supplier group and save it first.';
-      return (runId) => runSupplierSync(ctx.db, conn, groups, runId);
-    }),
-  ),
+  startSync: run.mutation(({ ctx }) => launchSync(ctx, 'sap.suppliers', SYNC_JOBS['sap.suppliers'](ctx.db))),
 
   /** Deletes every supplier and copies the chosen groups again (after SAP has been read). */
   startFreshSync: fresh.mutation(async ({ ctx }) => {
