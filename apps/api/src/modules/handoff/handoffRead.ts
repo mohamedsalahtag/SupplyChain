@@ -4,11 +4,22 @@ import { hasPermission, type Actor } from '../workflow/access.js';
 import { NotFoundError } from '../workflow/errors.js';
 import { formatQty, fromDb } from '../workflow/qty.js';
 import { rowVerHex, type Db } from '../workflow/tx.js';
-import { readiness, termOptions, termsFor, type Snapshot } from './handoffData.js';
+import { awardCurrency, readiness, termOptions, termsFor, type Snapshot, type Terms } from './handoffData.js';
 import { P_HANDOFF } from './handoffService.js';
 
 const day = (d: Date | string | null) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 const num = (m: number) => Number(formatQty(m)).toLocaleString('en-GB', { maximumFractionDigits: 3 });
+
+/**
+ * The "Ready to hand off?" checklist for terms that are still being edited (not saved): the same `readiness` rules as
+ * the panel, so the flags follow the form while the user fills in missing fields. Read-only; saving is unchanged.
+ */
+export async function previewReadiness(db: Db, actor: Actor, batchId: string, supplierCode: string, t: Omit<Terms, 'currency'>) {
+  const b = await db.selectFrom('scm.AwardBatch').select(['AwardBatchId', 'CompanyCode']).where('AwardBatchId', '=', batchId).executeTakeFirst();
+  if (!b || !actor.companies.has(b.CompanyCode)) throw new NotFoundError(`Award ${batchId}`);
+  const batch = { AwardBatchId: String(b.AwardBatchId), CompanyCode: b.CompanyCode };
+  return readiness(db, batch, supplierCode, { ...t, currency: await awardCurrency(db, batch.AwardBatchId, supplierCode) });
+}
 
 /** The award's Handoff tab: one card per supplier. */
 export async function handoffPanel(db: Db, actor: Actor, batchId: string) {

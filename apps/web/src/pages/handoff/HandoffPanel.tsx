@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { keepPreviousData } from '@tanstack/react-query';
 import { Alert, App, Button, Card, Col, Empty, Input, Modal, Row, Select, Skeleton, Space, Table, Tag, Typography } from 'antd';
 import { CheckCircleFilled, CloseCircleFilled, ExclamationCircleFilled, SendOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
@@ -41,6 +42,10 @@ function SupplierCard({ card: c, options, awardBatchId, abNo }: { card: Card_; o
   const [comment, setComment] = useState('');
   const [problems, setProblems] = useState<string[]>([]);
   useEffect(() => { if (!dirty) setT(c.terms); }, [c.terms, dirty]);
+  // While terms are being edited, the server re-checks them unsaved, so the flags follow the form.
+  const live = trpc.handoff.readiness.useQuery(
+    { awardBatchId, supplierCode: c.supplierCode, incoterm: t.incoterm, portOfLoadingId: t.portOfLoadingId, portOfDischargeId: t.portOfDischargeId, paymentTerms: t.paymentTerms },
+    { enabled: dirty && !!c.readiness, placeholderData: keepPreviousData });
   const refresh = () => Promise.all([utils.handoff.invalidate(), utils.award.invalidate(), utils.work.invalidate()]);
 
   const set = (patch: Partial<Terms>) => { setT((x) => ({ ...x, ...patch })); setDirty(true); setProblems([]); };
@@ -67,7 +72,7 @@ function SupplierCard({ card: c, options, awardBatchId, abNo }: { card: Card_; o
 
   const ports = (usedFor: 'LOADING' | 'DISCHARGE') => options.ports.filter((p) => p.usedFor !== (usedFor === 'LOADING' ? 'DISCHARGE' : 'LOADING'))
     .map((p) => ({ value: p.portId, label: `${p.name} (${p.countryCode})` }));
-  const ready = c.readiness;
+  const ready = dirty && c.readiness && live.data ? live.data : c.readiness;
   const editable = c.canEdit;
   const last = c.handoffs[0];
 
@@ -123,10 +128,10 @@ function SupplierCard({ card: c, options, awardBatchId, abNo }: { card: Card_; o
               {editable && (
                 <Space style={{ marginTop: 12 }} wrap>
                   <Button disabled={!dirty} loading={save.isPending} onClick={saveTerms}>Save terms</Button>
-                  <Button type="primary" icon={<SendOutlined />} disabled={!ready.ready && !dirty} loading={send.isPending} onClick={() => doSend(false)}>Hand off to PO team</Button>
+                  <Button type="primary" icon={<SendOutlined />} disabled={!ready.ready} loading={send.isPending} onClick={() => doSend(false)}>Hand off to PO team</Button>
                 </Space>
               )}
-              {dirty && <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 4 }}>The checklist shows the saved terms; Hand off saves your changes first.</div>}
+              {dirty && <Typography.Text type="secondary" style={{ display: 'block', marginTop: 4 }}>{live.isFetching ? 'Checking…' : 'The checklist includes your changes, not saved yet; Hand off saves them first.'}</Typography.Text>}
               {problems.length > 0 && <Alert style={{ marginTop: 8 }} type="error" showIcon message="Not handed off" description={<ul style={{ margin: 0, paddingInlineStart: 18 }}>{problems.map((p) => <li key={p}>{p}</li>)}</ul>} />}
             </>
           ) : c.open ? (

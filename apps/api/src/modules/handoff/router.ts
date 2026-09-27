@@ -7,7 +7,7 @@ import { hasPermission, loadActor } from '../workflow/access.js';
 import { assertEntityAccess, registerEntityAccess } from '../workflow/entityAccess.js';
 import { DomainError } from '../workflow/errors.js';
 import { listThread } from '../workflow/threads.js';
-import { getHandoff, handoffPanel, listHandoffs, termLists } from './handoffRead.js';
+import { getHandoff, handoffPanel, listHandoffs, previewReadiness, termLists } from './handoffRead.js';
 import { acceptHandoff, P_HANDOFF, returnHandoff, saveTerms, sendHandoff } from './handoffService.js';
 
 registerEntityAccess('HANDOFF', async (db, actor, entityId, write) => {
@@ -27,14 +27,18 @@ const shipping = procedure.meta({ permission: P.configShippingEdit });
 const idOf = z.string().regex(/^\d+$/);
 const command = z.object({ commandId: z.string().uuid() });
 const supplier = z.string().trim().min(1).max(20);
+const termsInput = {
+  incoterm: z.string().max(10).nullable(), portOfLoadingId: z.coerce.number().int().nullable(), portOfDischargeId: z.coerce.number().int().nullable(), paymentTerms: z.string().max(10).nullable(),
+};
 
 export const handoffRouter = router({
   /** The award's Handoff tab (anyone who can open awards; editing needs handoff.send). */
   panel: awardsOpen.input(z.object({ awardBatchId: idOf })).query(async ({ ctx, input }) => handoffPanel(ctx.db, await loadActor(ctx.db, ctx.user), input.awardBatchId)),
-  saveTerms: send.input(command.extend({
-    awardBatchId: idOf, supplierCode: supplier,
-    incoterm: z.string().max(10).nullable(), portOfLoadingId: z.coerce.number().int().nullable(), portOfDischargeId: z.coerce.number().int().nullable(), paymentTerms: z.string().max(10).nullable(),
-  })).mutation(async ({ ctx, input }) => saveTerms(ctx.db, await loadActor(ctx.db, ctx.user), input.commandId, input.awardBatchId, input.supplierCode,
+  /** The checklist for terms not saved yet, so the flags follow the form (read-only). */
+  readiness: awardsOpen.input(z.object({ awardBatchId: idOf, supplierCode: supplier, ...termsInput }))
+    .query(async ({ ctx, input }) => previewReadiness(ctx.db, await loadActor(ctx.db, ctx.user), input.awardBatchId, input.supplierCode,
+      { incoterm: input.incoterm, portOfLoadingId: input.portOfLoadingId, portOfDischargeId: input.portOfDischargeId, paymentTerms: input.paymentTerms })),
+  saveTerms: send.input(command.extend({ awardBatchId: idOf, supplierCode: supplier, ...termsInput })).mutation(async ({ ctx, input }) => saveTerms(ctx.db, await loadActor(ctx.db, ctx.user), input.commandId, input.awardBatchId, input.supplierCode,
     { incoterm: input.incoterm, portOfLoadingId: input.portOfLoadingId, portOfDischargeId: input.portOfDischargeId, paymentTerms: input.paymentTerms })),
   send: send.input(command.extend({
     awardBatchId: idOf, supplierCode: supplier, confirmWithoutAck: z.boolean().default(false), reasonCode: z.string().max(40).nullable().default(null), comment: z.string().trim().max(1000).nullable().default(null),
