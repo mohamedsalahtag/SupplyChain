@@ -1,7 +1,7 @@
 /** My work (spec 10) against a real database. */
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { finishRun, startRun } from '../../src/modules/sync/syncRun.js';
+import { finishRun, heartbeat, startRun, SyncAlreadyRunningError } from '../../src/modules/sync/syncRun.js';
 import { closeInbox, escalateOverdue, ITEM_TYPES, listWork, openInbox, workTabs } from '../../src/modules/workflow/inbox.js';
 import { loadWfSettings, saveWfSettings, wfSettingsVersion } from '../../src/modules/workflow/settings.js';
 import { actor, count, db, uid } from './helpers.js';
@@ -109,5 +109,25 @@ describe('sync failures become Exceptions (spec 10)', () => {
     await finishRun(db, ok, 'Succeeded', { read: 1 }, null);
     rows = (await listWork(db, admin, { tab: 'EXCEPTIONS', page: 1, pageSize: 100 })).rows.filter((r) => r.title === 'Suppliers sync failed');
     expect(rows).toEqual([]);
+  });
+
+  it('staleness is judged by the heartbeat; a run already marked failed is never turned into succeeded', async () => {
+    await sql`UPDATE integ.SyncRun SET Status = 'Failed' WHERE Status = 'Running'`.execute(db);
+    const statusOf = async (id: number) => (await db.selectFrom('integ.SyncRun').select('Status').where('SyncRunId', '=', id).executeTakeFirstOrThrow()).Status;
+    // started 40 minutes ago but beat a minute ago: still working, a second start is refused
+    const live = await startRun(db, 'sap.suppliers', 'test');
+    await sql`UPDATE integ.SyncRun SET StartedAt = DATEADD(minute, -40, SYSUTCDATETIME()) WHERE SyncRunId = ${live}`.execute(db);
+    await heartbeat(db, live);
+    await expect(startRun(db, 'sap.suppliers', 'test')).rejects.toBeInstanceOf(SyncAlreadyRunningError);
+    expect(await statusOf(live)).toBe('Running');
+    // silent for 11 minutes: abandoned at the next start
+    await sql`UPDATE integ.SyncRun SET HeartbeatAt = DATEADD(minute, -11, SYSUTCDATETIME()) WHERE SyncRunId = ${live}`.execute(db);
+    const next = await startRun(db, 'sap.suppliers', 'test');
+    expect(await statusOf(live)).toBe('Failed');
+    // the abandoned run finishing late does not overwrite Failed (nor close the exception)
+    await finishRun(db, live, 'Succeeded', { read: 5 }, null);
+    expect(await statusOf(live)).toBe('Failed');
+    await finishRun(db, next, 'Succeeded', { read: 1 }, null);
+    expect(await statusOf(next)).toBe('Succeeded');
   });
 });

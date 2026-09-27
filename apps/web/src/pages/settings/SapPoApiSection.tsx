@@ -79,8 +79,8 @@ export function SapPoApiSection() {
           <Switch id="poCsrf" size="small" />
         </Form.Item>
         <Form.Item label="Allow self-signed cert" name="allowSelfSigned" valuePropName="checked"><Switch id="poSelfSigned" size="small" /></Form.Item>
-        <Form.Item label="Timeout (seconds)" name="timeoutSeconds" extra={`No answer within this time = “SAP outcome unknown” (never resent blindly). Below ${d?.leaseMinutes ?? 5} minutes.`}>
-          <InputNumber id="poTimeout" min={5} max={240} style={{ width: 90 }} />
+        <Form.Item label="Timeout (seconds)" name="timeoutSeconds" extra={`No answer within this time = “SAP outcome unknown” (never resent blindly). At most 120 seconds for the whole SAP call.`}>
+          <InputNumber id="poTimeout" min={5} max={120} style={{ width: 90 }} />
         </Form.Item>
         <Space wrap>
           <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={save.isPending}>Save</Button>

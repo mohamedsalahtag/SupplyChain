@@ -5,12 +5,14 @@
  */
 import { sql, type Kysely } from 'kysely';
 import type { Database } from '../../db/schema.js';
+import { maintenanceRunning } from '../ops/maintenance.js';
 import { closeInbox, openInbox } from '../workflow/inbox.js';
 
 export const SYNC_SOURCES = ['sap.materials', 'sap.suppliers', 'sap.purchaseOrders'] as const;
 export type SyncSource = (typeof SYNC_SOURCES)[number];
 
-const STALE_AFTER_MINUTES = 30;
+/** A running sync beats (heartbeat) at least every minute while it works; silent this long = the server stopped mid-sync. */
+export const STALE_AFTER_MINUTES = 10;
 
 export class SyncAlreadyRunningError extends Error {
   constructor(
@@ -21,15 +23,30 @@ export class SyncAlreadyRunningError extends Error {
   }
 }
 
+/** Configuration → Start over is running: syncs wait until it is done. */
+export class MaintenanceRunningError extends Error {
+  constructor() {
+    super('Start over (purge) is running — try again in a minute');
+  }
+}
+
+/** The run is still alive: called by launchSync every minute while the work runs (the server stopping stops the beats). */
+export async function heartbeat(db: Kysely<Database>, runId: number): Promise<void> {
+  await db.updateTable('integ.SyncRun').set({ HeartbeatAt: sql<Date>`SYSUTCDATETIME()` }).where('SyncRunId', '=', runId).where('Status', '=', 'Running').execute();
+}
+
+/** Running, and its last heartbeat (or its start, if it never beat) is recent: SQL for "this run is really working". */
+export const liveRunSql = sql<boolean>`ISNULL(HeartbeatAt, StartedAt) >= DATEADD(minute, ${-STALE_AFTER_MINUTES}, SYSUTCDATETIME())`;
+
 /** Creates the Running row. Throws SyncAlreadyRunningError if one is in progress for this source. */
 export async function startRun(db: Kysely<Database>, source: SyncSource, user: string): Promise<number> {
-  // A run with no finish after 30 minutes means the server stopped mid-sync.
+  // A run silent for 10 minutes (no heartbeat, or no start if it never beat) means the server stopped mid-sync.
   await db
     .updateTable('integ.SyncRun')
-    .set({ Status: 'Failed', FinishedAt: sql<Date>`SYSUTCDATETIME()`, Message: 'Abandoned: no result recorded within 30 minutes (server stopped?)' })
+    .set({ Status: 'Failed', FinishedAt: sql<Date>`SYSUTCDATETIME()`, Message: `Abandoned: no sign of life for ${STALE_AFTER_MINUTES} minutes (server stopped?)` })
     .where('Source', '=', source)
     .where('Status', '=', 'Running')
-    .where('StartedAt', '<', sql<Date>`DATEADD(minute, ${-STALE_AFTER_MINUTES}, SYSUTCDATETIME())`)
+    .where(sql<boolean>`ISNULL(HeartbeatAt, StartedAt) < DATEADD(minute, ${-STALE_AFTER_MINUTES}, SYSUTCDATETIME())`)
     .execute();
 
   try {
@@ -38,8 +55,15 @@ export async function startRun(db: Kysely<Database>, source: SyncSource, user: s
       .values({ Source: source, Status: 'Running', StartedBy: user, FinishedAt: null, RowsRead: null, RowsInserted: null, RowsUpdated: null, RowsMarkedMissing: null, Message: null })
       .output('inserted.SyncRunId')
       .executeTakeFirstOrThrow();
-    return Number(row.SyncRunId); // msnodesqlv8 returns IDENTITY values as strings
+    const runId = Number(row.SyncRunId); // msnodesqlv8 returns IDENTITY values as strings
+    // Row first, then the test: the purge takes its lock first, then looks for running syncs — one of the two always sees the other.
+    if (await maintenanceRunning(db)) {
+      await db.deleteFrom('integ.SyncRun').where('SyncRunId', '=', runId).execute();
+      throw new MaintenanceRunningError();
+    }
+    return runId;
   } catch (err) {
+    if (err instanceof MaintenanceRunningError) throw err;
     if (!String(err).includes('UX_SyncRun_OneRunning')) throw err;
     const running = await db
       .selectFrom('integ.SyncRun')
@@ -60,7 +84,8 @@ export async function finishRun(
   counts: Partial<RunCounts>,
   message: string | null,
 ): Promise<void> {
-  await db
+  // Only a run that is still Running: one already marked Failed (abandoned) is never turned into Succeeded afterwards.
+  const r = await db
     .updateTable('integ.SyncRun')
     .set({
       Status: status,
@@ -72,7 +97,12 @@ export async function finishRun(
       Message: message,
     })
     .where('SyncRunId', '=', runId)
-    .execute();
+    .where('Status', '=', 'Running')
+    .executeTakeFirst();
+  if (Number(r.numUpdatedRows) === 0) {
+    console.warn(`Sync run ${runId} finished (${status}) after it was already closed (abandoned?): the result was not recorded — run the sync again`);
+    return;
+  }
   await syncOutcomeInbox(db, runId, status, message);
 }
 

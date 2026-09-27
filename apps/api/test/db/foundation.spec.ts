@@ -61,6 +61,35 @@ describe('runCommand: duplicate-safe (plan v5 §0.6)', () => {
     await runCommand(db, user, commandId, 'test', (tx) => recordEvent(tx, { type: 'TEST', entityType: 'TEST', entityId: entity, actorUserId: user }));
     expect(await eventsFor(entity)).toBe(1);
   });
+
+  it('a reused id for another command or another input is refused (COMMAND_KEY_REUSED); the same input replays', async () => {
+    const user = await makeUser();
+    const commandId = randomUUID();
+    const entity = uid('reuse');
+    const work = (tx: Parameters<Parameters<typeof withTx>[1]>[0]) => recordEvent(tx, { type: 'TEST', entityType: 'TEST', entityId: entity, actorUserId: user }).then((eventId) => ({ eventId }));
+    const first = await runCommand(db, user, commandId, 'test.a', work, { id: 1, list: ['x'] });
+    expect(await runCommand(db, user, commandId, 'test.a', work, { list: ['x'], id: 1 })).toEqual(first); // same input, other key order
+    await expect(runCommand(db, user, commandId, 'test.a', work, { id: 2, list: ['x'] })).rejects.toMatchObject({ code: 'COMMAND_KEY_REUSED', status: 409 });
+    await expect(runCommand(db, user, commandId, 'test.b', work, { id: 1, list: ['x'] })).rejects.toMatchObject({ code: 'COMMAND_KEY_REUSED' });
+    expect(await eventsFor(entity)).toBe(1);
+    const row = await db.selectFrom('scm.CommandLog').select(['CommandName', 'InputHash', 'ResultJson']).where('CommandId', '=', commandId).executeTakeFirstOrThrow();
+    expect([row.CommandName, row.InputHash?.trim().length, JSON.parse(row.ResultJson!)]).toEqual(['test.a', 64, first]);
+  });
+
+  it('two identical commands with input at the same moment: one change, both get its result; a different input racing is refused', async () => {
+    const user = await makeUser();
+    const commandId = randomUUID();
+    const entity = uid('race2');
+    const work = (tx: Parameters<Parameters<typeof withTx>[1]>[0]) => recordEvent(tx, { type: 'TEST', entityType: 'TEST', entityId: entity, actorUserId: user });
+    const [a, b] = await Promise.all([runCommand(db, user, commandId, 'test', work, { n: 1 }), runCommand(db, user, commandId, 'test', work, { n: 1 })]);
+    expect(a).toBe(b);
+    expect(await eventsFor(entity)).toBe(1);
+    const other = randomUUID();
+    const r = await Promise.allSettled([runCommand(db, user, other, 'test', work, { n: 1 }), runCommand(db, user, other, 'test', work, { n: 2 })]);
+    expect(r.map((x) => x.status).sort()).toEqual(['fulfilled', 'rejected']);
+    expect(r.find((x) => x.status === 'rejected')).toMatchObject({ reason: { code: 'COMMAND_KEY_REUSED' } });
+    expect(await eventsFor(entity)).toBe(2);
+  });
 });
 
 describe('optimistic concurrency on companies (RowVer)', () => {

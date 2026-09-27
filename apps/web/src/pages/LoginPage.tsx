@@ -36,7 +36,7 @@ export function LoginPage() {
     <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#f0f2f1', paddingInline: 16 }}>
       <Card style={{ width: 360, maxWidth: '100%' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-          <img src={ui.data?.iconDataUrl ?? '/favicon.svg'} alt="" width={36} height={36} style={{ objectFit: 'contain' }} />
+          <img src={ui.data?.iconDataUrl ?? '/logo.ico'} alt="" width={36} height={36} style={{ objectFit: 'contain' }} />
           <Typography.Title level={4} style={{ margin: 0 }}>
             {ui.data?.siteName ?? ''}
           </Typography.Title>

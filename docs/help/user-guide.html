@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Supply Chain · User guide</title>
+<style>
+  /* Printed to PDF by apps/web/scripts/help-pdf.mjs (headless Edge). Page 1 is landscape (the process flow), the rest portrait. */
+  @page { size: A4 portrait; margin: 12mm 13mm 14mm 13mm; }
+  @page wide { size: A4 landscape; margin: 9mm 11mm 11mm 11mm; }
+  :root { --green:#1f6f43; --ink:#1f1f1f; --muted:#595959; --line:#d9d9d9; --sales:#e6f4ff; --sales-b:#91caff; --proc:#f6ffed; --proc-b:#b7eb8f; --po:#f9f0ff; --po-b:#d3adf7; --sys:#fafafa; --sys-b:#d9d9d9; --red:#cf1322; --amber:#d48806; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; color: var(--ink); font: 9.8pt/1.42 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+  h1 { font-size: 19pt; margin: 0 0 1.5mm; color: var(--green); }
+  h2 { font-size: 13.5pt; margin: 0 0 2.5mm; color: var(--green); border-bottom: 2px solid var(--green); padding-bottom: 1mm; }
+  h3 { font-size: 11pt; margin: 4mm 0 1.5mm; }
+  p { margin: 0 0 2mm; }
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  .wide { page: wide; }
+  .sub { color: var(--muted); font-size: 9pt; }
+  table { width: 100%; border-collapse: collapse; font-size: 8.8pt; margin: 0 0 2.5mm; }
+  th, td { border: 1px solid var(--line); padding: 1.3mm 1.8mm; vertical-align: top; text-align: left; }
+  th { background: #f5f5f5; font-weight: 600; }
+  tr { break-inside: avoid; }
+  table.steps { font-size: 8.4pt; line-height: 1.36; }
+  table.steps th, table.steps td { padding: 1.1mm 1.6mm; }
+  td.n { width: 5mm; text-align: center; font-weight: 600; color: var(--green); }
+  .tag { display: inline-block; border: 1px solid; border-radius: 3px; padding: 0 1.3mm; font-size: 8.2pt; white-space: nowrap; line-height: 1.5; }
+  .t-sales { background: var(--sales); border-color: var(--sales-b); color: #0958d9; }
+  .t-proc { background: var(--proc); border-color: var(--proc-b); color: #389e0d; }
+  .t-po { background: var(--po); border-color: var(--po-b); color: #531dab; }
+  .t-sys { background: var(--sys); border-color: var(--sys-b); color: var(--muted); }
+  .t-red { background: #fff1f0; border-color: #ffa39e; color: var(--red); }
+  .t-gold { background: #fffbe6; border-color: #ffe58f; color: var(--amber); }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
+  .box { border: 1px solid var(--line); border-radius: 2mm; padding: 2.2mm 2.8mm; margin: 0 0 2.5mm; break-inside: avoid; }
+  .box h4 { margin: 0 0 1.2mm; font-size: 10pt; }
+  .ex { background: #fafafa; }
+  ul, ol { margin: 0 0 2mm; padding-left: 5mm; }
+  li { margin: 0 0 0.9mm; }
+  .rules li { margin-bottom: 1.2mm; }
+  .rules b { color: var(--green); }
+  .legend { display: flex; gap: 4mm; font-size: 8.8pt; align-items: center; margin: 1mm 0 1.5mm; }
+  .legend i { display: inline-block; width: 4mm; height: 3mm; border: 1px solid; margin-right: 1.2mm; vertical-align: -0.4mm; }
+  svg text { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+  .tiny { font-size: 8.3pt; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ PAGE 1 · PROCESS FLOW ============================================================ -->
+<section class="page wide">
+  <h1>Supply Chain · How the application works</h1>
+  <p class="sub">One demand, one quantity ledger, one purchase order per supplier. Sales asks, Procurement sources, the PO team orders in SAP. Every step is done by the department that owns it, and nothing changes after acceptance without a change request decided by the other department. Rule numbers (R1…) are explained on the right and in full on the last page.</p>
+  <div class="legend"><span style="white-space:nowrap"><i style="background:var(--sales);border-color:var(--sales-b)"></i>Sales</span><span style="white-space:nowrap"><i style="background:var(--proc);border-color:var(--proc-b)"></i>Procurement</span><span style="white-space:nowrap"><i style="background:var(--po);border-color:var(--po-b)"></i>PO team</span><span style="white-space:nowrap"><i style="background:var(--sys);border-color:var(--sys-b)"></i>System / SAP</span><span class="tiny">Each step shows the quantity state it produces (<b>qty:</b>); the demand's status is worked out from those states (R6). Red dashed arrows: what an open change request holds or returns.</span></div>
+  <div id="flow"></div>
+</section>
+
+<!-- ============================================================ PAGE 2 · THE STEPS ============================================================ -->
+<section class="page">
+  <h2>The full cycle, step by step</h2>
+  <table class="steps">
+    <tr><th style="width:5mm">#</th><th style="width:27mm">Step</th><th style="width:21mm">Owner</th><th>What happens, and the rules that apply</th><th style="width:34mm">Where · My work item</th></tr>
+    <tr><td class="n">1</td><td>Create the demand</td><td><span class="tag t-sales">Sales</span></td><td>Choose the company. Add ETD weeks (the current ISO week and the next 52; past weeks are refused). In each week add <b>container groups</b>: capacity per container in one unit (e.g. 1,540 CT), the number of identical containers, and the materials with their share of the container. Shares must total exactly 100%, whole units only. An SKU is optional (without it the line is a specification); origin is mandatory; one unit per material per demand.</td><td>Purchasing → Demands → New demand</td></tr>
+    <tr><td class="n">2</td><td>Submit to Procurement</td><td><span class="tag t-sales">Sales</span></td><td>The full check runs and lists every problem at once. The first submission is frozen as <b>version 1 = the KPI baseline</b> and never changes. Until Procurement decides, Sales may <i>take it back</i> to change it.</td><td>Demand page · opens <b>Accept demand</b> for Procurement</td></tr>
+    <tr><td class="n">3</td><td>Accept or return</td><td><span class="tag t-proc">Procurement</span></td><td><b>Accept</b>: every line gets one <b>Open</b> quantity and the demand is locked for Sales. <b>Return</b> with a comment: Sales fix and resubmit (a new version; the baseline stays version 1). The person who created the demand cannot accept it (R4).</td><td>My work → Accept demand · Sales: <b>Fix and resubmit</b></td></tr>
+    <tr><td class="n">4</td><td>Create the RFQ</td><td><span class="tag t-proc">Procurement</span></td><td>Take all or part of the <b>Open</b> quantity per line and week, set containers per week, and pick suppliers from the <b>shortlist</b>: only suppliers able to supply the line's origin, not blocked in SAP and set up for the company's purchasing organization, ranked by what they supplied before (R7). A supplier not on the list can be invited as a first contact. The chosen quantity becomes <b>In RFQ</b>.</td><td>Demand → Create RFQ… · Purchasing → RFQs</td></tr>
+    <tr><td class="n">5</td><td>Send and record quotes</td><td><span class="tag t-proc">Procurement</span></td><td>Download the supplier view, e-mail it outside the app, press <b>Send</b>. Record each quote: price, currency, available quantity, quoted SKU, containers offered per week (required). The first quote makes the row <b>Quoted</b>; a newer quote replaces the older. Quantity not needed is <b>released</b> to Open; cancelling the RFQ releases everything.</td><td>RFQ page · <b>Record quotes</b> until every supplier quoted</td></tr>
+    <tr><td class="n">6</td><td>Award by containers</td><td><span class="tag t-proc">Procurement</span></td><td>A grid of suppliers × containers per week: one click gives a container to a supplier; mixed awards are allowed; a supplier who did not price the whole make-up cannot win it; more than offered is allowed but logged (R8). Each supplier × week is a <b>shipment</b> with a confirmed ETD. Quantity becomes <b>Awarded</b>; the rest stays Quoted. Un-award is possible until the handoff.</td><td>RFQ → Award… · Purchasing → Awards</td></tr>
+    <tr><td class="n">7</td><td>Acknowledge the award</td><td><span class="tag t-sales">Sales</span></td><td>A heads-up, never an approval: acknowledge, or raise a query that goes to Procurement. It never blocks the handoff (R9); any later change to the award asks Sales again.</td><td>My work → <b>Acknowledge award</b></td></tr>
+    <tr><td class="n">8</td><td>Shipping terms and handoff</td><td><span class="tag t-proc">Procurement</span></td><td>Per supplier: Incoterm, ports of loading and discharge, payment terms (the supplier's SAP code by default); the currency is the award's. A confirmed ETD for every shipment. The <b>Ready to hand off?</b> checklist must be green (terms, ETDs, no hold, supplier usable in SAP). Handing off without Sales' acknowledgement needs a reason. <b>One handoff = one supplier of one award = one purchase order</b> (R10). Quantity becomes <b>Handed off</b>.</td><td>Award → Handoff tab · <b>Hand off</b></td></tr>
+    <tr><td class="n">9</td><td>Accept or return the handoff</td><td><span class="tag t-po">PO team</span></td><td>The handoff shows exactly what was sent. <b>Accept</b>: quantity moves to <b>PO preparation</b>. <b>Return</b> with a reason and comment (SKU, terms, shipment, data): back to Awarded; Procurement fixes and hands off again under a new number. The person who handed off cannot accept (R4). A change request that cancels handed-off quantity returns the handoff automatically.</td><td>My work → <b>Accept handoff</b> · Procurement: <b>Handoff returned</b></td></tr>
+    <tr><td class="n">10</td><td>Prepare and submit the PO</td><td><span class="tag t-po">PO team</span></td><td>Pick an SKU where none was given (only materials matching the specification, origin and unit; one item may be split across SKUs). A missing material becomes a <b>master-data request</b> until it exists in SAP. <b>Build</b> one draft per handoff (POD-…), <b>Validate</b> (SKUs, supplier usable, master data fresh, prices, plant and purchasing org), <b>Submit</b>: the payload is frozen (R11) and the quantity becomes <b>PO submitted</b>.</td><td>Handoff → PO preparation · <b>Prepare PO</b> · PO drafts &amp; SAP</td></tr>
+    <tr><td class="n">11</td><td>SAP answers</td><td><span class="tag t-sys">System</span></td><td>The outbox sends the draft. <b>Created</b>: the PO number is stored, quantity becomes <b>PO created</b>. <b>Rejected</b>: back to PO preparation with an exception; a new draft gets a new number. <b>No answer</b>: outcome unknown; SAP is asked by the portal reference and the draft is never resent blindly; after repeated failures a person resolves it with evidence.</td><td>PO drafts &amp; SAP · exceptions <b>PO rejected by SAP</b>, <b>SAP outcome unknown</b></td></tr>
+    <tr><td class="n">12</td><td>Closed</td><td><span class="tag t-sys">Nobody</span></td><td>The demand's status follows its quantities (R6): <i>Closed · all ordered</i>, <i>Closed · partly ordered, rest cancelled</i>, <i>Cancelled</i> or <i>Merged into D-…</i>. Nothing is ever deleted.</td><td>Reports → Demand execution</td></tr>
+  </table>
+  <div class="cols">
+    <div class="box"><h4>Also, at any time after acceptance</h4>
+      <ul>
+        <li><b>Change requests</b> (next page): Sales changes containers, cancels a week or the demand; Procurement reports quantity it cannot source, adds quantity a supplier offers, shifts a week or changes the mix. The other department decides.</li>
+        <li><b>Merge / unmerge</b> (Procurement): weeks of one accepted demand move into another of the same company to be sourced together; undo while the merged quantity is still Open.</li>
+        <li><b>Release</b> (RFQ) and <b>un-award</b> (award) send quantity back a step, with a reason.</li>
+      </ul>
+    </div>
+    <div class="box"><h4>My work: where your steps wait</h4>
+      <p>Every task or exception above appears on <b>My work</b> for the people who hold that step's permission in that company, with a due time from Configuration → Workflow. Items are opened and closed only by the action itself (R12); nobody closes them by hand. Overdue items turn red and are escalated once. The Reports dashboard shows the same queues for the whole company.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ PAGE 3 · CHANGE REQUESTS ============================================================ -->
+<section class="page">
+  <h2>Change requests: how a locked demand changes</h2>
+  <p>After Procurement accepts a demand, it is <b>locked</b>. Any change goes through a <b>change request (CR)</b>: <b>one department asks, the other department decides</b>, and only then does anything change. Every request, decision and effect is recorded on the demand (Change requests tab, Versions, History). Nobody decides a request they raised, even when they hold both roles.</p>
+
+  <h3>Who can start what</h3>
+  <table>
+    <tr><th style="width:23mm">Raised by</th><th style="width:32mm">Request</th><th>What it asks for</th><th style="width:23mm">Decided by</th><th style="width:29mm">Started from</th></tr>
+    <tr><td><span class="tag t-sales">Sales</span></td><td><b>Change containers</b></td><td>Edit the accepted demand's container groups in the same editor as a draft: the number of containers, a new group (also in a new week), a removed group, a changed composition (materials or shares).</td><td><span class="tag t-proc">Procurement</span></td><td>Demand → <i>Need a change?</i></td></tr>
+    <tr><td><span class="tag t-sales">Sales</span></td><td><b>Cancel week</b> · <b>Cancel whole demand</b></td><td>Shortcuts that remove every group of a week, or of the demand.</td><td><span class="tag t-proc">Procurement</span></td><td>Demand → <i>Need a change?</i></td></tr>
+    <tr><td><span class="tag t-proc">Procurement</span></td><td><b>Not sourced</b></td><td>Lines and quantities that cannot be sourced (only quantity still <b>Open</b>), optionally a lower container count. Approved quantity is cancelled as <i>not sourced</i> and <b>counts against Procurement</b> in the KPIs.</td><td><span class="tag t-sales">Sales</span></td><td>Demand → <i>Not sourced…</i></td></tr>
+    <tr><td><span class="tag t-proc">Procurement</span></td><td><b>Add quantity</b></td><td>A supplier offers more: quantity for a material and week, optionally extra containers (each decided on its own). It shows on the supplier view at once; the award waits for Sales. Approved quantity is <i>Procurement</i> quantity, kept outside the execution rate.</td><td><span class="tag t-sales">Sales</span></td><td>RFQ → <i>Add quantity…</i></td></tr>
+    <tr><td><span class="tag t-proc">Procurement</span></td><td><b>Week shift</b></td><td>A supplier can deliver an RFQ line in another week: the not-yet-awarded quantity moves from week A to week B.</td><td><span class="tag t-sales">Sales</span></td><td>RFQ line → <i>Propose week shift…</i></td></tr>
+    <tr><td><span class="tag t-proc">Procurement</span></td><td><b>Mix change</b></td><td>Less of some RFQ lines (none awarded) and / or more or new materials in the same weeks. Reductions are cancelled as a <i>change</i> (not against Procurement); additions land Open on the demand.</td><td><span class="tag t-sales">Sales</span></td><td>RFQ → <i>Propose mix change…</i></td></tr>
+  </table>
+
+  <h3>The cycle, in seven steps</h3>
+  <ol>
+    <li><b>Raise.</b> Make the change in the editor (or pick lines and quantities), choose a <b>reason code</b> and write a <b>comment</b> — both mandatory — then <b>Check &amp; send</b>.</li>
+    <li><b>Pre-check</b> (by the server). The changes become <b>items</b>, one per changed group or line, each with its quantity effect per material. Checks: a reduction needs enough <i>cancellable</i> quantity (Open, in RFQ, quoted, awarded, handed off, in PO preparation — never PO submitted or created); a composition change is refused while any quantity of that material is awarded or later ("un-award first"); the materials and week must not be in another open CR; one unit per material per demand. A failed check saves the request as <span class="tag t-red">Blocked</span> with the reasons and holds nothing. A passed check makes it <span class="tag t-gold">Submitted</span>.</li>
+    <li><b>Holds.</b> While the request is open, its week and materials are <b>on hold</b> (a badge on the demand and the RFQ): no other CR can touch them, and award, handoff and PO submission wait for the decision. RFQs and quotes continue.</li>
+    <li><b>Decide change request</b> appears on the other department's My work. The raiser is told when it is decided, and may <b>withdraw</b> before that (comment required; holds released, nothing changes).</li>
+    <li><b>Decision, per item:</b> <b>Approve</b>, <b>Approve less</b> (fewer containers or less quantity) or <b>Reject</b>, plus a decision comment. The request ends <i>Approved</i>, <i>Partially approved</i> or <i>Rejected</i>.</li>
+    <li><b>Apply, all or nothing</b>, in the same step as the decision. Approved reductions cancel quantity <b>least-progressed first</b>: Open, then in RFQ, quoted, awarded, handed off, PO preparation. Cancelled quantity stays on the demand as <i>Cancelled</i>. If part of it reached SAP meanwhile, as much as possible is cancelled and the request shows <i>Partially applied</i>. Approved additions add Open quantity (and new materials or weeks when needed). Container counts are updated and a new demand version <i>CR applied</i> is saved. If anything else fails, nothing changes and the decider sees why.</li>
+    <li><b>Follow-up.</b> Holds are released and the My work item closes. If cancelled quantity was awarded, Procurement gets <b>Tell the supplier</b>. If it was handed off or accepted by the PO team, the handoff is <b>returned automatically</b> and Procurement reconfirms containers and ETD, then hands off again. Sales' acknowledgement of a changed award goes back to <i>Pending</i>.</li>
+  </ol>
+
+  <h3>How Procurement responds to a Sales request</h3>
+  <ul>
+    <li>Open it from My work → <i>Decide change request</i>. Each item shows <b>before → after</b>, the quantity effect per material, and the quantity at submit and now — so the impact on RFQs, quotes and awards is visible before deciding.</li>
+    <li>Approve what the market allows; use <b>Approve less</b> when a supplier can take part of the extra containers; <b>Reject</b> with the reason in the comment when the change is no longer possible (quantity already on a PO would have been blocked by the pre-check).</li>
+    <li>After approval, act on the follow-ups: <b>Tell the supplier</b> about cancelled awarded quantity; reconfirm and hand off again when a handoff came back automatically.</li>
+    <li>Response time is measured (Reports → Performance and the Dashboard): the hours from submission to decision, per department.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ PAGE 4 · EXAMPLES ============================================================ -->
+<section class="page">
+  <h2>Change requests: worked examples</h2>
+  <div class="cols">
+    <div class="box ex"><h4>1 · The customer reduced the order</h4>
+      <p>D-000230, week W42: 5 containers of Royal Gala S-100 (1,540 CT each). Two containers are still Open, three are quoted in RFQ-000041.</p>
+      <p><b>Sales</b> → <i>Change containers</i>: sets the group to <b>3</b> containers, reason <i>Customer cancelled or reduced the order</i>, comment. Pre-check: the reduction is 3,080 CT; cancellable quantity is 7,700 CT (Open + quoted) → <b>Submitted</b>; W42 and the material go on hold.</p>
+      <p><b>Procurement</b> decides: <b>Approve</b>. Applied: 3,080 CT cancelled least-progressed first — the 3,080 CT Open go first, nothing quoted is touched. W42 now has 3 containers, version <i>CR applied</i>, holds released. The RFQ still asks for its 3 containers.</p></div>
+    <div class="box ex"><h4>2 · Cancel a week that is already handed off</h4>
+      <p>D-000228, week W41: 3 containers awarded to Andes Export and handed off (HO-000012, not yet submitted to SAP).</p>
+      <p><b>Sales</b> → <i>Cancel week</i> W41, reason <i>Sales forecast changed</i>. Pre-check passes: handed-off quantity is still cancellable.</p>
+      <p><b>Procurement</b> approves. Applied: 4,620 CT cancelled; HO-000012 is <b>returned automatically</b> (reason <i>CR_CHANGE</i>), the PO draft in preparation is void, and Procurement gets <i>Handoff returned automatically</i> and <i>Tell the supplier</i>. Had the PO already been submitted to SAP, that part could not be cancelled: the request would end <i>Partially applied</i> and the PO team changes the SAP order by hand.</p></div>
+    <div class="box ex"><h4>3 · Nothing at budget: not sourced</h4>
+      <p>D-000226, week W43, Packham pears 70-75 ZA, 1,120 CT Open. Every quote is above budget.</p>
+      <p><b>Procurement</b> → <i>Not sourced…</i>: 1,120 CT, reason <i>Quoted prices above budget</i> (a reason that counts against Procurement), and lowers the week to 0 containers.</p>
+      <p><b>Sales</b> decides: <b>Approve less</b> — 560 CT, keeping one container in the hope of a later offer. Applied: 560 CT cancelled as <i>not sourced</i>; the not-sourced rate on the reports rises accordingly; 560 CT stay Open and keep raising <i>Open quantity near ETD</i> until they are in an RFQ.</p></div>
+    <div class="box ex"><h4>4 · A supplier offers two more containers</h4>
+      <p>RFQ-000041 for D-000231: Agrisouth can ship 2 more containers of Royal Gala in W42.</p>
+      <p><b>Procurement</b> → <i>Add quantity…</i>: 3,080 CT Royal Gala S-100 Cat1 CL, W42, plus <b>2 extra containers</b>, reason <i>Market opportunity</i>. The proposed line appears on the supplier view marked <i>proposed</i>; Agrisouth quotes it; the award waits.</p>
+      <p><b>Sales</b> decides each item: quantity <b>Approve less</b> 1,540 CT, containers <b>Approve less</b> 1. Applied: the demand line grows by 1,540 CT of <i>Procurement</i> quantity (outside the execution rate), already Quoted on RFQ-000041; W42 gains 1 container. Procurement can now award it.</p></div>
+    <div class="box ex"><h4>5 · The supplier can only ship a week later</h4>
+      <p>RFQ-000039 line: Navel oranges EG, 4,200 CT asked for W42; the supplier offers W43.</p>
+      <p><b>Procurement</b> → <i>Propose week shift…</i> to W43 with 3 containers in the RFQ for W43, reason <i>Supply available only in another week</i>. The line shows <i>Pending Sales · CR-…</i>; quotes can still be recorded, the award waits.</p>
+      <p><b>Sales</b> approves: the quantity is now approved for W43 and the demand line shows <i>approved for 2026-W43</i>. A rejection would have put the line back to W42.</p></div>
+    <div class="box ex"><h4>6 · Blocked at the pre-check</h4>
+      <p><b>Sales</b> changes the shares of a group whose Fuji apples are already awarded → <span class="tag t-red">Blocked</span>: <i>un-award first</i>. Procurement can un-award (keeping the quotes), then Sales raises the request again.</p>
+      <p><b>Sales</b> cancels W41 while CR-000012 on W41 is still open → <span class="tag t-red">Blocked</span>: <i>already in CR-000012</i>. Wait for that decision or withdraw it.</p>
+      <p><b>Sales</b> tries to cancel 500 CT when only 400 CT are still cancellable (the rest is on a PO) → <span class="tag t-red">Blocked</span>: cancellable quantity is 400 CT.</p></div>
+  </div>
+  <h3>Reason codes</h3>
+  <p class="tiny">Sales: <i>Customer cancelled or reduced the order</i> · <i>Sales forecast changed</i> · <i>Customer changed the specification</i>. Procurement: <i>No supplier could supply in time</i> ⚑ · <i>Quoted prices above budget</i> ⚑ · <i>Market opportunity (extra quantity)</i> · <i>Supply available only in another week</i>. ⚑ = counts against Procurement in the not-sourced rate. Administrators keep the list under Configuration → Reason codes.</p>
+</section>
+
+<!-- ============================================================ PAGE 5 · STATUSES AND RULES ============================================================ -->
+<section class="page">
+  <h2>Statuses: who has it, what is next</h2>
+  <div class="cols">
+    <div>
+      <table>
+        <tr><th colspan="3">Demand</th></tr>
+        <tr><th>Status</th><th style="width:24mm">Who has it</th><th>Next</th></tr>
+        <tr><td>Draft</td><td>Sales</td><td>Sales submits it to Procurement</td></tr>
+        <tr><td>Waiting for Procurement to accept</td><td>Procurement</td><td>Accept, or return with a reason (Sales can still take it back)</td></tr>
+        <tr><td>Returned to Sales</td><td>Sales</td><td>Change it and submit again</td></tr>
+        <tr><td>Accepted · nothing sourced yet</td><td>Procurement</td><td>Create an RFQ</td></tr>
+        <tr><td>Partly in sourcing</td><td>Procurement</td><td>Source the open part</td></tr>
+        <tr><td>All in sourcing</td><td>Procurement</td><td>Quote, award, hand off</td></tr>
+        <tr><td>Closed · all ordered</td><td>—</td><td>Nothing</td></tr>
+        <tr><td>Closed · partly ordered, rest cancelled</td><td>—</td><td>Nothing</td></tr>
+        <tr><td>Cancelled · Merged into D-…</td><td>—</td><td>Nothing / continue on the other demand</td></tr>
+      </table>
+      <table>
+        <tr><th colspan="3">Award (Sales acknowledgement)</th></tr>
+        <tr><th>Status</th><th style="width:24mm">Who has it</th><th>Next</th></tr>
+        <tr><td>Waiting for Sales to acknowledge</td><td>Sales</td><td>Acknowledge, or ask a question</td></tr>
+        <tr><td>Sales asked a question</td><td>Procurement</td><td>Answer; Sales is asked again</td></tr>
+        <tr><td>Acknowledged by Sales (· after handoff)</td><td>Procurement</td><td>Hand off to the PO team</td></tr>
+      </table>
+    </div>
+    <div>
+      <table>
+        <tr><th colspan="3">RFQ</th></tr>
+        <tr><th>Status</th><th style="width:24mm">Who has it</th><th>Next</th></tr>
+        <tr><td>Draft · not sent to suppliers</td><td>Procurement</td><td>Download the supplier view, send it, press Send</td></tr>
+        <tr><td>Sent · waiting for quotes</td><td>Suppliers, then Procurement</td><td>Record each supplier's quote</td></tr>
+        <tr><td>Quotes in · ready to award</td><td>Procurement</td><td>Record the rest, or award</td></tr>
+        <tr><td>Partly awarded · Fully awarded</td><td>Procurement</td><td>Award the rest or release it · hand off</td></tr>
+        <tr><td>Closed · nothing left · Cancelled</td><td>—</td><td>Its quantity is Open on the demand again</td></tr>
+      </table>
+      <table>
+        <tr><th colspan="3">Handoff and PO draft</th></tr>
+        <tr><th>Status</th><th style="width:24mm">Who has it</th><th>Next</th></tr>
+        <tr><td>Waiting for the PO team to accept</td><td>PO team</td><td>Accept, or return to Procurement</td></tr>
+        <tr><td>Accepted — PO being prepared</td><td>PO team</td><td>Pick SKUs, build, validate, submit</td></tr>
+        <tr><td>Returned to Procurement</td><td>Procurement</td><td>Fix and hand off again (new number)</td></tr>
+        <tr><td>Draft · Validated</td><td>PO team</td><td>Validate · submit to SAP</td></tr>
+        <tr><td>Submitted — waiting for SAP · SAP outcome unknown</td><td>The outbox, then the PO team</td><td>Wait · resolve with evidence if SAP cannot be asked</td></tr>
+        <tr><td>Created in SAP · Not created in SAP</td><td>— · PO team</td><td>Done · fix and build a new draft, or return the handoff</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <h2 style="margin-top:3mm">The rules, in one list</h2>
+  <div class="cols">
+    <ol class="rules">
+      <li><b>R1 Company scope.</b> You see and act only on the companies you work for. Another company's records do not exist for you.</li>
+      <li><b>R2 Whole units, one unit.</b> Cartons are never split; one unit per material per demand; quantities are never added across units. Containers are the one measure added across everything.</li>
+      <li><b>R3 The baseline.</b> Version 1 at the first submission is the KPI baseline and never changes.</li>
+      <li><b>R4 Separation of duties.</b> Whoever created a demand cannot accept it; whoever handed off cannot accept the handoff; nobody decides their own change request.</li>
+      <li><b>R5 Locked after acceptance.</b> Nothing on an accepted demand changes without a change request decided by the other department.</li>
+      <li><b>R6 Status follows quantity.</b> A demand's status is worked out from its quantity ledger. Nothing is deleted: quantity is cancelled or merged, with history.</li>
+      <li><b>R7 Suppliers.</b> An RFQ goes only to suppliers able to supply the origin, not blocked in SAP, and set up for the company's purchasing organization.</li>
+    </ol>
+    <ol class="rules" start="8">
+      <li><b>R8 Awards are containers.</b> Award whole containers per week; above the offer is allowed but logged; one currency per supplier per award.</li>
+      <li><b>R9 Acknowledgement is a heads-up.</b> Sales' acknowledgement never blocks; handing off without it needs a reason and is recorded.</li>
+      <li><b>R10 One handoff, one PO.</b> One handoff per award × supplier equals one purchase order; the checklist must be green; a returned handoff puts the quantity back to Awarded.</li>
+      <li><b>R11 SAP is never guessed.</b> One live draft per handoff; the payload is frozen at submit; an unknown outcome is looked up by reference and never resent blindly; master data older than the setting (26 h) blocks submission.</li>
+      <li><b>R12 My work is written by the actions.</b> Items open and close only through the step itself; due times come from Configuration; overdue items are escalated once.</li>
+      <li><b>R13 Holds.</b> An open change request holds its week and materials: award, handoff and PO submission wait; RFQs and quotes continue.</li>
+      <li><b>R14 Cancellation order.</b> Approved reductions cancel the least-progressed quantity first; quantity submitted to SAP is never cancelled in the app.</li>
+    </ol>
+  </div>
+</section>
+
+<script>
+/* The process flow on page 1: swim lanes, steps, arrows and rule callouts, drawn from data so the layout stays consistent. */
+(function () {
+  const W = 1120, H = 556, PANEL = 244, LANE_R = W - 12 - PANEL - 6;
+  const lanes = [
+    { key: 'sales', label: 'Sales', y: 40, h: 104, fill: 'var(--sales)', stroke: 'var(--sales-b)', ink: '#1677ff' },
+    { key: 'proc', label: 'Procurement', y: 156, h: 156, fill: 'var(--proc)', stroke: 'var(--proc-b)', ink: '#1f6f43' },
+    { key: 'po', label: 'PO team', y: 322, h: 94, fill: 'var(--po)', stroke: 'var(--po-b)', ink: '#722ed1' },
+    { key: 'sys', label: 'System · SAP', y: 426, h: 78, fill: 'var(--sys)', stroke: 'var(--sys-b)', ink: '#8c8c8c' },
+  ];
+  const BW = 140, BH = 60, GAP = 148;
+  const col = (i) => 100 + i * GAP; // five columns, the last ends at 832 < LANE_R
+  const nodes = [
+    { id: 'n1', lane: 'sales', x: col(0), y: 60, t: '1 · Create the demand', s: 'weeks · groups · shares = 100%', q: '' },
+    { id: 'n2', lane: 'sales', x: col(1), y: 60, t: '2 · Submit', s: 'version 1 = baseline (R3)', q: '' },
+    { id: 'n7', lane: 'sales', x: col(3), y: 60, t: '7 · Acknowledge award', s: 'heads-up, never blocks (R9)', q: '' },
+    { id: 'cr', lane: 'proc', x: col(0), y: 174, t: 'Change requests', s: 'one asks, the other decides (R5 R13 R14)', q: 'Cancelled · added', cr: true },
+    { id: 'n3', lane: 'proc', x: col(1), y: 174, t: '3 · Accept or return', s: 'creator cannot accept (R4)', q: 'Open' },
+    { id: 'n4', lane: 'proc', x: col(2), y: 174, t: '4 · RFQ', s: 'shortlist by origin (R7)', q: 'In RFQ' },
+    { id: 'n5', lane: 'proc', x: col(2), y: 246, t: '5 · Send · record quotes', s: 'supplier view by e-mail', q: 'Quoted' },
+    { id: 'n6', lane: 'proc', x: col(3), y: 174, t: '6 · Award by containers', s: 'shipments · confirmed ETD (R8)', q: 'Awarded' },
+    { id: 'n8', lane: 'proc', x: col(4), y: 174, t: '8 · Terms · hand off', s: '1 supplier = 1 PO (R10)', q: 'Handed off' },
+    { id: 'n10', lane: 'po', x: col(3), y: 340, t: '10 · SKUs · draft · submit', s: 'validate · payload frozen (R11)', q: 'PO submitted' },
+    { id: 'n9', lane: 'po', x: col(4), y: 340, t: '9 · Accept or return', s: 'hander-off cannot accept (R4)', q: 'PO preparation' },
+    { id: 'mw', lane: 'sys', x: col(0), y: 436, w: 270, t: 'My work', s: 'items opened and closed by the steps · due times · escalation (R12)', q: '', sys: true },
+    { id: 'n11', lane: 'sys', x: col(3), y: 436, t: '11 · SAP outbox', s: 'created · rejected · unknown', q: 'PO created' },
+    { id: 'n12', lane: 'sys', x: col(4), y: 436, t: '12 · Closed', s: 'status from quantity (R6)', q: '' },
+  ];
+  // [from, to, kind, label] — h: same row · v: same column · hv: right then up · bus: the change-request line in the gap above the Procurement lane
+  const edges = [
+    ['n1', 'n2', 'h'], ['n2', 'n3', 'v', 'Accept demand'], ['n3', 'n2', 'vback', 'return'],
+    ['n3', 'n4', 'h'], ['n4', 'n5', 'v'], ['n5', 'n6', 'hv', 'quotes in'], ['n6', 'n7', 'v', 'Acknowledge award'], ['n6', 'n8', 'h'],
+    ['n8', 'n9', 'v', 'Accept handoff'], ['n9', 'n8', 'vback', 'return'], ['n9', 'n10', 'h'], ['n10', 'n11', 'v'], ['n11', 'n10', 'vback', 'rejected'], ['n11', 'n12', 'h'],
+    ['cr', 'n4', 'bus', 'holds'], ['cr', 'n6', 'bus', 'holds'], ['cr', 'n8', 'bus', 'auto return'],
+  ];
+  const by = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const c = (n) => { const w = n.w ?? BW; return { l: n.x, r: n.x + w, t: n.y, b: n.y + BH, cx: n.x + w / 2, cy: n.y + BH / 2 }; };
+  const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">
+    <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#595959"/></marker>
+    <marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#cf1322"/></marker></defs>`;
+  for (const l of lanes) {
+    s += `<rect x="6" y="${l.y}" width="${LANE_R - 6}" height="${l.h}" rx="6" fill="${l.fill}" stroke="${l.stroke}"/>`;
+    s += `<text x="16" y="${l.y + 17}" font-size="12" font-weight="600" fill="#1f1f1f">${l.label}</text>`;
+  }
+  const BUS_Y = 150; // the gap between the Sales and Procurement lanes
+  for (const [f, t, kind, label] of edges) {
+    const A = c(by[f]), B = c(by[t]);
+    let d = '', lx = 0, ly = 0, anchor = 'middle';
+    if (kind === 'h') {
+      const [x1, x2] = A.l < B.l ? [A.r, B.l] : [A.l, B.r];
+      d = `M${x1} ${A.cy} L${x2} ${A.cy}`; lx = (x1 + x2) / 2; ly = A.cy - 5;
+    } else if (kind === 'v' || kind === 'vback') {
+      const x = A.cx + (kind === 'v' ? -9 : 9);
+      const down = A.t < B.t;
+      const [y1, y2] = down ? [A.b, B.t] : [A.t, B.b];
+      d = `M${x} ${y1} L${x} ${y2}`; ly = down ? y2 - 6 : y2 + 14; // the label sits by the arrow head, clear of the hold line in the lane gap
+      if (kind === 'v') { lx = x - 5; anchor = 'end'; } else { lx = x + 5; anchor = 'start'; }
+    } else if (kind === 'hv') {
+      d = `M${A.r} ${A.cy} L${B.cx} ${A.cy} L${B.cx} ${B.b}`; lx = B.cx + 5; ly = A.cy - 5; anchor = 'start';
+    } else { // bus
+      const x = B.cx + 24;
+      d = `M${A.cx} ${A.t} L${A.cx} ${BUS_Y} L${x} ${BUS_Y} L${x} ${B.t}`; lx = x + 4; ly = B.t - 4; anchor = 'start';
+    }
+    const dash = kind === 'bus' ? ' stroke-dasharray="4 3"' : '';
+    const colr = kind === 'bus' ? '#cf1322' : '#595959';
+    s += `<path d="${d}" fill="none" stroke="${colr}" stroke-width="1.4"${dash} marker-end="url(#${kind === 'bus' ? 'ad' : 'a'})"/>`;
+    if (label) s += `<text x="${lx}" y="${ly}" font-size="9" fill="${colr}" text-anchor="${anchor}">${esc(label)}</text>`;
+  }
+  for (const n of nodes) {
+    const lane = lanes.find((l) => l.key === n.lane);
+    const stroke = n.cr ? '#cf1322' : n.sys ? '#8c8c8c' : lane.ink;
+    const w = n.w ?? BW;
+    s += `<rect x="${n.x}" y="${n.y}" width="${w}" height="${BH}" rx="5" fill="#fff" stroke="${stroke}" stroke-width="1.4"${n.cr ? ' stroke-dasharray="5 3"' : ''}/>`;
+    s += `<text x="${n.x + 7}" y="${n.y + 16}" font-size="10.5" font-weight="600" fill="#1f1f1f">${esc(n.t)}</text>`;
+    s += `<text x="${n.x + 7}" y="${n.y + 30}" font-size="8.4" fill="#595959">${esc(n.s)}</text>`;
+    if (n.q) s += `<text x="${n.x + 7}" y="${n.y + 51}" font-size="9" font-weight="700" fill="${n.cr ? '#cf1322' : '#1f6f43'}">qty: ${esc(n.q)}</text>`;
+  }
+  // the rules panel
+  const rx = W - PANEL - 6, rules = [
+    ['R1', 'Company scope: your companies only.'], ['R2', 'Whole units; one unit per material; never added across units.'], ['R3', 'Version 1 = the baseline, never changes.'],
+    ['R4', 'Separation of duties on accept, handoff accept, CR decide.'], ['R5', 'Locked after acceptance: change requests only.'], ['R6', 'Status is derived from the quantity ledger; nothing deleted.'],
+    ['R7', 'Suppliers: origin, not blocked, purchasing org.'], ['R8', 'Award whole containers; above offer logged; one currency.'], ['R9', 'Acknowledgement never blocks; no-ack handoff needs a reason.'],
+    ['R10', 'One handoff per supplier = one PO; checklist green.'], ['R11', 'Frozen payload; unknown outcome looked up, never resent.'], ['R12', 'My work items are written only by the steps.'],
+    ['R13', 'An open CR holds its week and materials.'], ['R14', 'Cancel least-progressed first; never what is in SAP.'],
+  ];
+  s += `<rect x="${rx}" y="40" width="${PANEL}" height="464" rx="6" fill="#fff" stroke="#d9d9d9"/><text x="${rx + 10}" y="58" font-size="12" font-weight="600">The rules (in full on the last page)</text>`;
+  rules.forEach(([k, t], i) => {
+    const y = 78 + i * 30;
+    s += `<text x="${rx + 10}" y="${y}" font-size="9.2" font-weight="700" fill="#1f6f43">${k}</text>`;
+    const words = t.split(' '); let line = ''; const lines = [];
+    for (const w of words) { if ((line + ' ' + w).trim().length > 40) { lines.push(line.trim()); line = w; } else line += ' ' + w; }
+    lines.push(line.trim());
+    lines.slice(0, 2).forEach((ln, j) => { s += `<text x="${rx + 36}" y="${y + j * 11}" font-size="8.6" fill="#1f1f1f">${esc(ln)}</text>`; });
+  });
+  // the ledger strip
+  const states = ['Open', 'In RFQ', 'Quoted', 'Awarded', 'Handed off', 'PO preparation', 'PO submitted', 'PO created', '· Cancelled · Merged out'];
+  s += `<text x="8" y="${H - 22}" font-size="9.5" font-weight="600" fill="#1f1f1f">Quantity ledger (every slice of quantity is in exactly one state):</text>`;
+  let x = 8;
+  states.forEach((st, i) => {
+    const w = st.length * 5.6 + 12;
+    const fill = i === 7 ? '#237804' : i === 8 ? '#fff1f0' : i === 0 ? '#bfbfbf' : i <= 2 ? '#722ed1' : '#52c41a';
+    const ink = i === 8 ? '#cf1322' : i === 0 || (i >= 3 && i <= 6) ? '#1f1f1f' : '#fff';
+    s += `<rect x="${x}" y="${H - 16}" width="${w}" height="14" rx="3" fill="${fill}"/><text x="${x + 6}" y="${H - 5.5}" font-size="8.6" fill="${ink}">${st}</text>`;
+    x += w + (i < 7 ? 16 : 6);
+    if (i < 7) s += `<text x="${x - 12}" y="${H - 5.5}" font-size="9" fill="#595959">→</text>`;
+  });
+  s += '</svg>';
+  document.getElementById('flow').innerHTML = s;
+})();
+</script>
+</body>
+</html>

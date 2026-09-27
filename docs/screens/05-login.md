@@ -15,7 +15,7 @@ flowchart TD
   B -- Yes --> C{Registered in this app?}
   C -- No --> E3[You are not registered — ask an administrator]
   C -- Disabled --> E4[Your account is disabled]
-  C -- Yes --> D[Update name/email/department from AD<br/>record last sign-in, audit] --> F[Session cookie, 10 h] --> G[The page asked for]
+  C -- Yes --> D[Update name/email/department from AD<br/>record last sign-in, audit] --> F[Session cookie, 30 days — was 10 h until 2026-09-26] --> G[The page asked for]
 ```
 
 ## Loose-end check

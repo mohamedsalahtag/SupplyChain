@@ -93,7 +93,7 @@ export async function raiseAddQuantity(db: Db, actor: Actor, commandId: string, 
       await ensureRfqWeek(tx, rfqId, add.etdWeek, input.extraContainers);
     }
     return r;
-  });
+  }, { rfqId, input, dryRun });
 }
 
 async function ensureRfqWeek(tx: Tx, rfqId: string, week: string, containers: number) {
@@ -157,7 +157,7 @@ export async function raiseWeekShift(db: Db, actor: Actor, commandId: string, rf
       await ensureRfqWeek(tx, rfqId, to, input.containers);
     }
     return r;
-  });
+  }, { rfqId, input, dryRun });
 }
 
 export async function raiseMixChange(db: Db, actor: Actor, commandId: string, rfqId: string,
@@ -194,5 +194,5 @@ export async function raiseMixChange(db: Db, actor: Actor, commandId: string, rf
     const holdLines = items.map((i) => i.lineId).filter((x): x is string => !!x);
     return saveCr(tx, actor, c.demand, { crType: 'MIX_CHANGE', dept: 'PROCUREMENT', reasonCode: input.reasonCode, comment: input.comment, rfqId },
       items, [...new Set(problems)], holdLines, items.filter((i) => i.kind === 'MIX_ADD').map((i) => i.etdWeek));
-  });
+  }, { rfqId, input, dryRun });
 }

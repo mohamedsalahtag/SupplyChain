@@ -34,7 +34,7 @@ export async function createAward(db: Db, actor: Actor, commandId: string, rfqId
     await updateWithRowVer(tx, 'scm.Rfq', 'RfqId', r.RfqId, rfqRowVer, sql`ManualStatus = ManualStatus`); // the quotes are what the buyer saw
     const { awardBatchId, abNo } = await writeAward(tx, actor, r, c, input, () => false);
     return { awardBatchId, abNo, warnings: c.warnings };
-  });
+  }, { rfqId, rfqRowVer, input, dryRun });
 }
 
 type RfqRow = { RfqId: string; RfqNo: string; DemandId: string; CompanyCode: string };
@@ -150,7 +150,7 @@ export async function unaward(db: Db, actor: Actor, commandId: string, itemId: s
     await resetAck(tx, i.AwardBatchId, 'RESET_UNAWARD', actor.id);
     await refreshHandoffTasks(tx, i.AwardBatchId);
     return { unawarded: formatQty(take) };
-  });
+  }, { itemId, rowVer, qty, mode, reasonCode, comment });
 }
 
 /** Another SKU of the same specification for an Awarded item (reason required). */
@@ -177,7 +177,7 @@ export async function correctSku(db: Db, actor: Actor, commandId: string, itemId
     await addThreadEntry(tx, { entityType: 'AWARD_BATCH', entityId: i.AwardBatchId, kind: 'SYSTEM', body: `SKU set to ${materialCode} — ${reason.trim()}`, authorUserId: actor.id, eventId });
     await resetAck(tx, i.AwardBatchId, 'RESET_SKU', actor.id);
     return { sku: materialCode };
-  });
+  }, { itemId, rowVer, materialCode, reason });
 }
 
 /** Containers and confirmed ETD of a shipment, while its quantity is Awarded (before handoff). */
@@ -203,7 +203,7 @@ export async function updateShipment(db: Db, actor: Actor, commandId: string, sh
     await addThreadEntry(tx, { entityType: 'AWARD_BATCH', entityId: String(sh.AwardBatchId), kind: 'SYSTEM', body: `Shipment ${sh.SupplierCode} · ${sh.EtdWeek}: ${containerCount} container(s)${confirmedEtd ? `, ETD ${confirmedEtd}` : ''}`, authorUserId: actor.id, eventId });
     if (changed && !firstEtdOnly) await resetAck(tx, String(sh.AwardBatchId), 'RESET_SHIPMENT', actor.id);
     return { saved: true };
-  });
+  }, { shipmentId, rowVer, containerCount, confirmedEtd });
 }
 
 /**

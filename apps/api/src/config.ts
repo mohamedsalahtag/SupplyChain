@@ -5,6 +5,31 @@ const bool = z
   .default('false')
   .transform((v) => v === 'true');
 
+/** An IPv4/IPv6 address, optionally with a /prefix (CIDR), or a proxy-addr range name (loopback, linklocal, uniquelocal). */
+const IP_OR_CIDR = /^(?:loopback|linklocal|uniquelocal|\d{1,3}(?:\.\d{1,3}){3}|[0-9a-f:]*:[0-9a-f:.]*)(?:\/\d{1,3})?$/i;
+
+/**
+ * TRUST_PROXY: empty/false = no proxy; true = trust whoever connects (only safe when HOST is loopback, so only the proxy
+ * on this machine can connect); or a comma list of the proxy addresses/CIDRs, e.g. 10.0.0.5,10.0.1.0/24.
+ */
+const trustProxy = z
+  .string()
+  .default('false')
+  .transform((v, ctx): boolean | string[] => {
+    const t = v.trim().toLowerCase();
+    if (t === '' || t === 'false') return false;
+    if (t === 'true') return true;
+    const list = t.split(',').map((x) => x.trim()).filter(Boolean);
+    const bad = list.filter((x) => !IP_OR_CIDR.test(x));
+    if (bad.length || !list.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `use true, false or a comma list of proxy IP addresses/CIDRs (not: ${bad.join(', ') || v})` });
+      return z.NEVER;
+    }
+    return list;
+  });
+
+export const isLoopbackHost = (host: string) => ['127.0.0.1', '::1', 'localhost'].includes(host.trim().toLowerCase());
+
 const schema = z.object({
   DB_SERVER: z.string().min(1),
   DB_PORT: z.coerce.number().int().default(1433),
@@ -34,6 +59,8 @@ const schema = z.object({
   /** Where PO drafts go is chosen in Configuration → SAP purchase orders. On a production server (NODE_ENV=production)
    *  the simulator is refused at submit unless this is true — set it only on a UAT/test server. */
   ALLOW_SAP_STUB: bool,
+  /** Configuration → Start over (purge all workflow data) works only when this is true, and never with NODE_ENV=production. */
+  ALLOW_PURGE: bool,
   /** Address the API listens on. Behind a reverse proxy use 127.0.0.1. */
   HOST: z.string().default('0.0.0.0'),
   /** HTTPS directly in the API: a .pfx/.p12 file (+ passphrase), or a PEM certificate + key. Paths on the server. */
@@ -41,8 +68,9 @@ const schema = z.object({
   TLS_PFX_PASSPHRASE: z.string().default(''),
   TLS_CERT_FILE: z.string().default(''),
   TLS_KEY_FILE: z.string().default(''),
-  /** true when an HTTPS reverse proxy (IIS ARR, nginx) is in front: the proxy's https is trusted for secure cookies. */
-  TRUST_PROXY: bool,
+  /** An HTTPS reverse proxy (IIS ARR, nginx) is in front: its https and client address are trusted. true (HOST must then be
+   *  127.0.0.1 in production) or a comma list of the proxy's IP addresses/CIDRs. */
+  TRUST_PROXY: trustProxy,
   /** Production: the API also serves the built web app (npm run build) from this folder; empty = <repo>/apps/web/dist. */
   SERVE_WEB: bool,
   WEB_DIST: z.string().default(''),
@@ -60,6 +88,11 @@ export function productionProblems(cfg: Config, env = process.env.NODE_ENV): str
     cfg.ALLOW_VIEW_AS && 'ALLOW_VIEW_AS must be false',
     !(cfg.TLS_PFX_FILE || (cfg.TLS_CERT_FILE && cfg.TLS_KEY_FILE) || cfg.TRUST_PROXY) &&
       'no HTTPS: set TLS_PFX_FILE (or TLS_CERT_FILE + TLS_KEY_FILE), or TRUST_PROXY=true behind an HTTPS reverse proxy — passwords must never cross the network in clear text',
+    // TRUST_PROXY=true believes X-Forwarded-For/-Proto from anyone who can connect: only the local proxy may (F08).
+    cfg.TRUST_PROXY === true && !isLoopbackHost(cfg.HOST) &&
+      `TRUST_PROXY=true needs HOST=127.0.0.1 (now ${cfg.HOST}): otherwise anyone can forge their address and "https" — or list the proxy addresses, e.g. TRUST_PROXY=10.0.0.5`,
+    !cfg.DB_ENCRYPT && 'DB_ENCRYPT must be true: the database connection carries business data and must be encrypted',
+    !/^ldaps:\/\//i.test(cfg.AD_URL) && 'AD_URL must start with ldaps:// — passwords are checked against Active Directory',
   ].filter((x): x is string => !!x);
 }
 

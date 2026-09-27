@@ -5,7 +5,7 @@ import { trpc } from '../../lib/trpc';
 
 const ICON_TYPES = ['image/png', 'image/jpeg', 'image/svg+xml', 'image/webp', 'image/x-icon', 'image/vnd.microsoft.icon'];
 const ICON_MAX_BYTES = 256 * 1024;
-const DEFAULT_ICON = '/favicon.svg';
+const DEFAULT_ICON = '/logo.ico';
 
 const readAsDataUrl = (file: File) =>
   new Promise<string>((resolve, reject) => {
@@ -85,7 +85,7 @@ export function GeneralSection() {
             help={siteName.trim() ? undefined : 'Enter a site name'}>
             <Input id="siteName" value={siteName} maxLength={60} showCount onChange={(e) => setSiteName(e.target.value)} style={{ width: 320 }} />
           </Form.Item>
-          <Form.Item label="Icon" extra="PNG, JPG, SVG, WEBP or ICO, up to 256 KB. A square image works best.">
+          <Form.Item label="Icon" extra="PNG, JPG, SVG, WEBP or ICO, up to 256 KB. A square image works best. Without a chosen image, the project logo (apps/web/public/logo.ico) is used — replace that file to change the built-in logo.">
             <Space align="center" wrap>
               <img src={icon ?? DEFAULT_ICON} alt="Current icon" width={40} height={40}
                 style={{ objectFit: 'contain', border: '1px solid #e5e7e6', borderRadius: 6, padding: 4, background: '#fff' }} />
@@ -93,7 +93,7 @@ export function GeneralSection() {
                 <Button icon={<UploadOutlined />}>Choose image…</Button>
               </Upload>
               <Button icon={<DeleteOutlined />} disabled={!icon} onClick={() => setIcon(null)}>
-                Use default icon
+                Use the project logo
               </Button>
             </Space>
           </Form.Item>

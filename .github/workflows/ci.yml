@@ -1,0 +1,25 @@
+# Typecheck, unit tests, production build and a dependency audit on every push and pull request.
+# The DB suite (npm run test:db) needs SQL Server with Windows login and stays a local step.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    # msnodesqlv8 (the ODBC driver binding) builds and installs on Windows.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Dependency audit (production, high and above)
+        run: npm audit --omit=dev --audit-level=high

@@ -95,5 +95,5 @@ export async function recordQuotes(db: Db, actor: Actor, commandId: string, rfqI
     await addThreadEntry(tx, { entityType: 'RFQ', entityId: rfqId, kind: 'SYSTEM', body: `Quotes from ${name}: ${valid.length} row(s)${replaced ? `, ${replaced} replacing earlier quotes` : ''}`, authorUserId: actor.id, eventId });
     await refreshQuoteTask(tx, r, actor.id);
     return { saved: valid.length, replaced };
-  });
+  }, { rfqId, supplierCode, currency, rows, weeks });
 }

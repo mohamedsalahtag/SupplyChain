@@ -74,7 +74,7 @@ export async function selectSkus(db: Db, actor: Actor, commandId: string, awardI
     if (i.HandoffId) await voidOpenDrafts(tx, i.HandoffId); // a draft built before this selection is rebuilt
     await recordEvent(tx, { type: 'SKU_SELECTED_AT_PO', entityType: 'AWARD_ITEM', entityId: awardItemId, demandId: i.DemandId, payload: { allocations: parts.map((p) => ({ code: p.code, qty: formatQty(p.qty) })) }, actorUserId: actor.id });
     return { saved: true };
-  });
+  }, { awardItemId, allocations });
 }
 
 /** No SKU exists in SAP yet: the item waits (PENDING_MASTER_DATA) and a request is tracked. */
@@ -90,7 +90,7 @@ export async function markMasterDataMissing(db: Db, actor: Actor, commandId: str
       title: `Material missing in SAP · ${i.SubMajorCategory} ${i.Size} ${i.MaterialClass} ${i.OriginCode}`, note: note.trim(), link: i.HandoffId ? `/handoffs/${i.HandoffId}` : '/po-drafts?tab=mdr', raisedBy: actor.id,
     });
     return { mdrId: String(mdr.MdrId) };
-  });
+  }, { awardItemId, note });
 }
 
 /** The material now exists in SAP: the item goes back to waiting for its SKU. */
@@ -104,7 +104,7 @@ export async function closeMasterDataRequest(db: Db, actor: Actor, commandId: st
     await sql`UPDATE scm.AwardItem SET SkuStatus = 'PENDING' WHERE AwardItemId = ${String(m.AwardItemId)} AND SkuStatus = 'PENDING_MASTER_DATA'`.execute(tx);
     await closeInbox(tx, 'MASTER_DATA_MISSING', 'MDR', mdrId, actor.id);
     return { closed: true };
-  });
+  }, { mdrId });
 }
 
 // ───────────────────────── PO drafts ─────────────────────────
@@ -150,7 +150,7 @@ export async function buildDraft(db: Db, actor: Actor, commandId: string, handof
 ${eventSql('ev', { type: 'PO_DRAFT_BUILT', entityType: 'PO_DRAFT', entityId: head.PoDraftId, demandId: String(h.DemandId), payload: { poDraftNo: head.PoDraftNo, hoNo: h.HoNo }, actorUserId: actor.id })}
 ${threadEntrySql(1, { entityType: 'HANDOFF', entityId: handoffId, kind: 'SYSTEM', authorUserId: actor.id, body: `${head.PoDraftNo} built by the PO team` }, 'ev')}`.execute(tx);
     return { poDraftId: String(head.PoDraftId), poDraftNo: head.PoDraftNo };
-  });
+  }, { handoffId });
 }
 
 type DraftRow = { PoDraftId: string; PoDraftNo: string; HandoffId: string; CompanyCode: string; SupplierCode: string; Currency: string; ContainerCount: number; Status: string; AwardBatchId: string; DemandId: string };
@@ -202,7 +202,7 @@ export async function validateDraft(db: Db, actor: Actor, commandId: string, dra
     await updateWithRowVer(tx, 'scm.PoDraft', 'PoDraftId', draftId, rowVer,
       problems.length ? sql`Status = 'DRAFT', ValidatedAt = NULL, LastError = ${problems.join('\n')}` : sql`Status = 'VALIDATED', ValidatedAt = SYSUTCDATETIME(), LastError = NULL`);
     return { problems };
-  });
+  }, { draftId, rowVer });
 }
 
 /** The exact message SAP gets (the ZCON field mapping comes with the real adapter, Stage 9). */
@@ -238,7 +238,7 @@ export async function submitDraft(db: Db, actor: Actor, commandId: string, draft
     ]);
     await closeInbox(tx, 'PO_TO_PREPARE', 'HANDOFF', d.HandoffId, actor.id);
     return { submitted: true };
-  });
+  }, { draftId, rowVer });
 }
 
 // ───────────────────────── outcomes (shared with the outbox) ─────────────────────────
@@ -251,7 +251,7 @@ export async function markCreated(tx: Tx, draftId: string, poNumber: string, res
   const upd = await tx.updateTable('scm.PoDraft').set({ Status: 'CREATED', SapPoNumber: poNumber, SapCreatedAt: sql`SYSUTCDATETIME()`, Resolution: resolution, LastError: null })
     .where('PoDraftId', '=', draftId).where('Status', 'in', ['SUBMITTED', 'UNKNOWN']).executeTakeFirst();
   if (Number(upd.numUpdatedRows) === 0) return false;
-  await sql`UPDATE scm.SapSubmission SET Status = 'CREATED', ClaimedBy = NULL, LeaseUntil = NULL WHERE PoDraftId = ${draftId}`.execute(tx);
+  await sql`UPDATE scm.SapSubmission SET Status = 'CREATED', ClaimedBy = NULL, LeaseUntil = NULL WHERE PoDraftId = ${draftId} AND Status NOT IN ('CREATED', 'REJECTED')`.execute(tx);
   await runSliceBatch(tx, [
     moveSlicesSql(0, { from: sql`FROM scm.QtySlice s WITH (UPDLOCK, ROWLOCK)`, where: sql`s.HandoffId = ${String(d.HandoffId)}`, states: ['PO_SUBMITTED'], trigger: 'SAP_CONFIRMED', ctx: { actorUserId, docType: 'PO_DRAFT', docId: draftId } }),
     eventSql('ev', { type: 'PO_CREATED', entityType: 'PO_DRAFT', entityId: draftId, demandId: String(d.DemandId), payload: { poDraftNo: d.PoDraftNo, poNumber, resolution }, actorUserId }),
@@ -269,7 +269,7 @@ export async function markRejected(tx: Tx, draftId: string, errors: string[], re
   const upd = await tx.updateTable('scm.PoDraft').set({ Status: 'REJECTED', Resolution: resolution, LastError: errors.join('\n') })
     .where('PoDraftId', '=', draftId).where('Status', 'in', ['SUBMITTED', 'UNKNOWN']).executeTakeFirst();
   if (Number(upd.numUpdatedRows) === 0) return false;
-  await sql`UPDATE scm.SapSubmission SET Status = 'REJECTED', ClaimedBy = NULL, LeaseUntil = NULL WHERE PoDraftId = ${draftId}`.execute(tx);
+  await sql`UPDATE scm.SapSubmission SET Status = 'REJECTED', ClaimedBy = NULL, LeaseUntil = NULL WHERE PoDraftId = ${draftId} AND Status NOT IN ('CREATED', 'REJECTED')`.execute(tx);
   await runSliceBatch(tx, [
     moveSlicesSql(0, { from: sql`FROM scm.QtySlice s WITH (UPDLOCK, ROWLOCK)`, where: sql`s.HandoffId = ${String(d.HandoffId)}`, states: ['PO_SUBMITTED'], trigger: 'SAP_REJECTED', ctx: { actorUserId, docType: 'PO_DRAFT', docId: draftId, comment: errors.join('; ').slice(0, 2000) } }),
     eventSql('ev', { type: 'PO_REJECTED', entityType: 'PO_DRAFT', entityId: draftId, demandId: String(d.DemandId), payload: { poDraftNo: d.PoDraftNo, errors, resolution }, actorUserId }),
@@ -303,12 +303,12 @@ export async function resolveUnknown(db: Db, actor: Actor, adapter: SapPoAdapter
       if (!/^[0-9A-Z-]{4,20}$/i.test(po)) throw new DomainError('BAD_PO', 'Enter the SAP PO number');
       if (look.kind === 'FOUND' && look.poNumber !== po) throw new DomainError('PO_MISMATCH', `SAP has ${look.poNumber} for ${d.PoDraftNo}, not ${po}`);
       if (look.kind === 'NOT_FOUND') throw new DomainError('PO_NOT_FOUND', `SAP has no PO with the reference ${d.PoDraftNo}`);
-      await markCreated(tx, draftId, po, 'MANUAL_CREATED', actor.id);
+      if (!(await markCreated(tx, draftId, po, 'MANUAL_CREATED', actor.id))) throw new DomainError('BAD_STATE', 'Only an unknown outcome can be resolved', 409);
     } else {
       if (look.kind === 'FOUND') throw new DomainError('PO_FOUND', `SAP has PO ${look.poNumber} for ${d.PoDraftNo} — it was created`);
-      await markRejected(tx, draftId, [`Confirmed not created: ${comment.trim()}`], 'MANUAL_NOT_CREATED', actor.id);
+      if (!(await markRejected(tx, draftId, [`Confirmed not created: ${comment.trim()}`], 'MANUAL_NOT_CREATED', actor.id))) throw new DomainError('BAD_STATE', 'Only an unknown outcome can be resolved', 409);
     }
     await recordEvent(tx, { type: 'SAP_UNKNOWN_RESOLVED', entityType: 'PO_DRAFT', entityId: draftId, demandId: d.DemandId, payload: { outcome: r.outcome, comment: comment.trim(), sapCheck: look.kind }, actorUserId: actor.id });
     return { resolved: r.outcome };
-  });
+  }, { draftId, rowVer, r, comment });
 }

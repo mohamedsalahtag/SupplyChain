@@ -81,5 +81,5 @@ export async function inviteSuppliers(db: Db, actor: Actor, commandId: string, r
       });
     }
     return { invited: all.length };
-  });
+  }, { rfqId, rowVer, input });
 }

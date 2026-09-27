@@ -92,6 +92,7 @@ export const PERMISSION_CATALOG: CatalogScreen[] = [
       { key: 'users.add', label: 'Add a user from Active Directory' },
       { key: 'users.companies.edit', label: 'Choose which companies a user works for' },
       { key: 'users.edit', label: 'Change a user’s roles or active status' },
+      { key: 'users.delete', label: 'Delete a user (archived when their name is on records)' },
     ],
   },
   {
@@ -126,6 +127,7 @@ export const PERMISSION_CATALOG: CatalogScreen[] = [
       { key: 'configuration.workflow.settings.edit', label: 'Change workflow settings (due times, limits)' },
       { key: 'configuration.shipping.edit', label: 'Keep the shipping-term lists (Incoterms, ports, payment-term descriptions)' },
       { key: 'configuration.ad.edit', label: 'Change and test the Active Directory connection' },
+      { key: 'configuration.purge', label: 'Purge all workflow data and start over (test servers only)' },
     ],
   },
 ];
@@ -171,6 +173,8 @@ export const P = {
   usersAdd: 'users.add',
   usersEdit: 'users.edit',
   usersCompaniesEdit: 'users.companies.edit',
+  usersDelete: 'users.delete',
+  configPurge: 'configuration.purge',
   securityOpen: 'security.open',
   securityRolesEdit: 'security.roles.edit',
   operationsOpen: 'operations.open',

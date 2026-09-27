@@ -1,33 +1,26 @@
-import type {} from '@fastify/cookie'; // adds setCookie / clearCookie to the reply type
+import type {} from '@fastify/cookie'; // adds clearCookie to the reply type
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { loadAdConnection, toAdSettings } from '../settings/adConnection.js';
 import { SIGNED_IN } from '@supplychain/shared';
 import { procedure, publicProcedure, router, type Context } from '../trpc/trpc.js';
 import { audit } from './audit.js';
-import { DirectoryUnreachableError, signInToDirectory, WrongCredentialsError } from './ldap.js';
-import { SESSION_COOKIE, SESSION_HOURS, signSession } from './session.js';
+import { DirectoryConfigError, DirectoryUnreachableError, signInToDirectory, WrongCredentialsError } from './ldap.js';
+import { endSessions } from './authUser.js';
+import { startSession } from './cookie.js';
+import { LoginThrottle, usernameKey, WINDOW_MS } from './loginThrottle.js';
+import { SESSION_COOKIE } from './session.js';
 
-/** At most 10 sign-in attempts per minute from one address. */
-const attempts = new Map<string, number[]>();
-function limitAttempts(ip: string): void {
-  const now = Date.now();
-  const recent = (attempts.get(ip) ?? []).filter((t) => now - t < 60_000);
-  recent.push(now);
-  attempts.set(ip, recent);
-  if (recent.length > 10) {
-    throw new TRPCError({ code: 'TOO_MANY_REQUESTS', message: 'Too many sign-in attempts. Wait a minute and try again.' });
-  }
-}
+/** Sign-in throttle: per address and per username (loginThrottle.ts); swept every minute. */
+const throttle = new LoginThrottle();
+setInterval(() => throttle.sweep(), WINDOW_MS).unref();
 
-async function startSession(ctx: Context, userId: number, viewAsBy?: number): Promise<void> {
-  ctx.res.setCookie(SESSION_COOKIE, await signSession(userId, ctx.cfg.SESSION_SECRET, viewAsBy), {
-    httpOnly: true,
-    sameSite: 'strict',
-    secure: ctx.req.protocol === 'https',
-    path: '/',
-    maxAge: SESSION_HOURS * 3600,
-  });
+async function limitAttempts(ctx: Context, username: string): Promise<void> {
+  const hit = throttle.hit(ctx.req.ip, username);
+  if (!hit) return;
+  // Once per window and key, so a flood does not flood the audit log too.
+  if (hit.first) await audit(ctx.db, { userId: null, action: 'login.throttled', target: usernameKey(username), details: { ip: ctx.req.ip, by: hit.by } }, ctx.log);
+  throw new TRPCError({ code: 'TOO_MANY_REQUESTS', message: 'Too many sign-in attempts. Wait a minute and try again.' });
 }
 
 /** View as (spec 16) is offered to active administrators, and kept while they view as a demo user. */
@@ -70,8 +63,8 @@ export const authRouter = router({
   /** Switch into a demo account; everything done now is recorded as that account. */
   viewAsStart: procedure.meta({ permission: SIGNED_IN }).input(z.object({ userId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
     if (!canViewAs(ctx)) throw new TRPCError({ code: 'FORBIDDEN', message: 'View as is not available' });
-    const target = await ctx.db.selectFrom('app.User').select(['Username', 'IsActive', 'IsDemo']).where('UserId', '=', input.userId).executeTakeFirst();
-    if (!target?.IsDemo || !target.IsActive) throw new TRPCError({ code: 'FORBIDDEN', message: 'Only active demo accounts can be viewed as' });
+    const target = await ctx.db.selectFrom('app.User').select(['Username', 'IsActive', 'IsDemo', 'DeletedAt']).where('UserId', '=', input.userId).executeTakeFirst();
+    if (!target?.IsDemo || !target.IsActive || target.DeletedAt) throw new TRPCError({ code: 'FORBIDDEN', message: 'Only active demo accounts can be viewed as' });
     const realUserId = ctx.user.viewAs?.realUserId ?? ctx.user.id;
     await startSession(ctx, input.userId, realUserId);
     await audit(ctx.db, { userId: realUserId, action: 'viewAs.start', target: target.Username, details: { ip: ctx.req.ip } }, ctx.log);
@@ -89,7 +82,7 @@ export const authRouter = router({
   login: publicProcedure
     .input(z.object({ username: z.string().trim().min(1).max(200), password: z.string().min(1).max(256) }))
     .mutation(async ({ ctx, input }) => {
-      limitAttempts(ctx.req.ip);
+      await limitAttempts(ctx, input.username);
       const ad = await loadAdConnection(ctx.db, ctx.cfg);
 
       let dir;
@@ -100,6 +93,10 @@ export const authRouter = router({
           await audit(ctx.db, { userId: null, action: 'login.failed', target: input.username, details: { ip: ctx.req.ip } }, ctx.log);
           throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Wrong username or password' });
         }
+        if (err instanceof DirectoryConfigError) {
+          ctx.log.error({ err }, 'Active Directory settings refused');
+          throw new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: 'Sign-in is not set up correctly on this server. Contact IT.' });
+        }
         if (err instanceof DirectoryUnreachableError) {
           ctx.log.error({ err }, 'Active Directory unreachable');
           throw new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: 'Cannot reach Active Directory. Try again later or contact IT.' });
@@ -109,10 +106,10 @@ export const authRouter = router({
 
       const user = await ctx.db
         .selectFrom('app.User')
-        .select(['UserId', 'IsActive', 'IsDemo'])
+        .select(['UserId', 'IsActive', 'IsDemo', 'DeletedAt'])
         .where('Username', '=', dir.username)
         .executeTakeFirst();
-      if (!user || user.IsDemo) {
+      if (!user || user.IsDemo || user.DeletedAt) {
         await audit(ctx.db, { userId: null, action: 'login.notRegistered', target: dir.username, details: { ip: ctx.req.ip } }, ctx.log);
         throw new TRPCError({ code: 'FORBIDDEN', message: 'You are not registered in this app. Ask an administrator to add you.' });
       }
@@ -140,9 +137,17 @@ export const authRouter = router({
       return { ok: true };
     }),
 
+  /**
+   * Signs out on every device: the person's SessionVersion is raised, so all their cookies (other browsers, other PCs)
+   * stop working, not only this one. In View as, that person is the administrator.
+   */
   logout: publicProcedure.mutation(async ({ ctx }) => {
     ctx.res.clearCookie(SESSION_COOKIE, { path: '/' });
-    if (ctx.user) await audit(ctx.db, { userId: ctx.user.id, action: 'logout', target: ctx.user.username }, ctx.log);
+    if (ctx.user) {
+      const personId = ctx.user.viewAs?.realUserId ?? ctx.user.id;
+      await endSessions(ctx.db, personId);
+      await audit(ctx.db, { userId: personId, action: 'logout', target: ctx.user.username, details: { allDevices: true } }, ctx.log);
+    }
     return { ok: true };
   }),
 
@@ -154,10 +159,10 @@ export const authRouter = router({
     if (!ctx.cfg.ALLOW_TEST_LOGIN || !isLoopback(ctx.req.ip)) throw new TRPCError({ code: 'NOT_FOUND' });
     const user = await ctx.db
       .selectFrom('app.User')
-      .select(['UserId', 'IsActive'])
+      .select(['UserId', 'IsActive', 'DeletedAt'])
       .where('Username', '=', input.username.toLowerCase())
       .executeTakeFirst();
-    if (!user?.IsActive) throw new TRPCError({ code: 'FORBIDDEN', message: 'No active registered user with that username' });
+    if (!user?.IsActive || user.DeletedAt) throw new TRPCError({ code: 'FORBIDDEN', message: 'No active registered user with that username' });
     await startSession(ctx, Number(user.UserId));
     ctx.log.warn({ username: input.username }, 'TEST LOGIN used (ALLOW_TEST_LOGIN is on)');
     return { ok: true };

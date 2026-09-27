@@ -93,7 +93,7 @@ export async function acknowledge(db: Db, actor: Actor, commandId: string, ackId
     const eventId = await recordEvent(tx, { type: 'AWARD_ACKNOWLEDGED', entityType: 'AWARD_BATCH', entityId: a.AwardBatchId, payload: { revision: a.Revision }, actorUserId: actor.id });
     await addThreadEntry(tx, { entityType: 'AWARD_BATCH', entityId: a.AwardBatchId, kind: 'SYSTEM', body: `Acknowledged by Sales (revision ${a.Revision})${comment.trim() ? ` — ${comment.trim()}` : ''}`, authorUserId: actor.id, eventId });
     return { status: to };
-  });
+  }, { ackId, rowVer, comment });
 }
 
 /** Sales: a question on the award (nothing is blocked); Procurement gets an exception. */
@@ -113,7 +113,7 @@ export async function raiseQuery(db: Db, actor: Actor, commandId: string, ackId:
       title: `${b.DemandNo} · Sales asks about ${b.AbNo}`, note: comment.trim().slice(0, 1000), link: `/awards/${b.AwardBatchId}`, raisedBy: actor.id, excludeUserId: actor.id,
     });
     return { status: 'QUERY_RAISED' };
-  });
+  }, { ackId, rowVer, comment });
 }
 
 /** Procurement: the query is answered (in the comments); Sales is asked to acknowledge again. */
@@ -129,5 +129,5 @@ export async function answerQuery(db: Db, actor: Actor, commandId: string, ackId
     await addThreadEntry(tx, { entityType: 'AWARD_BATCH', entityId: a.AwardBatchId, kind: 'CLARIFICATION', body: `Answer: ${answer.trim()}`, authorUserId: actor.id, eventId });
     await askSales(tx, await batchOf(tx, a.AwardBatchId), ackId, a.Revision, actor.id);
     return { status: 'PENDING' };
-  });
+  }, { ackId, rowVer, answer });
 }

@@ -53,7 +53,7 @@ export const awardRouter = router({
     await assertEntityAccess(ctx.db, actor, 'AWARD_BATCH', input.awardBatchId, true);
     return runCommand(ctx.db, actor.id, input.commandId, 'award.comment', async (tx) => ({
       entryId: await addThreadEntry(tx, { entityType: 'AWARD_BATCH', entityId: input.awardBatchId, kind: 'COMMENT', body: input.body, authorUserId: actor.id }),
-    }));
+    }), { awardBatchId: input.awardBatchId, body: input.body });
   }),
   reasons: open.input(z.object({ context: z.enum(['UNAWARD', 'RELEASE']) })).query(({ ctx, input }) =>
     ctx.db.selectFrom('scm.ReasonCode').select(['ReasonCode', 'Description']).where('Context', '=', input.context).where('IsActive', '=', true).orderBy('ReasonCode').execute()),

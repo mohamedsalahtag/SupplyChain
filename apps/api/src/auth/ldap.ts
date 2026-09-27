@@ -23,6 +23,8 @@ export type DirectoryUser = {
 
 export class WrongCredentialsError extends Error {}
 export class DirectoryUnreachableError extends Error {}
+/** The directory answered, but the configured Base DN is wrong: the message is written for the administrator. */
+export class DirectoryConfigError extends Error {}
 
 const ATTRIBUTES = ['sAMAccountName', 'userPrincipalName', 'displayName', 'mail', 'department', 'title'];
 
@@ -43,12 +45,25 @@ export function escapeFilter(value: string): string {
   return value.replace(/[\\*()\0]/g, (c) => '\\' + c.charCodeAt(0).toString(16).padStart(2, '0'));
 }
 
+/**
+ * On a production server (NODE_ENV=production) passwords only travel to a directory whose certificate is checked:
+ * ldaps:// and no self-signed allowance (security review 2026-09-26, F08). Checked on save and before every bind.
+ */
+export function adTransportProblem(s: Pick<AdSettings, 'url' | 'allowSelfSigned'>, env = process.env.NODE_ENV): string | null {
+  if (env !== 'production') return null;
+  if (!/^ldaps:\/\//i.test(s.url)) return 'On the production server Active Directory must be reached over ldaps:// (port 636): ldap:// sends passwords in clear text.';
+  if (s.allowSelfSigned) return 'On the production server the directory certificate must be checked: turn off "allow self-signed" and install the company CA on the server.';
+  return null;
+}
+
 function client(s: AdSettings): Client {
+  const problem = adTransportProblem(s);
+  if (problem) throw new DirectoryConfigError(problem);
   return new Client({
     url: s.url,
     connectTimeout: 5000,
     timeout: 10000,
-    tlsOptions: s.url.startsWith('ldaps://') ? { rejectUnauthorized: !s.allowSelfSigned } : undefined,
+    tlsOptions: /^ldaps:\/\//i.test(s.url) ? { rejectUnauthorized: !s.allowSelfSigned } : undefined,
   });
 }
 
@@ -72,10 +87,10 @@ function toUser(e: Entry): DirectoryUser {
 export function explainSearchError(err: unknown, baseDn: string): Error {
   const text = String((err as Error)?.message ?? err);
   if (/referral|RefErr|0x0*a\b/i.test(text)) {
-    return new Error(`The Base DN "${baseDn}" is not in this directory. Use the domain's own, e.g. DC=sharbatlyfruit,DC=com.`);
+    return new DirectoryConfigError(`The Base DN "${baseDn}" is not in this directory. Use the domain's own, e.g. DC=sharbatlyfruit,DC=com.`);
   }
   if (/0000208D|NO_OBJECT|No Such Object/i.test(text)) {
-    return new Error(`The Base DN "${baseDn}" does not exist in Active Directory.`);
+    return new DirectoryConfigError(`The Base DN "${baseDn}" does not exist in Active Directory.`);
   }
   return err instanceof Error ? err : new Error(text);
 }

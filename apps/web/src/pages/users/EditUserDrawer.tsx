@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { App, Button, Descriptions, Drawer, Select, Space, Switch, Typography } from 'antd';
-import { SaveOutlined } from '@ant-design/icons';
+import { DeleteOutlined, SaveOutlined } from '@ant-design/icons';
 import { P } from '@supplychain/shared';
 import { trpc } from '../../lib/trpc';
 import { useCan, useMe } from '../../lib/auth';
@@ -79,8 +79,51 @@ export function EditUserDrawer({ user, onClose }: { user: UserRow | null; onClos
           {(editable || companiesEditable) && (
             <Button type="primary" icon={<SaveOutlined />} loading={update.isPending || setCompanies.isPending} onClick={onSave}>Save</Button>
           )}
+          {can(P.usersDelete) && <DeleteUser user={user} onDeleted={onClose} />}
         </Space>
       )}
     </Drawer>
+  );
+}
+
+/** Delete: states first whether the user is deleted outright or archived (their name is on records), then confirms. */
+function DeleteUser({ user, onDeleted }: { user: UserRow; onDeleted: () => void }) {
+  const { message, modal } = App.useApp();
+  const utils = trpc.useUtils();
+  const preview = trpc.users.deletePreview.useQuery({ userId: user.UserId });
+  const del = trpc.users.delete.useMutation();
+  const p = preview.data;
+  const onDelete = () => modal.confirm({
+    title: `Delete ${user.DisplayName}?`,
+    okText: p?.mode === 'archive' ? 'Archive and remove' : 'Delete',
+    okButtonProps: { danger: true },
+    content: p?.mode === 'archive'
+      ? `${user.DisplayName} is on records, so the account is archived: removed from this list, unable to sign in, roles and companies removed. The records keep their name. The same person can be registered again later.`
+      : `${user.DisplayName} has no records; the account, its roles and companies are deleted.`,
+    onOk: async () => {
+      try {
+        const r = await del.mutateAsync({ userId: user.UserId });
+        message.success(r.mode === 'archive' ? `${r.displayName} archived` : `${r.displayName} deleted`);
+        await Promise.all([utils.users.list.invalidate(), utils.security.invalidate()]);
+        onDeleted();
+      } catch (err) {
+        message.error(err instanceof Error ? err.message : String(err));
+      }
+    },
+  });
+  return (
+    <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 12, marginTop: 8 }}>
+      <Typography.Text strong type="danger">Delete user</Typography.Text>
+      {p && (
+        <Typography.Paragraph type="secondary" style={{ fontSize: 12, margin: '4px 0 8px' }}>
+          {p.refusal ?? (p.mode === 'archive'
+            ? `On records (${p.references.slice(0, 4).map((r) => `${r.count} ${r.label}`).join(', ')}${p.references.length > 4 ? ', …' : ''}): the account is archived, the records keep the name.`
+            : 'No records: the account is deleted outright.')}
+        </Typography.Paragraph>
+      )}
+      <Button danger icon={<DeleteOutlined />} disabled={!p || !!p.refusal} loading={preview.isPending || del.isPending} onClick={onDelete} data-testid="user-delete">
+        Delete user…
+      </Button>
+    </div>
   );
 }

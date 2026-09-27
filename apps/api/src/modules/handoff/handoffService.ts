@@ -78,7 +78,7 @@ export async function saveTerms(db: Db, actor: Actor, commandId: string, batchId
       WHEN NOT MATCHED THEN INSERT (AwardBatchId, SupplierCode, Incoterm, PortOfLoadingId, PortOfDischargeId, PaymentTerms, Currency, UpdatedBy, UpdatedAt)
         VALUES (${batchId}, ${supplierCode}, ${t.incoterm}, ${t.portOfLoadingId}, ${t.portOfDischargeId}, ${t.paymentTerms}, ${currency}, ${actor.id}, SYSUTCDATETIME());`.execute(tx);
     return { saved: true };
-  });
+  }, { batchId, supplierCode, t });
 }
 
 /** Hand off one supplier of an award to the PO team. Without Sales' acknowledgement only with `confirmWithoutAck` and a reason. */
@@ -134,7 +134,7 @@ export async function sendHandoff(db: Db, actor: Actor, commandId: string, batch
       link: `/handoffs/${hoId}`, raisedBy: actor.id,
     });
     return { handoffId: hoId, hoNo: head.HoNo, sentWithoutAck: r.ackMissing };
-  });
+  }, { batchId, supplierCode, opts });
 }
 
 type HandoffRow = { HandoffId: string; HoNo: string; AwardBatchId: string; SupplierCode: string; CompanyCode: string; Status: string; DemandId: string; AbNo: string };
@@ -168,7 +168,7 @@ export async function acceptHandoff(db: Db, actor: Actor, commandId: string, han
       title: `Prepare the PO for ${h.HoNo}`, note: 'Select the missing SKUs, build the PO draft, validate and submit it to SAP', link: `/handoffs/${handoffId}`, raisedBy: actor.id,
     });
     return { accepted: true };
-  });
+  }, { handoffId, rowVer });
 }
 
 /**
@@ -213,7 +213,7 @@ export async function returnHandoff(db: Db, actor: Actor, commandId: string, han
     await updateWithRowVer(tx, 'scm.Handoff', 'HandoffId', handoffId, rowVer, sql`Status = Status`);
     await returnHandoffTx(tx, actor.id, true, h, reasonCode, comment.trim(), null);
     return { returned: true };
-  });
+  }, { handoffId, rowVer, reasonCode, comment });
 }
 
 /**

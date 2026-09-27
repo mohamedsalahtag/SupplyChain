@@ -33,6 +33,7 @@ import { RfqPage } from './pages/rfq/RfqPage';
 import { RfqsListPage } from './pages/rfq/RfqsListPage';
 import { DemandsListPage } from './pages/demands/DemandsListPage';
 import { ViewAsBanner, ViewAsMenu } from './components/ViewAs';
+import { HelpButton } from './components/HelpButton';
 
 type Item = { key: string; label: string; perm: string };
 type Group = { key: string; label: string; icon: ReactNode; items: Item[] };
@@ -116,11 +117,12 @@ export function AppLayout() {
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Layout.Header style={{ display: 'flex', alignItems: 'center', paddingInline: 16, height: 40, lineHeight: '40px', ...(me.viewAs ? { background: '#ad4e00' } : {}) }}>
-        <img src={ui.data?.iconDataUrl ?? '/favicon.svg'} alt="" width={22} height={22} style={{ marginInlineEnd: 8, borderRadius: 4, objectFit: 'contain' }} />
+        <img src={ui.data?.iconDataUrl ?? '/logo.ico'} alt="" width={22} height={22} style={{ marginInlineEnd: 8, borderRadius: 4, objectFit: 'contain' }} />
         <Typography.Text strong style={{ color: '#fff', fontSize: 14, flex: 1 }}>
           {ui.data?.siteName ?? ''}
         </Typography.Text>
         <ViewAsMenu />
+        <HelpButton />
         <Dropdown trigger={['click']} menu={{ items: [{ key: 'logout', icon: <LogoutOutlined />, label: 'Log out', onClick: onLogout }] }}>
           <a data-testid="user-menu" style={{ color: '#fff' }} onClick={(e) => e.preventDefault()}>
             <UserOutlined /> {me.displayName} <DownOutlined style={{ fontSize: 10 }} />

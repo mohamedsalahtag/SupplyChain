@@ -2,7 +2,7 @@
 import { sql, type SqlBool } from 'kysely';
 import { z } from 'zod';
 import { DomainError } from '../workflow/errors.js';
-import { rowVerHex, updateWithRowVer, withTx, type Db } from '../workflow/tx.js';
+import { rowVerHex, updateWithRowVer, withTx, type Db, type Tx } from '../workflow/tx.js';
 
 const isTimeZone = (tz: string) => {
   try {
@@ -85,18 +85,25 @@ export async function companyOptions(db: Db) {
   return db.selectFrom('scm.Company').select(['CompanyCode', 'Name']).where('IsActive', '=', true).orderBy('CompanyCode').execute();
 }
 
-/** Replaces a user's companies (only active, existing companies). */
-export async function setUserCompanies(db: Db, userId: number, companyCodes: string[]): Promise<void> {
+/**
+ * Replaces a user's companies (only active, existing companies). An archived user is not found. `inTx` runs in the same
+ * transaction (Users page: end the user's sessions and write the audit row).
+ */
+export async function setUserCompanies(db: Db, userId: number, companyCodes: string[], inTx?: (tx: Tx, changed: boolean) => Promise<void>): Promise<{ changed: boolean }> {
   const codes = [...new Set(companyCodes)];
-  await withTx(db, async (tx) => {
-    const user = await tx.selectFrom('app.User').select('UserId').where('UserId', '=', userId).executeTakeFirst();
+  return withTx(db, async (tx) => {
+    const user = await tx.selectFrom('app.User').select('UserId').where('UserId', '=', userId).where('DeletedAt', 'is', null).executeTakeFirst();
     if (!user) throw new DomainError('NOT_FOUND', 'User not found', 404);
     if (codes.length) {
       const found = await tx.selectFrom('scm.Company').select('CompanyCode').where('CompanyCode', 'in', codes).where('IsActive', '=', true).execute();
       if (found.length !== codes.length) throw new DomainError('BAD_COMPANY', 'Unknown or inactive company');
     }
+    const old = (await tx.selectFrom('scm.UserCompany').select('CompanyCode').where('UserId', '=', userId).execute()).map((r) => r.CompanyCode);
+    const changed = old.length !== codes.length || old.some((c) => !codes.includes(c));
     await tx.deleteFrom('scm.UserCompany').where('UserId', '=', userId).execute();
     if (codes.length) await tx.insertInto('scm.UserCompany').values(codes.map((CompanyCode) => ({ UserId: userId, CompanyCode }))).execute();
+    await inTx?.(tx, changed);
+    return { changed };
   });
 }
 

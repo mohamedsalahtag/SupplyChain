@@ -171,7 +171,7 @@ export async function createRfq(db: Db, actor: Actor, commandId: string, input: 
     await addThreadEntry(tx, { entityType: 'DEMAND', entityId: d.DemandId, kind: 'SYSTEM', body: `${rfqNo} created (${weeks.join(', ')})`, authorUserId: actor.id, eventId });
     for (const a of asks.values()) await closeInbox(tx, 'OPEN_QTY_AGING', 'LINE', a.lineId, actor.id);
     return { rfqId, rfqNo };
-  });
+  }, { input });
 }
 
 export async function sendRfq(db: Db, actor: Actor, commandId: string, rfqId: string, rowVer: string): Promise<{ sent: true }> {
@@ -190,7 +190,7 @@ export async function sendRfq(db: Db, actor: Actor, commandId: string, rfqId: st
       number: r.RfqNo, title: `${d.DemandNo} · ${n} supplier(s)`, link: link(rfqId), raisedBy: actor.id,
     });
     return { sent: true as const };
-  });
+  }, { rfqId, rowVer });
 }
 
 export async function releaseQty(db: Db, actor: Actor, commandId: string, rfqLineId: string, qty: string, reasonCode: string, comment: string) {
@@ -209,7 +209,7 @@ export async function releaseQty(db: Db, actor: Actor, commandId: string, rfqLin
     await addThreadEntry(tx, { entityType: 'RFQ', entityId: r.RfqId, kind: 'SYSTEM', body: `Released ${formatQty(q)} ${rl.Unit} back to Open (${reasonCode})${comment ? ` — ${comment}` : ''}`, authorUserId: actor.id, eventId });
     await refreshQuoteTask(tx, r, actor.id);
     return { released: formatQty(q) };
-  });
+  }, { rfqLineId, qty, reasonCode, comment });
 }
 
 export async function cancelRfq(db: Db, actor: Actor, commandId: string, rfqId: string, rowVer: string, reasonCode: string, comment: string) {
@@ -231,5 +231,5 @@ export async function cancelRfq(db: Db, actor: Actor, commandId: string, rfqId: 
     await addThreadEntry(tx, { entityType: 'RFQ', entityId: rfqId, kind: 'SYSTEM', body: `Cancelled (${reasonCode})${comment ? ` — ${comment}` : ''}; all its quantity is Open again`, authorUserId: actor.id, eventId });
     await addThreadEntry(tx, { entityType: 'DEMAND', entityId: r.DemandId, kind: 'SYSTEM', body: `${r.RfqNo} cancelled; its quantity is Open again`, authorUserId: actor.id, eventId });
     return { cancelled: true as const };
-  });
+  }, { rfqId, rowVer, reasonCode, comment });
 }

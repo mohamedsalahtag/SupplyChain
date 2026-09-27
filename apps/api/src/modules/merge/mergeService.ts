@@ -125,7 +125,7 @@ export async function executeMerge(db: Db, actor: Actor, commandId: string, inpu
       await queueNotification(tx, { type: 'MERGE_EXECUTED', userId: Number(d.CreatedBy), entityType: 'MERGE', entityId: mergeId });
     }
     return { mergeId, mergeNo };
-  });
+  }, { input });
 }
 
 export async function unmerge(db: Db, actor: Actor, commandId: string, mergeId: string, rowVer: string, reason: string): Promise<{ unmerged: true }> {
@@ -166,5 +166,5 @@ export async function unmerge(db: Db, actor: Actor, commandId: string, mergeId: 
       await queueNotification(tx, { type: 'MERGE_UNDONE', userId: Number(d.CreatedBy), entityType: 'MERGE', entityId: mergeId });
     }
     return { unmerged: true as const };
-  });
+  }, { mergeId, rowVer, reason });
 }

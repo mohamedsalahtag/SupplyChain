@@ -29,6 +29,10 @@ export interface Database {
     CreatedBy: string;
     LastLoginAt: Date | null;
     IsDemo: Generated<boolean>;
+    /** Set when an administrator deletes a user who is on records (archived: hidden, cannot sign in). Migration 0029. */
+    DeletedAt: Generated<Date | null>;
+    /** Raised to end every session of the user (sign-out, disabled, archived, roles/companies changed). Migration 0030. */
+    SessionVersion: Generated<number>;
   };
   'app.Role': {
     RoleId: Generated<number>;
@@ -120,6 +124,8 @@ export interface Database {
     RowsUpdated: number | null;
     RowsMarkedMissing: number | null;
     Message: string | null;
+    /** Migration 0031: last sign of life of a running sync (NULL for older runs). */
+    HeartbeatAt: Date | null;
   };
 
   // ---- scm: Demand-to-PO workflow (plan v5) ----
@@ -201,7 +207,7 @@ export interface Database {
     ClosedBy: number | null;
     ExcludeUserId: Generated<number | null>;
   };
-  'scm.CommandLog': { CommandId: string; UserId: number; CommandName: string; ResultJson: string | null; CreatedAt: Generated<Date> };
+  'scm.CommandLog': { CommandId: string; UserId: number; CommandName: string; ResultJson: string | null; InputHash: string | null; CreatedAt: Generated<Date> };
   'scm.Attachment': {
     AttachmentId: Generated<string>;
     EntityType: string;

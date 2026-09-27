@@ -12,6 +12,7 @@
     "test": "npm run test --workspaces --if-present",
     "test:db": "npm run test:db -w apps/api",
     "build": "npm run build -w apps/web",
+    "help:pdf": "node apps/web/scripts/help-pdf.mjs",
     "start": "npm run start -w apps/api"
   },
   "devDependencies": {

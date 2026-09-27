@@ -4,7 +4,9 @@ import { sql } from 'kysely';
 import { z } from 'zod';
 import { audit } from '../../auth/audit.js';
 import { loadSapConnection } from '../../settings/sapConnection.js';
-import { procedure, router } from '../../trpc/trpc.js';
+import type { AuthUser } from '../../auth/authUser.js';
+import { procedure, router, type Context } from '../../trpc/trpc.js';
+import { loadActor } from '../workflow/access.js';
 import { loadCodeCounts } from '../sync/codeList.js';
 import { launchSync } from '../sync/launch.js';
 import { loadPoInclude, loadWatermark, poIncludeSchema, refreshPoTypes, runPoSync, savePoInclude, TYPES_KEY } from './poSync.js';
@@ -27,11 +29,19 @@ const listInput = z.object({
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
 });
 
+/**
+ * The companies whose SAP orders the user may see (security review 2026-09-26, F05): md.PurchaseOrder.CompanyCode is the
+ * SAP company code, the same code as scm.Company / scm.UserCompany. Administrators see every active company (loadActor).
+ */
+const companiesOf = async (ctx: Pick<Context, 'db'> & { user: AuthUser }) => [...(await loadActor(ctx.db, ctx.user)).companies];
+
 const contains = (s: string) => `%${s.replace(/[[%_]/g, '[$&]')}%`;
 
 export const purchaseOrdersRouter = router({
   list: view.input(listInput).query(async ({ ctx, input: f }) => {
-    let q = ctx.db.selectFrom('md.PurchaseOrder as po').leftJoin('md.Supplier as s', 's.SupplierCode', 'po.SupplierCode');
+    const companies = await companiesOf(ctx);
+    if (!companies.length) return { total: 0, rows: [] };
+    let q = ctx.db.selectFrom('md.PurchaseOrder as po').leftJoin('md.Supplier as s', 's.SupplierCode', 'po.SupplierCode').where('po.CompanyCode', 'in', companies);
     if (f.q) {
       const p = contains(f.q);
       q = q.where((eb) => eb.or([eb('po.PurchaseOrder', 'like', p), eb('po.SupplierCode', 'like', p), eb('s.Name', 'like', p)]));
@@ -56,9 +66,14 @@ export const purchaseOrdersRouter = router({
     };
   }),
 
-  /** One order's lines, with the material description when the material is in Materials. */
-  lines: view.input(z.object({ purchaseOrder: z.string().max(20) })).query(async ({ ctx, input }) =>
-    (
+  /** One order's lines, with the material description when the material is in Materials. Another company's order: not found. */
+  lines: view.input(z.object({ purchaseOrder: z.string().max(20) })).query(async ({ ctx, input }) => {
+    const companies = await companiesOf(ctx);
+    const po = companies.length
+      ? await ctx.db.selectFrom('md.PurchaseOrder').select('PurchaseOrder').where('PurchaseOrder', '=', input.purchaseOrder).where('CompanyCode', 'in', companies).executeTakeFirst()
+      : undefined;
+    if (!po) throw new TRPCError({ code: 'NOT_FOUND', message: 'Purchase order not found' });
+    return (
       await ctx.db
         .selectFrom('md.PurchaseOrderLine as l')
         .leftJoin('md.Material as m', 'm.MaterialCode', 'l.Material')
@@ -66,12 +81,14 @@ export const purchaseOrdersRouter = router({
         .where('l.PurchaseOrder', '=', input.purchaseOrder)
         .orderBy('l.ItemNo')
         .execute()
-    ).map((l) => ({ ...l, ItemNo: Number(l.ItemNo), Quantity: Number(l.Quantity), NetPrice: Number(l.NetPrice), PriceQuantity: Number(l.PriceQuantity), MaterialDescription: l.MaterialDescription ?? '' })),
-  ),
+    ).map((l) => ({ ...l, ItemNo: Number(l.ItemNo), Quantity: Number(l.Quantity), NetPrice: Number(l.NetPrice), PriceQuantity: Number(l.PriceQuantity), MaterialDescription: l.MaterialDescription ?? '' }));
+  }),
 
-  typeOptions: view.query(async ({ ctx }) =>
-    (await ctx.db.selectFrom('md.PurchaseOrder').select('OrderType').distinct().orderBy('OrderType').execute()).map((r) => r.OrderType),
-  ),
+  typeOptions: view.query(async ({ ctx }) => {
+    const companies = await companiesOf(ctx);
+    if (!companies.length) return [];
+    return (await ctx.db.selectFrom('md.PurchaseOrder').select('OrderType').distinct().where('CompanyCode', 'in', companies).orderBy('OrderType').execute()).map((r) => r.OrderType);
+  }),
 
   /** Z types SAP offers (last check), the chosen types and start date, and the watermark. */
   include: procedure.meta({ permission: P.configOpen }).query(async ({ ctx }) => {

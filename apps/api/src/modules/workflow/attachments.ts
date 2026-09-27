@@ -30,6 +30,42 @@ export const ALLOWED_TYPES: Record<string, string> = {
   '.eml': 'message/rfc822',
 };
 
+const OLE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]; // Office 97–2003 and Outlook .msg (compound file)
+const ZIP = [0x50, 0x4b, 0x03, 0x04]; // .xlsx / .docx are zip packages
+const startsWith = (data: Buffer, bytes: number[], at = 0) => bytes.every((b, i) => data[at + i] === b);
+const ascii = (s: string) => [...s].map((c) => c.charCodeAt(0));
+
+/** Text types: no signature, but no binary content either (UTF-16 text with its byte-order mark is fine). */
+function looksLikeText(data: Buffer): boolean {
+  if (startsWith(data, [0xff, 0xfe]) || startsWith(data, [0xfe, 0xff])) return true;
+  return !data.subarray(0, 8192).includes(0);
+}
+
+/** What the first bytes of each allowed type must be, so a renamed file (an .exe called quote.pdf) is refused. */
+const SIGNATURES: Record<string, (d: Buffer) => boolean> = {
+  '.pdf': (d) => d.subarray(0, 1024).includes('%PDF-'),
+  '.png': (d) => startsWith(d, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  '.jpg': (d) => startsWith(d, [0xff, 0xd8, 0xff]),
+  '.jpeg': (d) => startsWith(d, [0xff, 0xd8, 0xff]),
+  '.gif': (d) => startsWith(d, ascii('GIF87a')) || startsWith(d, ascii('GIF89a')),
+  '.webp': (d) => startsWith(d, ascii('RIFF')) && startsWith(d, ascii('WEBP'), 8),
+  '.xlsx': (d) => startsWith(d, ZIP),
+  '.docx': (d) => startsWith(d, ZIP),
+  '.xls': (d) => startsWith(d, OLE),
+  '.doc': (d) => startsWith(d, OLE),
+  '.msg': (d) => startsWith(d, OLE),
+  '.csv': looksLikeText,
+  '.eml': looksLikeText,
+};
+
+/** Throws FILE_CONTENT when the bytes are not what the file name says. */
+export function assertContentMatches(fileName: string, data: Buffer): void {
+  const check = SIGNATURES[extname(fileName).toLowerCase()];
+  if (!check || !check(data)) {
+    throw new DomainError('FILE_CONTENT', `${fileName} is not a real ${extname(fileName).slice(1).toUpperCase()} file (its content does not match its type).`);
+  }
+}
+
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../..');
 export const attachmentsRoot = (configured: string) => (configured ? resolve(configured) : join(REPO_ROOT, 'data', 'attachments'));
 
@@ -59,6 +95,7 @@ export async function saveAttachment(tx: Tx, a: NewAttachment): Promise<{ attach
   const contentType = contentTypeFor(fileName);
   if (a.data.length === 0) throw new DomainError('FILE_EMPTY', 'The file is empty');
   if (a.data.length > a.maxBytes) throw new DomainError('FILE_TOO_LARGE', `The file is larger than ${Math.round(a.maxBytes / 1_048_576)} MB`);
+  assertContentMatches(fileName, a.data);
 
   let versionNo = 1;
   if (a.supersedesId) {

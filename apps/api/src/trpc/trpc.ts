@@ -6,6 +6,7 @@ import type { Logger } from 'pino';
 import type { AuthUser } from '../auth/authUser.js';
 import type { Config } from '../config.js';
 import type { Database } from '../db/schema.js';
+import { newErrorId } from './errorId.js';
 import { DomainError, toTrpcError } from '../modules/workflow/errors.js';
 
 export type Context = {
@@ -24,11 +25,23 @@ type Meta = { permission: string };
 
 // isDev false: error replies never include server stack traces (they stay in the log).
 // Workflow business-rule errors carry a stable code (and details) for the UI.
+// An unexpected fault (a SQL error, a bug) never reaches the browser: the reply says "internal error" with an error id,
+// and the full error is logged under that id (security review 2026-09-26). 4xx messages are written for the user and stay.
 const t = initTRPC.context<Context>().meta<Meta>().create({
   isDev: false,
-  errorFormatter: ({ shape, error }) => {
+  errorFormatter: ({ shape, error, ctx, path }) => {
     const cause = error.cause;
-    return cause instanceof DomainError ? { ...shape, data: { ...shape.data, domainCode: cause.code, details: cause.details ?? null } } : shape;
+    if (cause instanceof DomainError) return { ...shape, data: { ...shape.data, domainCode: cause.code, details: cause.details ?? null } };
+    if (error.code !== 'INTERNAL_SERVER_ERROR') return shape;
+    const log = (obj: object, msg: string) => (ctx ? ctx.log.error(obj, msg) : console.error(msg, obj));
+    // A TRPCError thrown on purpose (no foreign cause) carries a message written for the user.
+    if (!cause || cause instanceof TRPCError) {
+      log({ path, err: error }, 'tRPC internal error');
+      return shape;
+    }
+    const errorId = newErrorId();
+    log({ errorId, path, err: cause }, 'Internal error');
+    return { ...shape, message: `Internal error. Quote this reference to IT: ${errorId}`, data: { ...shape.data, errorId } };
   },
 });
 

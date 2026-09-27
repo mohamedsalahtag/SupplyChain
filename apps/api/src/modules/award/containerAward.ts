@@ -158,7 +158,7 @@ ${threadEntrySql(t++, { entityType: 'AWARD_BATCH', entityId: awardBatchId, kind:
     }
     for (let i = 0; i < rows.length; i += 40) await runSliceBatch(tx, rows.slice(i, i + 40));
     return { awardBatchId, abNo, warnings: c.warnings };
-  });
+  }, { rfqId, rfqRowVer, input });
 }
 
 /** Un-award n containers of an award container: their quantity goes back (quotes kept → Quoted, or released → Open). */
@@ -196,5 +196,5 @@ export async function unawardContainers(db: Db, actor: Actor, commandId: string,
     await resetAck(tx, batchId, 'RESET_UNAWARD', actor.id);
     await refreshHandoffTasks(tx, batchId);
     return { unawarded: count };
-  });
+  }, { awardContainerId, rowVer, count, mode, reasonCode, comment });
 }

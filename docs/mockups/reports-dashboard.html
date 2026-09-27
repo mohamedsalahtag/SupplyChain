@@ -1,0 +1,689 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reports · Dashboard candidates</title>
+<style>
+  :root { --green:#1f6f43; --line:#f0f0f0; --border:#d9d9d9; --bg:#f5f5f5; --text:#1f1f1f; --muted:#8c8c8c; --blue:#1677ff; --red:#cf1322; --amber:#d48806;
+          /* the five quantity classes of the Demands list progress bar (spec 21) — users already know them */
+          --st-open:#bfbfbf; --st-rfq:#722ed1; --st-awarded:#52c41a; --st-po:#237804; --st-cancel:#ff7875;
+          /* two-series pair, validated (dataviz slots 1 and 2) */
+          --s1:#2a78d6; --s2:#eb6834; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:13px/1.5 -apple-system,"Segoe UI",Roboto,Arial,sans-serif; color:var(--text); background:var(--bg); }
+  header { height:40px; background:#001529; color:#fff; display:flex; align-items:center; padding:0 16px; gap:8px; position:sticky; top:0; z-index:20; }
+  header .logo { width:22px; height:22px; border-radius:4px; background:var(--green); }
+  .shell { display:flex; min-height:calc(100vh - 40px); }
+  nav { width:190px; background:#fff; border-right:1px solid var(--line); padding:6px 0; flex-shrink:0; }
+  nav .grp { color:var(--muted); padding:8px 16px 2px; font-size:12px; }
+  nav a { display:block; padding:5px 16px 5px 28px; color:var(--text); cursor:default; }
+  nav a.active { background:#e6f4ea; color:var(--green); border-right:3px solid var(--green); }
+  main { flex:1; padding:12px 16px 80px; min-width:0; }
+  h5 { font-size:16px; margin:0; }
+  .muted { color:var(--muted); } .small { font-size:12px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:8px; }
+  .card-h { padding:8px 12px; border-bottom:1px solid var(--line); display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .pad { padding:10px 12px; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { padding:5px 8px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+  th { background:#fafafa; font-size:12px; color:#595959; font-weight:600; }
+  td.num, th.num { text-align:right; font-variant-numeric: tabular-nums; }
+  .tag { display:inline-block; border-radius:4px; padding:0 7px; font-size:12px; border:1px solid; white-space:nowrap; line-height:20px; }
+  .t-grey { color:#595959; border-color:#d9d9d9; background:#fafafa; } .t-blue { color:#0958d9; border-color:#91caff; background:#e6f4ff; }
+  .t-green { color:#389e0d; border-color:#b7eb8f; background:#f6ffed; } .t-gold { color:#d48806; border-color:#ffe58f; background:#fffbe6; }
+  .t-orange { color:#d46b08; border-color:#ffd591; background:#fff7e6; } .t-purple { color:#531dab; border-color:#d3adf7; background:#f9f0ff; }
+  .t-red { color:#cf1322; border-color:#ffa39e; background:#fff1f0; }
+  button { font:inherit; border:1px solid var(--border); background:#fff; border-radius:4px; padding:3px 12px; cursor:pointer; }
+  button.primary { background:var(--green); color:#fff; border-color:var(--green); }
+  button.sm { padding:1px 8px; font-size:12px; }
+  a { color:var(--blue); cursor:pointer; text-decoration:none; }
+  .banner { border-radius:6px; padding:8px 12px; margin-bottom:10px; }
+  .b-info { background:#e6f4ff; border:1px solid #91caff; } .b-warn { background:#fffbe6; border:1px solid #ffe58f; }
+  .tabs { display:flex; gap:2px; border-bottom:1px solid var(--line); margin:0 0 10px; flex-wrap:wrap; }
+  .tab { padding:6px 14px; cursor:pointer; border-bottom:2px solid transparent; color:#595959; }
+  .tab.active { color:var(--green); border-bottom-color:var(--green); font-weight:600; }
+  .badge { background:#8c8c8c; color:#fff; border-radius:10px; padding:0 7px; font-size:11px; margin-left:6px; }
+  .filters { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .chips { display:inline-flex; gap:4px; } .chips span { border:1px solid var(--border); border-radius:4px; padding:1px 8px; cursor:pointer; background:#fff; }
+  .chips span.on { border-color:var(--green); color:var(--green); background:#e6f4ea; }
+  .seg { display:inline-flex; background:#f5f5f5; border-radius:4px; padding:2px; } .seg span { padding:1px 10px; border-radius:3px; cursor:pointer; color:#595959; }
+  .seg span.on { background:#fff; color:#1f1f1f; box-shadow:0 1px 2px rgba(0,0,0,.08); }
+  .page { display:none; } .page.active { display:block; }
+
+  /* candidate cards */
+  .grid { display:grid; grid-template-columns: repeat(12, 1fr); gap:12px; align-items:start; }
+  .c12 { grid-column:span 12; } .c8 { grid-column:span 8; } .c7 { grid-column:span 7; } .c6 { grid-column:span 6; } .c5 { grid-column:span 5; } .c4 { grid-column:span 4; }
+  .rs2 { grid-row:span 2; }
+  @media (max-width:1150px) { .c8,.c7,.c6,.c5,.c4 { grid-column:span 12; } .rs2 { grid-row:auto; } }
+  .grp-h { margin:20px 0 8px; display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }
+  .grp-h h6 { font-size:14px; margin:0; }
+  .w .card-h b { font-size:13px; }
+  .keep { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--border); border-radius:4px; padding:0 8px; cursor:pointer; background:#fff; font-size:12px; line-height:20px; user-select:none; }
+  .keep input { margin:0; }
+  .w.kept { border-color:var(--green); box-shadow:0 0 0 2px #e6f4ea; }
+  .w.kept .keep { border-color:var(--green); color:var(--green); background:#e6f4ea; }
+  .chip { font-size:11px; border-radius:10px; padding:0 8px; border:1px solid; line-height:18px; }
+  .chip.now { color:#0958d9; border-color:#91caff; background:#e6f4ff; } .chip.period { color:#531dab; border-color:#d3adf7; background:#f9f0ff; }
+  .aud { font-size:11px; color:#595959; background:#fafafa; border:1px solid #e8e8e8; border-radius:10px; padding:0 8px; line-height:18px; }
+  .rec { font-size:11px; color:#389e0d; border:1px solid #b7eb8f; background:#f6ffed; border-radius:10px; padding:0 8px; line-height:18px; }
+  .tog { margin-left:auto; font-size:12px; color:var(--muted); white-space:nowrap; } .tog a { margin-left:6px; } .tog a.on { color:#1f1f1f; font-weight:600; cursor:default; }
+  .foot { border-top:1px dashed var(--line); padding:8px 12px; font-size:12px; color:#595959; display:grid; grid-template-columns:64px 1fr; gap:2px 10px; }
+  .foot b { color:#8c8c8c; font-weight:600; }
+  .tiles { display:grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap:10px; }
+  .tile { border:1px solid var(--line); border-radius:6px; padding:8px 10px; background:#fff; }
+  .tile .l { font-size:12px; color:#595959; } .tile .v { font-size:22px; font-weight:600; line-height:1.25; } .tile .s { font-size:11px; color:var(--muted); }
+  .tile.warn .v { color:var(--amber); } .tile.bad .v { color:var(--red); } .tile.ok .v { color:#389e0d; } .tile.dim .v { color:var(--muted); }
+  .hbar { display:flex; align-items:center; gap:8px; margin:4px 0; font-size:12px; }
+  .hbar .lab { width:220px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .hbar .trk { flex:1; height:12px; background:#fafafa; border-radius:3px; }
+  .hbar .fill { height:12px; border-radius:3px; background:var(--green); min-width:2px; }
+  .hbar .val { width:150px; flex-shrink:0; color:#595959; font-variant-numeric: tabular-nums; }
+  .stack { display:flex; height:24px; border-radius:4px; overflow:hidden; background:#f5f5f5; }
+  .stack span { display:flex; align-items:center; justify-content:center; font-size:11px; white-space:nowrap; overflow:hidden; border-right:2px solid #fff; }
+  .stack span:last-child { border-right:0; }
+  .legend { display:flex; gap:12px; flex-wrap:wrap; font-size:12px; color:#595959; margin-top:6px; }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:-1px; }
+  .legend i.line { height:2px; width:14px; border-radius:0; background:#1f1f1f; vertical-align:2px; }
+  svg text { font:11px -apple-system,"Segoe UI",Roboto,Arial,sans-serif; fill:#595959; }
+  .tv { display:none; } .w.table .tv { display:block; } .w.table .cv { display:none; }
+  .due { color:var(--red); border-color:#ffa39e; background:#fff1f0; }
+  .sub { font-size:12px; color:#595959; margin:0 0 6px; }
+  .qrow td:first-child { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:200px; }
+  .dept { background:#fafafa; font-size:12px; color:#595959; padding:3px 8px; }
+  .selbar { position:fixed; left:190px; right:0; bottom:0; background:#fff; border-top:2px solid var(--green); padding:8px 16px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; z-index:15; box-shadow:0 -2px 8px rgba(0,0,0,.06); }
+  @media (max-width:900px) { nav { display:none; } .selbar { left:0; } }
+  .selbar .list { flex:1; min-width:200px; font-size:12px; color:#595959; }
+  .selbar .list b { color:#1f1f1f; }
+  .no table td { font-size:12px; }
+</style>
+</head>
+<body>
+<header><div class="logo"></div><b>Supply chain</b><span style="margin-left:auto" class="small">Mockup — Reports › Dashboard tab · candidates to choose from · tick <b>Keep</b> on the cards you want</span></header>
+<div class="shell">
+<nav>
+  <div class="grp">General</div>
+  <a>My work <span class="badge" style="background:#ff4d4f">11</span></a>
+  <div class="grp">Master data</div>
+  <a>Materials</a><a>Suppliers</a>
+  <div class="grp">Purchasing</div>
+  <a>Demands</a><a>RFQs</a><a>Awards</a><a>Handoffs</a><a>PO drafts &amp; SAP</a><a>Change requests</a><a>Purchase orders</a><a class="active">Reports</a>
+  <div class="grp">Administration</div>
+  <a>Users</a><a>Security</a><a>Operations status</a><a>Configuration</a>
+</nav>
+<main>
+
+  <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+    <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap"><h5>Reports</h5><span class="muted">What was asked, what was ordered, and how long it took. Quantities are never added across units.</span></div>
+    <div class="filters">
+      <span class="small muted">Company</span>
+      <span class="chips" id="companies"><span class="on" data-c="1000">1000 KSA</span><span class="on" data-c="2000">2000 UAE</span><span class="on" data-c="3000">3000 BAH</span></span>
+      <span class="small muted" style="margin-left:6px">Period</span>
+      <span class="seg" id="period"><span class="on" data-p="Last 12 weeks">Last 12 weeks</span><span data-p="Last 3 months">Last 3 months</span><span data-p="This year">This year</span><span data-p="From – To">From – To…</span></span>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <span class="tab active" data-t="dash">Dashboard</span>
+    <span class="tab" data-t="exec">Demand execution <span class="badge">23</span></span>
+    <span class="tab" data-t="cr">Change request register <span class="badge">41</span></span>
+    <span class="tab" data-t="perf">Performance</span>
+  </div>
+
+  <!-- ===================== DASHBOARD ===================== -->
+  <section class="page active" id="p-dash">
+    <div class="banner b-info small">
+      <b>How to read this mockup.</b> The Dashboard becomes the first tab of Reports and opens by default. Every card below is a <b>candidate</b>: tick <b>Keep</b> on the ones you want, the bar at the bottom collects your list.
+      Cards marked <span class="chip now">now</span> are live (refreshed every minute) and ignore the period; cards marked <span class="chip period">period</span> follow the Period filter (default: last 12 weeks — the performance query is the heaviest over years).
+      The Company filter and the spec 24 rules apply to every card: your companies only, never a total across units or currencies, N/A when there is nothing to divide by.
+      Each card says <i>who</i> it serves, <i>what question</i> it answers, <i>why</i> it earns its place and <i>where the numbers come from</i>. <span class="rec">Recommended</span> marks the set I would build first.
+    </div>
+
+    <!-- ---------- Group A: right now ---------- -->
+    <div class="grp-h"><h6>A · Right now</h6><span class="muted small">live, the state of the companies you work for — the dashboard shows the whole company, My work shows only you</span></div>
+    <div class="grid">
+
+      <!-- D1 -->
+      <section class="card w c7" data-id="D1" data-title="Where the quantity is (per unit)" data-rec="1">
+        <div class="card-h"><label class="keep"><input type="checkbox"> Keep</label><b>D1 · Where the quantity is</b><span class="chip now">now</span><span class="aud">Everyone</span><span class="rec">Recommended</span>
+          <span class="tog">View <a class="on" data-v="chart">Chart</a> <a data-v="table">Table</a></span></div>
+        <div class="pad">
+          <p class="sub">Demands still in progress (accepted, not closed) · 27 demands · per unit — the same five classes and colours as the progress bar on the Demands list.</p>
+          <div class="cv">
+            <div style="display:flex;align-items:center;gap:10px;margin:6px 0"><b style="width:44px">CT</b><div id="d1-ct" style="flex:1"></div><span class="small muted" style="width:130px;text-align:right">355,640 CT · 23 demands</span></div>
+            <div style="display:flex;align-items:center;gap:10px;margin:6px 0"><b style="width:44px">KGM</b><div id="d1-kgm" style="flex:1"></div><span class="small muted" style="width:130px;text-align:right">84,000 KGM · 4 demands</span></div>
+            <div class="legend"><span><i style="background:var(--st-open)"></i>Open (nothing sourced)</span><span><i style="background:var(--st-rfq)"></i>In RFQ or quoted</span><span><i style="background:var(--st-awarded)"></i>Awarded · handed off · PO preparation</span><span><i style="background:var(--st-po)"></i>On PO (submitted or created)</span><span><i style="background:var(--st-cancel)"></i>Cancelled</span></div>
+          </div>
+          <div class="tv"><table>
+            <tr><th>Unit</th><th class="num">Open</th><th class="num">In RFQ · quoted</th><th class="num">Awarded · handed off · PO prep.</th><th class="num">On PO</th><th class="num">Cancelled</th><th class="num">Total in progress</th></tr>
+            <tr><td>CT</td><td class="num">38,400</td><td class="num">61,600</td><td class="num">92,400</td><td class="num">154,000</td><td class="num">9,240</td><td class="num">355,640</td></tr>
+            <tr><td>KGM</td><td class="num">12,000</td><td class="num">18,000</td><td class="num">24,000</td><td class="num">30,000</td><td class="num">0</td><td class="num">84,000</td></tr>
+          </table></div>
+        </div>
+        <div class="foot">
+          <b>Answers</b><span>How much of the companies' demand is still open, in RFQ, awarded or on a PO — per unit, for demands still in progress.</span>
+          <b>Why</b><span>The quantity ledger is the heart of the app; this is the whole company's progress bar. It replaces a "demands by status" count, which would weigh a 1-container demand like a 40-container one.</span>
+          <b>Source</b><span><code>scm.QtySlice</code> by state for accepted demands of your companies that still have quantity in progress; grouped exactly like the Demands list progress (spec 21).</span>
+          <b>Click</b><span>A segment opens Demands filtered to the matching statuses (e.g. Open → <i>Accepted · nothing sourced yet</i> + <i>Partly in sourcing</i>).</span>
+        </div>
+      </section>
+
+      <!-- D2 -->
+      <section class="card w c5 rs2" data-id="D2" data-title="Who has the ball (open work per step)" data-rec="1">
+        <div class="card-h"><label class="keep"><input type="checkbox"> Keep</label><b>D2 · Who has the ball</b><span class="chip now">now</span><span class="aud">Everyone · management</span><span class="rec">Recommended</span></div>
+        <div class="pad" style="padding-top:6px">
+          <p class="sub">Open work items in your companies, all owners · <b>57 open · <span style="color:var(--red)">11 overdue</span></b></p>
+          <table id="d2"></table>
+        </div>
+        <div class="foot">
+          <b>Answers</b><span>How much work waits at each step, in which department, and how much of it is overdue — for the whole company, not just me.</span>
+          <b>Why</b><span>My work lists your own items. This shows the bottleneck: six "Record quotes" with three overdue means sourcing is where the flow stalls. A manager sees it without asking anyone.</span>
+          <b>Source</b><span>Open <code>scm.InboxItem</code> rows of your companies grouped by type (the My work types), with the overdue count and the oldest due date. Read-only, independent of who may act.</span>
+          <b>Click</b><span>A row opens the matching My work tab (your items) or the list behind it (Demands, RFQs, Handoffs, PO drafts).</span>
+        </div>
+      </section>
+
+      <!-- D3 -->
+      <section class="card w c7" data-id="D3" data-title="Shipping soon — containers per ETD week" data-rec="1">
+        <div class="card-h"><label class="keep"><input type="checkbox"> Keep</label><b>D3 · Shipping soon — containers per ETD week</b><span class="chip now">now</span><span class="aud">Everyone</span><span class="rec">Recommended</span>
+          <span class="tog">View <a class="on" data-v="chart">Chart</a> <a data-v="table">Table</a></span></div>
+        <div class="pad">
+          <p class="sub">Next 10 ETD weeks · containers of accepted demands · red week labels = containers still open or only in RFQ inside the 4-week window (the <i>Open quantity near ETD</i> rule, Configuration → Workflow).</p>
+          <div class="cv"><div id="d3"></div>
+            <div class="legend"><span><i style="background:var(--st-po)"></i>Ordered (SAP PO created)</span><span><i style="background:var(--st-awarded)"></i>Awarded</span><span><i style="background:var(--st-rfq)"></i>In RFQ or quoted</span><span><i style="background:var(--st-open)"></i>Open — not sourced</span><span><i class="line"></i>Baseline (version 1 as accepted)</span></div></div>
+          <div class="tv"><table id="d3t"></table></div>
+        </div>
+        <div class="foot">
+          <b>Answers</b><span>For each coming ETD week: how many containers are ordered, awarded, in RFQ or still open — and what version 1 asked for.</span>
+          <b>Why</b><span>Fruit ships by week. Sales sees whether its weeks are covered, Procurement sees what must be sourced next, the PO team sees what is coming. Containers are the one measure that can be added across units.</span>
+          <b>Source</b><span><code>scm.DemandWeek</code> (containers now), <code>scm.AwardShipment</code> (awarded; ordered = behind a CREATED <code>PoDraft</code>), the week's open / in-RFQ share from the ledger; baseline from <code>DemandVersion</code> 1.</span>
+          <b>Click</b><span>A week opens Demands filtered to that ETD week; the red weeks open D4's list.</span>
+        </div>
+      </section>
+
+      <!-- D4 -->
+      <section class="card w c5" data-id="D4" data-title="Not yet sourced and shipping soon (at risk)" data-rec="1">
+        <div class="card-h"><label class="keep"><input type="checkbox"> Keep</label><b>D4 · Not yet sourced, shipping soon</b><span class="chip now">now</span><span class="aud">Sales · Procurement</span><span class="rec">Recommended</span></div>
+        <div class="pad" style="padding-top:6px">
+          <p class="sub"><b>9 lines · 6 demands · 18,640 CT + 6,000 KGM</b> open with an ETD inside 4 weeks</p>
+          <table>
+            <tr><th>Demand</th><th>Week</th><th>Material</th><th class="num">Open</th><th class="num">Days</th></tr>
+            <tr><td><a>D-000231</a> <span class="muted small">1000</span></td><td>W41</td><td class="small">Apples Royal Gala S-100 Cat1 CL</td><td class="num">1,540 CT</td><td class="num" style="color:var(--red)">9</td></tr>
+            <tr><td><a>D-000228</a> <span class="muted small">1000</span></td><td>W42</td><td class="small">Oranges Navel 64 Cat1 EG</td><td class="num">4,200 CT</td><td class="num" style="color:var(--red)">16</td></tr>
+            <tr><td><a>D-000235</a> <span class="muted small">2000</span></td><td>W42</td><td class="small">Grapes Crimson 8.2 kg Cat1 ZA</td><td class="num">2,700 CT</td><td class="num" style="color:var(--red)">16</td></tr>
+            <tr><td><a>D-000226</a> <span class="muted small">3000</span></td><td>W43</td><td class="small">Pears Packham 70-75 Cat1 ZA</td><td class="num">1,120 CT</td><td class="num">23</td></tr>
+            <tr><td><a>D-000238</a> <span class="muted small">1000</span></td><td>W43</td><td class="small">Kiwi Hayward 27 Cat1 NZ</td><td class="num">6,000 KGM</td><td class="num">23</td></tr>
+            <tr><td><a>D-000240</a> <span class="muted small">1000</span></td><td>W44</td><td class="small">Apples Fuji 80-88 Cat1 CL</td><td class="num">3,080 CT</td><td class="num">30</td></tr>
+            <tr><td colspan="5" class="small muted">… 3 more · <a>Show all</a> · sorted by days to the Monday of the ETD week</td></tr>
+          </table>
+        </div>
+        <div class="foot">
+          <b>Answers</b><span>Which demand lines still have Open quantity and ship within the aging window — the ones that miss the vessel if nothing happens.</span>
+          <b>Why</b><span>The most expensive failure in the process. The exception already sits on Procurement's My work; here Sales sees it too, and management can count it.</span>
+          <b>Source</b><span>Open slices whose <code>ApprovedEtdWeek</code> lies within <code>agingWeeksBeforeEtd</code> — the same rule as the <i>Open quantity near ETD</i> exception.</span>
+          <b>Click</b><span>The demand; "Create RFQ" for Procurement.</span>
+        </div>
+      </section>
+
+      <!-- D5 -->
+      <section class="card w c7" data-id="D5" data-title="RFQs out, waiting for quotes">
+        <div class="card-h"><label class="keep"><input type="checkbox"> Keep</label><b>D5 · RFQs out, waiting for quotes</b><span class="chip now">now</span><span class="aud">Procurement · Sales reads</span></div>
+        <div class="pad" style="padding-top:6px">
+          <p class="sub"><b>6 RFQs sent · 12 suppliers have not answered</b> · the app does not e-mail suppliers, so chasing is a manual step</p>
+          <table>
+            <tr><th>RFQ</th><th>Demand</th><th>Sent</th><th class="num">Days out</th><th>Quoted</th><th>Containers · weeks</th><th></th></tr>
+            <tr><td><a>RFQ-000039</a></td><td>D-000228 <span class="muted small">1000</span></td><td class="small">18 Sep · Omar</td><td class="num"><span class="tag due">8</span></td><td>0 of 4</td><td class="small">12 · W42–W43</td><td><button class="sm">Record quotes</button></td></tr>
+            <tr><td><a>RFQ-000037</a></td><td>D-000219 <span class="muted small">1000</span></td><td class="small">15 Sep · Omar</td><td class="num"><span class="tag due">11</span></td><td>3 of 5</td><td class="small">8 · W44</td><td><button class="sm">Record quotes</button></td></tr>
+            <tr><td><a>RFQ-000040</a></td><td>D-000226 <span class="muted small">3000</span></td><td class="small">20 Sep · Huda</td><td class="num">6</td><td>1 of 2</td><td class="small">3 · W43</td><td><button class="sm">Record quotes</button></td></tr>
+            <tr><td><a>RFQ-000041</a></td><td>D-000231 <span class="muted small">1000</span></td><td class="small">22 Sep · Omar</td><td class="num">4</td><td>1 of 3</td><td class="small">6 · W41</td><td><button class="sm">Record quotes</button></td></tr>
+            <tr><td><a>RFQ-000042</a></td><td>D-000235 <span class="muted small">2000</span></td><td class="small">24 Sep · Huda</td><td class="num">2</td><td>2 of 3</td><td class="small">5 · W42</td><td><button class="sm">Record quotes</button></td></tr>
+            <tr><td><a>RFQ-000043</a></td><td>D-000240 <span class="muted small">1000</span></td><td class="small">25 Sep · Omar</td><td class="num">1</td><td>0 of 2</td><td class="small">4 · W44</td><td><button class="sm">Record quotes</button></td></tr>
+          </table>
+          <p class="small muted" style="margin:6px 0 0">Red = out longer than the <i>Record quotes</i> due time (Configuration → Workflow).</p>
+        </div>
+        <div class="foot">
+          <b>Answers</b><span>Which sent RFQs still lack quotes, how long they have been out, and how many suppliers answered.</span>
+          <b>Why</b><span>A quote that never comes is invisible until the ETD is near. "Days out" and "n of m quoted" tell the buyer whom to chase today.</span>
+          <b>Source</b><span><code>scm.Rfq</code> (Sent) × <code>RfqSupplier</code> × current <code>SupplierQuote</code>; containers from <code>RfqWeek</code>.</span>
+          <b>Click</b><span>The RFQ, on Record quotes.</span>
+        </div>
+      </section>
+
+      <!-- D6 -->
+      <section class="card w c12" data-id="D6" data-title="PO pipeline (handoff to SAP)">
+        <div class="card-h"><label class="keep"><input type="checkbox"> Keep</label><b>D6 · PO pipeline</b><span class="chip now">now</span><span class="aud">PO team · others read</span></div>
+        <div class="pad">
+          <div class="tiles">
+            <div class="tile"><div class="l">Handoffs to accept</div><div class="v">3</div><div class="s">oldest 1 d · none returned today</div></div>
+            <div class="tile warn"><div class="l">In PO preparation</div><div class="v">5</div><div class="s">7 SKUs to pick · 2 waiting for SAP master data</div></div>
+            <div class="tile"><div class="l">Drafts to validate · submit</div><div class="v">2 · 1</div><div class="s">POD-000033, -034 · POD-000032 validated</div></div>
+            <div class="tile dim"><div class="l">Sent to SAP, waiting</div><div class="v">1</div><div class="s">4 min · outbox running · simulator</div></div>
+            <div class="tile ok"><div class="l">Outcome unknown</div><div class="v">0</div><div class="s">nothing needs a person</div></div>
+            <div class="tile bad"><div class="l">Rejected by SAP</div><div class="v">1</div><div class="s">POD-000031 · "supplier blocked for org 2000"</div></div>
+            <div class="tile ok"><div class="l">Created this week</div><div class="v">6</div><div class="s">21 containers · 2 companies</div></div>
+          </div>
+        </div>
+        <div class="foot">
+          <b>Answers</b><span>What sits at each step between the handoff and the SAP PO, and what needs a person now.</span>
+          <b>Why</b><span>The PO team's whole desk on one line; unknown and rejected outcomes are the ones that lock quantity. Sales and Procurement see how close their awards are to a PO. (The administrator's Operations status keeps the outbox internals.)</span>
+          <b>Source</b><span><code>scm.Handoff</code> status, <code>AwardItem.SkuStatus</code>, <code>scm.PoDraft</code> status, <code>scm.SapSubmission</code>.</span>
+          <b>Click</b><span>Each tile opens Handoffs or PO drafts &amp; SAP filtered to that status.</span>
+        </div>
+      </section>
+    </div>
+
+    <!-- ---------- Group B: over the period ---------- -->
+    <div class="grp-h"><h6>B · Over the period</h6><span class="muted small">demands accepted in the period — <b class="period-label">Last 12 weeks</b></span></div>
+    <div class="grid">
+
+      <!-- D8 -->
+      <section class="card w c12" data-id="D8" data-title="Headline KPIs per unit (same as Performance)">
+        <div class="card-h"><label class="keep"><input type="checkbox"> Keep</label><b>D8 · Headline KPIs, per unit</b><span class="chip period">period</span><span class="aud">Everyone · management</span><span class="muted small">duplicates the Performance tab's headline — keep only if you want it on the landing tab</span></div>
+        <div class="pad">
+          <div style="display:grid;grid-template-columns:50px 1fr;gap:8px 12px;align-items:center">
+            <b>CT</b>
+            <div class="tiles">
+              <div class="tile"><div class="l">Committed</div><div class="v">412,000</div><div class="s">asked and not cancelled</div></div>
+              <div class="tile"><div class="l">Executed</div><div class="v">318,780</div><div class="s">SAP PO created</div></div>
+              <div class="tile"><div class="l">Outstanding</div><div class="v">84,700</div><div class="s">still in progress</div></div>
+              <div class="tile ok"><div class="l">Execution rate</div><div class="v">77.4%</div><div class="s">executed ÷ committed</div></div>
+              <div class="tile"><div class="l">Not sourced</div><div class="v">2.1%</div><div class="s">cancelled by Procurement</div></div>
+              <div class="tile ok"><div class="l">On time</div><div class="v">91.3%</div><div class="s">PO ≥ 7 days before ETD</div></div>
+              <div class="tile"><div class="l">Accepted → PO created</div><div class="v">6.8 d</div><div class="s">quantity-weighted</div></div>
+            </div>
+            <b>KGM</b>
+            <div class="tiles">
+              <div class="tile"><div class="l">Committed</div><div class="v">84,000</div><div class="s"></div></div>
+              <div class="tile"><div class="l">Executed</div><div class="v">60,000</div><div class="s"></div></div>
+              <div class="tile"><div class="l">Outstanding</div><div class="v">24,000</div><div class="s"></div></div>
+              <div class="tile warn"><div class="l">Execution rate</div><div class="v">71.4%</div><div class="s"></div></div>
+              <div class="tile dim"><div class="l">Not sourced</div><div class="v">N/A</div><div class="s">nothing to divide by</div></div>
+              <div class="tile ok"><div class="l">On time</div><div class="v">88.0%</div><div class="s"></div></div>
+              <div class="tile"><div class="l">Accepted → PO created</div><div class="v">8.1 d</div><div class="s"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="foot">
+          <b>Answers</b><span>Committed, executed, execution rate, not-sourced rate, on time and accepted → PO created — per unit, for demands accepted in the period.</span>
+          <b>Why</b><span>The numbers the Performance tab leads with, on the landing tab. If Performance stays one click away, this card is redundant — your call.</span>
+          <b>Source</b><span>The existing <code>reports.performance</code> query (spec 24: never across units, N/A on a zero denominator).</span>
+          <b>Click</b><span>Opens the Performance tab with the same period.</span>
+        </div>
+      </section>
+
+      <!-- D9 -->
+      <section class="card w c6" data-id="D9" data-title="Where the time goes (stage hours)" data-rec="1">
+        <div class="card-h"><label class="keep"><input type="checkbox"> Keep</label><b>D9 · Where the time goes</b><span class="chip period">period</span><span class="aud">Management · Procurement</span><span class="rec">Recommended</span>
+          <span class="tog">Unit <a class="on" data-u="CT">CT</a> <a data-u="KGM">KGM</a></span></div>
+        <div class="pad">
+          <p class="sub">Average hours per stage, weighted by quantity, PO-created quantity only · end to end <b id="d9-e2e">163 h (6.8 d)</b></p>
+          <div id="d9"></div>
+          <p class="small muted" style="margin:6px 0 0"><i>Submit → Accept</i> is new (backlog 30): it is per demand, not quantity-weighted, and is not part of end to end (the clock starts at submission).</p>
+        </div>
+        <div class="foot">
+          <b>Answers</b><span>How many hours the quantity spends at each stage, and which stage is the slowest.</span>
+          <b>Why</b><span>The Performance tab has the same times in a table; as bars the slowest stage is visible at once, and that is the one a manager acts on.</span>
+          <b>Source</b><span>Stage times from <code>reports.performance</code> (split lineage, quantity-weighted); Submit → Accept from <code>Demand.SubmittedAt</code> / <code>AcceptedAt</code>.</span>
+          <b>Click</b><span>Performance for the detail; unit switch on the card.</span>
+        </div>
+      </section>
+
+      <!-- D10 -->
+      <section class="card w c6" data-id="D10" data-title="Flow: containers accepted vs ordered per week" data-rec="1">
+        <div class="card-h"><label class="keep"><input type="checkbox"> Keep</label><b>D10 · Flow in and out</b><span class="chip period">period</span><span class="aud">Everyone · management</span><span class="rec">Recommended</span>
+          <span class="tog">View <a class="on" data-v="chart">Chart</a> <a data-v="table">Table</a></span></div>
+        <div class="pad">
+          <p class="sub">Containers accepted (into the pipeline) vs containers ordered (SAP PO created), per week · backlog now: <b>118 containers accepted, not yet ordered</b></p>
+          <div class="cv"><div id="d10"></div>
+            <div class="legend"><span><i style="background:var(--s1)"></i>Accepted</span><span><i style="background:var(--s2)"></i>Ordered (PO created)</span></div></div>
+          <div class="tv"><table id="d10t"></table></div>
+        </div>
+        <div class="foot">
+          <b>Answers</b><span>Is the pipeline draining or filling? Week by week, what came in against what reached a PO.</span>
+          <b>Why</b><span>Rates say how well; flow says how much. When accepted outruns ordered for weeks, the backlog grows before anyone feels it. Containers are the one measure that adds up across units.</span>
+          <b>Source</b><span><code>scm.DemandWeek</code> containers by the demand's acceptance week; <code>AwardShipment</code> containers behind CREATED drafts by <code>PoDraft.SapCreatedAt</code> week.</span>
+          <b>Click</b><span>A week opens Demands accepted that week.</span>
+        </div>
+      </section>
+    </div>
+
+    <!-- ---------- Group C: changes and quality ---------- -->
+    <div class="grp-h"><h6>C · Changes and quality</h6><span class="muted small">why demand moves and where rework happens</span></div>
+    <div class="grid">
+
+      <!-- D11 -->
+      <section class="card w c8" data-id="D11" data-title="Change requests: waiting, response, reasons" data-rec="1">
+        <div class="card-h"><label class="keep"><input type="checkbox"> Keep</label><b>D11 · Change requests</b><span class="chip now">now</span><span class="chip period">period</span><span class="aud">Sales · Procurement · management</span><span class="rec">Recommended</span></div>
+        <div class="pad">
+          <div class="tiles" style="margin-bottom:10px">
+            <div class="tile warn"><div class="l">Waiting for Sales to decide</div><div class="v">3</div><div class="s">raised by Procurement · oldest 1 d 6 h</div></div>
+            <div class="tile"><div class="l">Waiting for Procurement to decide</div><div class="v">2</div><div class="s">raised by Sales · oldest 20 h</div></div>
+            <div class="tile"><div class="l">Decided in the period</div><div class="v">34</div><div class="s">Sales answers in 19 h · Procurement in 11 h</div></div>
+            <div class="tile"><div class="l">Blocked at pre-check</div><div class="v">2</div><div class="s">quantity already awarded or on a PO</div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div><p class="sub"><b>Why Sales changes demands</b> · 25 requests</p><div id="d11a"></div></div>
+            <div><p class="sub"><b>Why Procurement cannot source</b> · 9 requests · <span class="tag t-red" style="font-size:11px;line-height:16px">counts against Procurement</span></p><div id="d11b"></div></div>
+          </div>
+        </div>
+        <div class="foot">
+          <b>Answers</b><span>How many change requests wait for a decision and with whom; how fast each department answers; and the reasons — why Sales changes demands, why Procurement cannot source.</span>
+          <b>Why</b><span>The register lists every request; this tells the story behind them. Reasons that count against Procurement are marked, so the not-sourced rate has its explanation next to it.</span>
+          <b>Source</b><span><code>scm.ChangeRequest</code> (status, department, SubmittedAt, DecidedAt) × <code>scm.ReasonCode</code> (description, CountsAgainstProcurement).</span>
+          <b>Click</b><span>A bar opens the Change request register filtered by reason; the waiting tiles open My work / Change requests.</span>
+        </div>
+      </section>
+
+      <!-- D12 -->
+      <section class="card w c4" data-id="D12" data-title="Demand stability after acceptance">
+        <div class="card-h"><label class="keep"><input type="checkbox"> Keep</label><b>D12 · Demand stability</b><span class="chip period">period</span><span class="aud">Management</span></div>
+        <div class="pad">
+          <div class="tiles">
+            <div class="tile"><div class="l">Accepted demands</div><div class="v">46</div><div class="s">in the period</div></div>
+            <div class="tile warn"><div class="l">Changed after acceptance</div><div class="v">37%</div><div class="s">17 demands with an applied change</div></div>
+            <div class="tile"><div class="l">Containers cancelled by Sales</div><div class="v">38</div><div class="s">of 412 accepted · 9.2%</div></div>
+            <div class="tile"><div class="l">Containers added by Procurement</div><div class="v">9</div><div class="s">outside the execution rate</div></div>
+            <div class="tile"><div class="l">Merges</div><div class="v">4</div><div class="s">11 weeks moved into other demands</div></div>
+            <div class="tile"><div class="l">Not sourced</div><div class="v">6</div><div class="s">containers cancelled by Procurement</div></div>
+          </div>
+        </div>
+        <div class="foot">
+          <b>Answers</b><span>How much of what Sales asked for moved after acceptance — changed demands, containers cancelled, added, merged.</span>
+          <b>Why</b><span>Procurement is measured against a moving target; this says how much it moves. Pairs with D11's reasons.</span>
+          <b>Source</b><span>Applied <code>ChangeRequest</code>s and their items (containers), slices with origin Procurement, <code>DemandVersion</code> reasons MERGE_IN.</span>
+          <b>Click</b><span>Change request register · Demands.</span>
+        </div>
+      </section>
+
+      <!-- D13 -->
+      <section class="card w c6" data-id="D13" data-title="Handoff quality (returns by reason)">
+        <div class="card-h"><label class="keep"><input type="checkbox"> Keep</label><b>D13 · Handoff quality</b><span class="chip period">period</span><span class="aud">Procurement · PO team</span></div>
+        <div class="pad">
+          <div class="tiles" style="margin-bottom:10px">
+            <div class="tile"><div class="l">Handoffs sent</div><div class="v">58</div><div class="s">one per supplier per award</div></div>
+            <div class="tile warn"><div class="l">Returned by the PO team</div><div class="v">8.6%</div><div class="s">5 of 58</div></div>
+            <div class="tile"><div class="l">Returned automatically</div><div class="v">2</div><div class="s">a change request cancelled quantity</div></div>
+            <div class="tile"><div class="l">Sent without Sales' acknowledgement</div><div class="v">4</div><div class="s">3 acknowledged later</div></div>
+          </div>
+          <p class="sub"><b>Return reasons</b></p><div id="d13"></div>
+        </div>
+        <div class="foot">
+          <b>Answers</b><span>How often the PO team sends handoffs back, for which reasons, and how many were sent before Sales acknowledged.</span>
+          <b>Why</b><span>Returns are rework between Procurement and the PO team; the reason split says what to fix — SKUs, terms or shipments. Performance has the counts, not the reasons.</span>
+          <b>Source</b><span><code>scm.Handoff</code>: Status, ReturnReason, ReturnedBy (null = automatic), SentWithoutAck.</span>
+          <b>Click</b><span>Handoffs filtered to Returned.</span>
+        </div>
+      </section>
+
+      <!-- D14 -->
+      <section class="card w c6" data-id="D14" data-title="Top suppliers by containers awarded" data-rec="1">
+        <div class="card-h"><label class="keep"><input type="checkbox"> Keep</label><b>D14 · Top suppliers</b><span class="chip period">period</span><span class="aud">Procurement · management</span><span class="rec">Recommended</span>
+          <span class="tog">View <a class="on" data-v="chart">Chart</a> <a data-v="table">Table</a></span></div>
+        <div class="pad">
+          <p class="sub">Containers awarded in the period · 365 containers · 12 suppliers · top supplier <b>26%</b></p>
+          <div class="cv" id="d14"></div>
+          <div class="tv"><table id="d14t"></table></div>
+        </div>
+        <div class="foot">
+          <b>Answers</b><span>Whom we award containers to, how concentrated the supply is, and who gets handoffs returned.</span>
+          <b>Why</b><span>Concentration is a risk and a negotiation fact. Returned handoffs per supplier point at data or SKU problems with that supplier.</span>
+          <b>Source</b><span>Active <code>scm.AwardContainer</code> / <code>AwardShipment</code> by SupplierCode; <code>md.Supplier</code> (name, country); <code>Handoff</code> returns.</span>
+          <b>Click</b><span>Awards filtered to the supplier.</span>
+        </div>
+      </section>
+    </div>
+
+    <!-- ---------- Group D: suppliers and money ---------- -->
+    <div class="grp-h"><h6>D · Origins and money</h6><span class="muted small">where the fruit comes from and what it costs — per currency, never converted</span></div>
+    <div class="grid">
+
+      <!-- D15 -->
+      <section class="card w c4" data-id="D15" data-title="Containers by origin">
+        <div class="card-h"><label class="keep"><input type="checkbox"> Keep</label><b>D15 · Containers by origin</b><span class="chip period">period</span><span class="aud">Procurement · Sales</span></div>
+        <div class="pad"><p class="sub">Awarded containers by the container's origin · 365</p><div id="d15"></div></div>
+        <div class="foot">
+          <b>Answers</b><span>Where the awarded containers come from.</span>
+          <b>Why</b><span>Season planning and risk: one origin, one port, one strike. Sales and Procurement share the picture.</span>
+          <b>Source</b><span><code>AwardContainer</code> → container group → line <code>OriginCode</code> (spec 11 origins).</span>
+          <b>Click</b><span>Awards filtered by origin.</span>
+        </div>
+      </section>
+
+      <!-- D16 -->
+      <section class="card w c8" data-id="D16" data-title="Awarded and ordered value per currency">
+        <div class="card-h"><label class="keep"><input type="checkbox"> Keep</label><b>D16 · Awarded and ordered value</b><span class="chip period">period</span><span class="aud">Management · Procurement</span></div>
+        <div class="pad">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div>
+              <div class="tiles">
+                <div class="tile"><div class="l">Awarded · USD</div><div class="v">6.42 M</div><div class="s">quantity × quoted price, active award items</div></div>
+                <div class="tile"><div class="l">On SAP PO · USD</div><div class="v">5.31 M</div><div class="s">83% of the awarded value</div></div>
+                <div class="tile"><div class="l">Awarded · EUR</div><div class="v">0.39 M</div><div class="s">Spain, Italy</div></div>
+                <div class="tile"><div class="l">On SAP PO · EUR</div><div class="v">0.31 M</div><div class="s">79%</div></div>
+              </div>
+            </div>
+            <div><p class="sub"><b>Top suppliers by value · USD</b></p><div id="d16"></div></div>
+          </div>
+        </div>
+        <div class="foot">
+          <b>Answers</b><span>The value awarded and the value already on SAP purchase orders, per currency, and the biggest suppliers by value.</span>
+          <b>Why</b><span>Management thinks in money. Per currency only — never converted and never summed across currencies, the same rule as units.</span>
+          <b>Source</b><span><code>AwardItem</code> Qty × UnitPrice by Currency; <code>PoDraftItem</code> of CREATED drafts.</span>
+          <b>Click</b><span>Awards · PO drafts.</span>
+        </div>
+      </section>
+
+      <!-- D17 -->
+      <section class="card w c12" data-id="D17" data-title="Price vs last purchase (per material and currency)">
+        <div class="card-h"><label class="keep"><input type="checkbox"> Keep</label><b>D17 · Price vs last purchase</b><span class="chip period">period</span><span class="aud">Procurement</span></div>
+        <div class="pad" style="padding-top:6px">
+          <table>
+            <tr><th>Material (line key)</th><th>Unit</th><th class="num">Awarded, average</th><th class="num">Containers</th><th class="num">Last SAP PO price</th><th>Last PO</th><th class="num">Change</th></tr>
+            <tr><td>Apples Royal Gala S-100 Cat1 · CL</td><td>CT</td><td class="num">18.50 USD</td><td class="num">96</td><td class="num">17.90 USD</td><td class="small">May 2026 · Agrisouth</td><td class="num" style="color:var(--red)">+3.4%</td></tr>
+            <tr><td>Apples Fuji 80-88 Cat1 · CL</td><td>CT</td><td class="num">19.20 USD</td><td class="num">61</td><td class="num">19.60 USD</td><td class="small">Jun 2026 · Andes Export</td><td class="num" style="color:#389e0d">−2.0%</td></tr>
+            <tr><td>Oranges Navel 64 Cat1 · EG</td><td>CT</td><td class="num">11.40 USD</td><td class="num">41</td><td class="num">10.80 USD</td><td class="small">Feb 2026 · Nile Fresh</td><td class="num" style="color:var(--red)">+5.6%</td></tr>
+            <tr><td>Grapes Crimson 8.2 kg Cat1 · ZA</td><td>CT</td><td class="num">24.10 USD</td><td class="num">54</td><td class="num">23.95 USD</td><td class="small">Mar 2026 · Cape Citrus</td><td class="num">+0.6%</td></tr>
+            <tr><td>Pears Packham 70-75 Cat1 · ZA</td><td>CT</td><td class="num">16.80 USD</td><td class="num">18</td><td class="num muted">—</td><td class="small muted">no purchase history</td><td class="num muted">—</td></tr>
+            <tr><td>Kiwi Hayward 27 Cat1 · NZ</td><td>KGM</td><td class="num">2.95 USD</td><td class="num">22</td><td class="num">2.70 USD</td><td class="small">Jul 2026 · Zesta Growers</td><td class="num" style="color:var(--red)">+9.3%</td></tr>
+          </table>
+          <p class="small muted" style="margin:6px 0 0">Same currency and unit only; otherwise "—". The SAP price is per the material's base unit (the PO sync already converts CAR → CT).</p>
+        </div>
+        <div class="foot">
+          <b>Answers</b><span>Per material and currency: the average awarded price in the period against the last price we paid in SAP, and the change.</span>
+          <b>Why</b><span>The RFQ shortlist shows the last price per supplier when inviting; this shows the outcome per material after the award — are we paying more this season, and where?</span>
+          <b>Source</b><span><code>AwardItem</code> (UnitPrice, Currency, LineKey) vs <code>scm.PurchaseHistorySummary</code> (LastUnitPrice, LastCurrency, LastPoDate).</span>
+          <b>Click</b><span>Purchase orders filtered to the material.</span>
+        </div>
+      </section>
+    </div>
+
+    <!-- ---------- Group E: not offered ---------- -->
+    <div class="grp-h"><h6>E · Deliberately not offered</h6><span class="muted small">ideas that came up and why they are not on the list — say so if you disagree</span></div>
+    <div class="card no"><table>
+      <tr><th style="width:28%">Idea</th><th>Why not</th><th style="width:24%">Where it lives instead</th></tr>
+      <tr><td>Demands by status (count donut)</td><td>Counts weigh a 1-container demand like a 40-container one and mix Sales' drafts with Procurement's work. D1 shows the quantity, D2 the waiting work.</td><td>Demands list → Status filter</td></tr>
+      <tr><td>"My demands", "my RFQs", "my awards" tiles</td><td>My work and the Mine switch already do this; a company dashboard should not be personal.</td><td>My work · Demands › Mine</td></tr>
+      <tr><td>Sign-ins, active users, audit counts</td><td>No business decision follows from them.</td><td>Administration → Users</td></tr>
+      <tr><td>Materials / suppliers counts and sync freshness</td><td>Freshness matters only when it blocks a PO submission, and that is the administrator's morning check.</td><td>Administration → Operations status</td></tr>
+      <tr><td>SAP outbox internals (attempts, leases, adapter)</td><td>Administrator's check; the PO team's slice is in D6.</td><td>Operations status · PO drafts &amp; SAP</td></tr>
+      <tr><td>One total quantity or one total value</td><td>Forbidden by spec 24: never across units, never across currencies.</td><td>—</td></tr>
+      <tr><td>All-time charts by default</td><td>The performance query is the heaviest over years (database review 2026-09); the period defaults to the last 12 weeks.</td><td>Period filter</td></tr>
+      <tr><td>Supplier score or ranking</td><td>Needs on-time delivery and quality data that the app does not hold yet (no goods receipt). D14 and D13 show what is measurable today.</td><td>Later, with receipt data</td></tr>
+      <tr><td>A separate dashboard per role</td><td>One screen per job; the cards say whom they serve, and the company filter does the rest.</td><td>—</td></tr>
+    </table></div>
+  </section>
+
+  <!-- ===================== OTHER TABS (as built) ===================== -->
+  <section class="page" id="p-exec"><div class="card pad"><b>Demand execution</b> — unchanged, as built (spec 24): one row per accepted demand and unit; click a row for the demand drawer; Export to Excel.</div></section>
+  <section class="page" id="p-cr"><div class="card pad"><b>Change request register</b> — unchanged, as built (spec 24).</div></section>
+  <section class="page" id="p-perf"><div class="card pad"><b>Performance</b> — unchanged, as built (spec 24): headline per unit, stage times, CR / acknowledgement / handoff / SAP KPIs; Export to Excel.</div></section>
+
+</main>
+</div>
+
+<div class="selbar">
+  <b>Your selection</b>
+  <div class="list" id="sel">Nothing kept yet — tick <b>Keep</b> on the cards you want.</div>
+  <button class="sm" id="recBtn">Select the recommended set</button>
+  <button class="sm" id="clrBtn">Clear</button>
+  <button class="sm primary" id="copyBtn">Copy the list</button>
+</div>
+
+<script>
+/* ---------- helpers ---------- */
+const fmt = (n) => Number(n).toLocaleString('en-GB');
+const niceMax = (m) => { if (m <= 0) return 1; const p = Math.pow(10, Math.floor(Math.log10(m))); const r = m / p; const s = r <= 1 ? 1 : r <= 2 ? 2 : r <= 2.5 ? 2.5 : r <= 5 ? 5 : 10; return s * p; };
+const renders = [];
+
+/* stacked horizontal bar — direct labels only where they fit; the table view carries the rest */
+function stackBar(el, parts) {
+  const total = parts.reduce((s, p) => s + p.v, 0);
+  el.innerHTML = `<div class="stack">${parts.filter((p) => p.v > 0).map((p) => {
+    const pct = (p.v / total) * 100;
+    return `<span style="width:${pct}%;background:${p.color};color:${p.light ? '#1f1f1f' : '#fff'}" title="${p.label}: ${fmt(p.v)} (${pct.toFixed(1)}%)">${pct >= 11 ? `${p.short} ${fmt(p.v)}` : pct >= 5 ? p.short : ''}</span>`;
+  }).join('')}</div>`;
+}
+
+/* horizontal bars, one hue (magnitude) */
+function hbars(el, rows, opt = {}) {
+  const max = opt.max || Math.max(...rows.map((r) => r.v));
+  el.innerHTML = rows.map((r) => `<div class="hbar"><div class="lab" title="${r.label}">${r.label}</div><div class="trk"><div class="fill" style="width:${((r.v / max) * 100).toFixed(1)}%;background:${r.color || 'var(--green)'}"></div></div><div class="val">${r.text ?? fmt(r.v)}</div></div>`).join('');
+}
+
+/* columns (stacked or grouped) as inline SVG; native <title> tooltips */
+function columns(el, opt) {
+  const W = Math.max(320, el.clientWidth || 700), H = opt.height || 220, padL = 34, padR = 8, padT = 14, padB = 26;
+  const n = opt.cats.length;
+  const tops = opt.cats.map((_, i) => (opt.stacked ? opt.series.reduce((s, se) => s + se.values[i], 0) : Math.max(...opt.series.map((se) => se.values[i]))));
+  const max = niceMax(Math.max(...tops, ...(opt.baseline || [0])) * 1.08);
+  const plotW = W - padL - padR, plotH = H - padT - padB, slot = plotW / n;
+  const y = (v) => padT + plotH - (v / max) * plotH;
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img">`;
+  for (let t = 0; t <= 4; t++) { const v = (max * t) / 4, yy = y(v); s += `<line x1="${padL}" x2="${W - padR}" y1="${yy}" y2="${yy}" stroke="#ededed"/><text x="${padL - 6}" y="${yy + 4}" text-anchor="end">${fmt(Math.round(v))}</text>`; }
+  opt.cats.forEach((c, i) => {
+    const x0 = padL + i * slot;
+    if (opt.stacked) {
+      const bw = Math.min(slot * 0.6, 44), x = x0 + (slot - bw) / 2; let acc = 0;
+      opt.series.forEach((se) => { const v = se.values[i]; if (!v) return; const y1 = y(acc + v), y0 = y(acc); s += `<rect x="${x}" y="${y1}" width="${bw}" height="${Math.max(0, y0 - y1 - 2)}" rx="2" fill="${se.color}"><title>${c} · ${se.label}: ${fmt(v)}</title></rect>`; acc += v; });
+      if (opt.baseline && opt.baseline[i] != null) { const yb = y(opt.baseline[i]); s += `<line x1="${x - 5}" x2="${x + bw + 5}" y1="${yb}" y2="${yb}" stroke="#1f1f1f" stroke-width="2"><title>${c} · baseline (version 1): ${opt.baseline[i]}</title></line>`; }
+      s += `<text x="${x + bw / 2}" y="${y(acc) - 5}" text-anchor="middle" fill="#1f1f1f">${fmt(acc)}</text>`;
+    } else {
+      const k = opt.series.length, bw = Math.min((slot * 0.72) / k, 24), gx = x0 + (slot - (bw * k + 2 * (k - 1))) / 2;
+      opt.series.forEach((se, j) => { const v = se.values[i], x = gx + j * (bw + 2), y1 = y(v); s += `<rect x="${x}" y="${y1}" width="${bw}" height="${Math.max(0, y(0) - y1)}" rx="2" fill="${se.color}"><title>${c} · ${se.label}: ${fmt(v)}</title></rect>`; });
+    }
+    const flag = opt.flag && opt.flag[i];
+    s += `<text x="${x0 + slot / 2}" y="${H - 9}" text-anchor="middle"${flag ? ' fill="#cf1322" font-weight="600"' : ''}>${opt.catLabels ? opt.catLabels[i] : c}</text>`;
+  });
+  s += `<line x1="${padL}" x2="${W - padR}" y1="${y(0)}" y2="${y(0)}" stroke="#c3c2b7"/></svg>`;
+  el.innerHTML = s;
+}
+function tableHtml(el, header, rows) {
+  el.innerHTML = `<tr>${header.map((h, i) => `<th${i ? ' class="num"' : ''}>${h}</th>`).join('')}</tr>` + rows.map((r) => `<tr>${r.map((c, i) => `<td${i ? ' class="num"' : ''}>${c}</td>`).join('')}</tr>`).join('');
+}
+
+/* ---------- D1 ---------- */
+const ST = { open: 'var(--st-open)', rfq: 'var(--st-rfq)', aw: 'var(--st-awarded)', po: 'var(--st-po)', cx: 'var(--st-cancel)' };
+stackBar(document.getElementById('d1-ct'), [
+  { label: 'Open', short: 'Open', v: 38400, color: ST.open, light: true }, { label: 'In RFQ or quoted', short: 'In RFQ', v: 61600, color: ST.rfq },
+  { label: 'Awarded · handed off · PO preparation', short: 'Awarded', v: 92400, color: ST.aw, light: true }, { label: 'On PO', short: 'On PO', v: 154000, color: ST.po }, { label: 'Cancelled', short: 'Cancelled', v: 9240, color: ST.cx, light: true }]);
+stackBar(document.getElementById('d1-kgm'), [
+  { label: 'Open', short: 'Open', v: 12000, color: ST.open, light: true }, { label: 'In RFQ or quoted', short: 'In RFQ', v: 18000, color: ST.rfq },
+  { label: 'Awarded · handed off · PO preparation', short: 'Awarded', v: 24000, color: ST.aw, light: true }, { label: 'On PO', short: 'On PO', v: 30000, color: ST.po }]);
+
+/* ---------- D2 ---------- */
+const queues = [
+  ['Sales', [['Fix and resubmit', 2, 1, '3 d'], ['Decide change request · from Procurement', 3, 0, '1 d 6 h'], ['Acknowledge award', 5, 2, '4 d']]],
+  ['Procurement', [['Accept demand', 4, 1, '3 d'], ['Decide change request · from Sales', 2, 0, '20 h'], ['Record quotes', 6, 3, '11 d'], ['Tell the supplier', 1, 0, '5 h'], ['Hand off', 7, 2, '3 d']]],
+  ['PO team', [['Accept handoff', 3, 0, '1 d'], ['Prepare PO', 5, 1, '2 d']]],
+  ['Exceptions', [['Open quantity near ETD', 9, 0, '—'], ['Handoff returned', 2, 1, '2 d'], ['Material missing in SAP', 2, 0, '—'], ['Award query', 1, 0, '6 h'], ['PO rejected by SAP', 1, 0, '3 h'], ['Supplier missing for origin', 1, 0, '—'], ['Origins to map', 3, 0, '—']]],
+];
+const maxQ = 9;
+document.getElementById('d2').innerHTML = `<tr><th>Step</th><th style="width:26%"></th><th class="num">Open</th><th class="num">Overdue</th><th>Oldest</th></tr>` + queues.map(([dept, rows]) => `<tr><td class="dept" colspan="5">${dept}</td></tr>` + rows.map(([l, n, o, old]) =>
+  `<tr class="qrow"><td title="${l}"><a>${l}</a></td><td><div class="trk" style="height:10px;background:#fafafa;border-radius:3px;display:flex;overflow:hidden"><div style="width:${((n - o) / maxQ) * 100}%;background:${dept === 'Exceptions' ? '#8c8c8c' : 'var(--green)'}"></div><div style="width:${(o / maxQ) * 100}%;background:#cf1322"></div></div></td><td class="num">${n}</td><td class="num"${o ? ' style="color:var(--red);font-weight:600"' : ''}>${o || '—'}</td><td class="small muted">${old}</td></tr>`).join('')).join('');
+
+/* ---------- D3 ---------- */
+const weeks = ['2026-W40', '2026-W41', '2026-W42', '2026-W43', '2026-W44', '2026-W45', '2026-W46', '2026-W47', '2026-W48', '2026-W49'];
+const wLab = ['W40 · 28 Sep', 'W41 · 5 Oct', 'W42 · 12 Oct', 'W43 · 19 Oct', 'W44 · 26 Oct', 'W45 · 2 Nov', 'W46 · 9 Nov', 'W47 · 16 Nov', 'W48 · 23 Nov', 'W49 · 30 Nov'];
+const d3 = {
+  ordered: [34, 26, 20, 9, 4, 0, 0, 0, 0, 0], awarded: [6, 8, 12, 14, 10, 6, 3, 0, 0, 0], rfq: [2, 4, 9, 8, 16, 12, 10, 8, 4, 0], open: [0, 0, 4, 5, 10, 13, 15, 16, 18, 18],
+  baseline: [40, 38, 40, 36, 44, 30, 28, 20, 22, 18],
+};
+const d3flag = weeks.map((_, i) => i <= 3 && d3.open[i] + d3.rfq[i] > 0); // inside the 4-week window and not covered
+renders.push(() => columns(document.getElementById('d3'), { cats: weeks, catLabels: wLab, stacked: true, flag: d3flag, baseline: d3.baseline, series: [
+  { label: 'Ordered (SAP PO created)', color: '#237804', values: d3.ordered }, { label: 'Awarded', color: '#52c41a', values: d3.awarded },
+  { label: 'In RFQ or quoted', color: '#722ed1', values: d3.rfq }, { label: 'Open — not sourced', color: '#bfbfbf', values: d3.open }] }));
+tableHtml(document.getElementById('d3t'), ['ETD week', 'Baseline (v1)', 'Now', 'Ordered', 'Awarded', 'In RFQ', 'Open'],
+  weeks.map((w, i) => [wLab[i], d3.baseline[i], d3.ordered[i] + d3.awarded[i] + d3.rfq[i] + d3.open[i], d3.ordered[i], d3.awarded[i], d3.rfq[i], d3flag[i] ? `<span style="color:var(--red);font-weight:600">${d3.open[i]}</span>` : d3.open[i]]));
+
+/* ---------- D9 ---------- */
+const stages = {
+  CT: { e2e: '163 h (6.8 d)', rows: [['Submit → Accept (new)', 14], ['Accept → RFQ', 31], ['RFQ → quote', 52], ['Quote → award', 29], ['Award → handoff', 22], ['Handoff accepted → PO created', 15]] },
+  KGM: { e2e: '194 h (8.1 d)', rows: [['Submit → Accept (new)', 22], ['Accept → RFQ', 40], ['RFQ → quote', 61], ['Quote → award', 35], ['Award → handoff', 30], ['Handoff accepted → PO created', 18]] },
+};
+function renderD9(u) {
+  const st = stages[u]; const slowest = Math.max(...st.rows.map((r) => r[1]));
+  hbars(document.getElementById('d9'), st.rows.map(([l, v]) => ({ label: l, v, text: `${v} h${v === slowest ? ' · slowest' : ''}`, color: l.startsWith('Submit') ? '#8c8c8c' : v === slowest ? '#0d366b' : 'var(--s1)' })), { max: 70 });
+  document.getElementById('d9-e2e').textContent = st.e2e;
+}
+renderD9('CT');
+
+/* ---------- D10 ---------- */
+const fw = ['W28', 'W29', 'W30', 'W31', 'W32', 'W33', 'W34', 'W35', 'W36', 'W37', 'W38', 'W39'];
+const acc = [31, 28, 35, 40, 38, 44, 42, 47, 39, 45, 41, 36], ord = [22, 26, 30, 33, 36, 35, 40, 38, 41, 43, 37, 30];
+renders.push(() => columns(document.getElementById('d10'), { cats: fw, stacked: false, height: 200, series: [{ label: 'Accepted', color: '#2a78d6', values: acc }, { label: 'Ordered (PO created)', color: '#eb6834', values: ord }] }));
+tableHtml(document.getElementById('d10t'), ['Week', 'Accepted', 'Ordered (PO created)', 'Difference'], fw.map((w, i) => [w, acc[i], ord[i], (acc[i] - ord[i] > 0 ? '+' : '') + (acc[i] - ord[i])]));
+
+/* ---------- D11 ---------- */
+hbars(document.getElementById('d11a'), [
+  { label: 'Customer cancelled or reduced the order', v: 12 }, { label: 'Sales forecast changed', v: 9 }, { label: 'Customer changed the specification', v: 4 }], { max: 12 });
+hbars(document.getElementById('d11b'), [
+  { label: 'No supplier could supply in time ⚑', v: 3, color: '#cf1322' }, { label: 'Supply available only in another week', v: 3 }, { label: 'Quoted prices above budget ⚑', v: 2, color: '#cf1322' }, { label: 'Market opportunity (extra quantity)', v: 1 }], { max: 12 });
+
+/* ---------- D13 ---------- */
+hbars(document.getElementById('d13'), [
+  { label: 'SKU is wrong', v: 2 }, { label: 'Shipping terms incomplete or wrong', v: 2 }, { label: 'Containers or ETD wrong', v: 1 }, { label: 'Other data problem', v: 0, text: '0' }, { label: 'Automatic: change request cancelled quantity', v: 2, color: '#8c8c8c' }], { max: 5 });
+
+/* ---------- D14 ---------- */
+const sup = [['Agrisouth (Chile) S.A.', 'CL', 96, 1], ['Andes Export', 'CL', 61, 2], ['Cape Citrus Growers', 'ZA', 54, 0], ['Nile Fresh Export', 'EG', 41, 1], ['Valle Verde', 'CL', 33, 0], ['Zesta Growers', 'NZ', 22, 0], ['Other suppliers (6)', '—', 58, 1]];
+hbars(document.getElementById('d14'), sup.map(([n, o, v, r]) => ({ label: `${n} · ${o}`, v, text: `${v} · ${((v / 365) * 100).toFixed(0)}%${r ? ` · ${r} returned` : ''}`, color: n.startsWith('Other') ? '#8c8c8c' : 'var(--green)' })), { max: 96 });
+tableHtml(document.getElementById('d14t'), ['Supplier', 'Origin', 'Containers', 'Share', 'Handoffs returned'], sup.map(([n, o, v, r]) => [n, o, v, `${((v / 365) * 100).toFixed(1)}%`, r]));
+
+/* ---------- D15 ---------- */
+hbars(document.getElementById('d15'), [['Chile · CL', 190], ['South Africa · ZA', 78], ['Egypt · EG', 41], ['New Zealand · NZ', 22], ['Spain · ES', 18], ['Italy · IT', 9], ['United States · US', 7]].map(([l, v]) => ({ label: l, v, text: `${v} · ${((v / 365) * 100).toFixed(0)}%` })), { max: 190 });
+
+/* ---------- D16 ---------- */
+hbars(document.getElementById('d16'), [['Agrisouth (Chile) S.A.', 1.72], ['Cape Citrus Growers', 0.98], ['Andes Export', 0.91], ['Nile Fresh Export', 0.62], ['Valle Verde', 0.55]].map(([l, v]) => ({ label: l, v, text: `${v.toFixed(2)} M USD` })), { max: 1.72 });
+
+/* ---------- chrome: tabs, filters, chart/table toggles ---------- */
+document.querySelectorAll('.tab').forEach((t) => t.onclick = () => { document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('active', x === t)); document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p.id === 'p-' + t.dataset.t)); });
+document.querySelectorAll('#companies span').forEach((c) => c.onclick = () => c.classList.toggle('on'));
+document.querySelectorAll('#period span').forEach((p) => p.onclick = () => { document.querySelectorAll('#period span').forEach((x) => x.classList.toggle('on', x === p)); document.querySelectorAll('.period-label').forEach((l) => l.textContent = p.dataset.p); });
+document.querySelectorAll('.tog a[data-v]').forEach((a) => a.onclick = () => { const card = a.closest('.w'); card.classList.toggle('table', a.dataset.v === 'table'); card.querySelectorAll('.tog a[data-v]').forEach((x) => x.classList.toggle('on', x === a)); if (a.dataset.v === 'chart') renders.forEach((r) => r()); });
+document.querySelectorAll('.tog a[data-u]').forEach((a) => a.onclick = () => { renderD9(a.dataset.u); a.closest('.tog').querySelectorAll('a').forEach((x) => x.classList.toggle('on', x === a)); });
+
+/* ---------- selection ---------- */
+const cards = [...document.querySelectorAll('.w')];
+const KEY = 'reports-dashboard-mockup-selection';
+function refreshSel(save = true) {
+  const kept = cards.filter((c) => c.querySelector('.keep input').checked);
+  cards.forEach((c) => c.classList.toggle('kept', c.querySelector('.keep input').checked));
+  document.getElementById('sel').innerHTML = kept.length ? `<b>${kept.length} of ${cards.length}</b> — ${kept.map((c) => `<b>${c.dataset.id}</b> ${c.dataset.title}`).join(' · ')}` : 'Nothing kept yet — tick <b>Keep</b> on the cards you want.';
+  if (save) { try { localStorage.setItem(KEY, JSON.stringify(kept.map((c) => c.dataset.id))); } catch (e) { /* private window: nothing saved */ } }
+}
+cards.forEach((c) => c.querySelector('.keep input').onchange = () => refreshSel());
+document.getElementById('recBtn').onclick = () => { cards.forEach((c) => c.querySelector('.keep input').checked = c.dataset.rec === '1'); refreshSel(); };
+document.getElementById('clrBtn').onclick = () => { cards.forEach((c) => c.querySelector('.keep input').checked = false); refreshSel(); };
+document.getElementById('copyBtn').onclick = async () => {
+  const kept = cards.filter((c) => c.querySelector('.keep input').checked).map((c) => `${c.dataset.id} — ${c.dataset.title}`);
+  const text = kept.length ? `Dashboard cards to build:\n${kept.join('\n')}` : 'No cards selected';
+  try { await navigator.clipboard.writeText(text); document.getElementById('copyBtn').textContent = 'Copied'; setTimeout(() => (document.getElementById('copyBtn').textContent = 'Copy the list'), 1500); } catch (e) { alert(text); }
+};
+try { const saved = JSON.parse(localStorage.getItem(KEY) || '[]'); cards.forEach((c) => c.querySelector('.keep input').checked = saved.includes(c.dataset.id)); } catch (e) { /* ignore */ }
+refreshSel(false);
+
+/* charts size to their card; re-draw on resize */
+renders.forEach((r) => r());
+let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => renders.forEach((r) => r()), 120); });
+</script>
+</body>
+</html>

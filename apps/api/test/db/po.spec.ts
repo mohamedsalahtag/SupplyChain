@@ -15,7 +15,10 @@ import { runOutbox } from '../../src/modules/po/outbox.js';
 import { getDraft, preparation, skuCandidates } from '../../src/modules/po/poRead.js';
 import { buildDraft, resolveUnknown, selectSkus, submitDraft, validateDraft } from '../../src/modules/po/poService.js';
 import { stubSapAdapter } from '../../src/modules/po/sapAdapter.js';
+import { atRisk, changeRequests, flow, pipeline, queues, rfqsWaiting, stability, suppliers, weeks } from '../../src/modules/reports/dashboard.js';
+import { arrivals, supplierDetail, suppliers as scorecard, trend } from '../../src/modules/reports/insights.js';
 import { crRegister, demandReport, executionSummary, performance } from '../../src/modules/reports/reports.js';
+import { reportCounts } from '../../src/modules/reports/counts.js';
 import { recordQuotes } from '../../src/modules/rfq/quotes.js';
 import { getRfq } from '../../src/modules/rfq/rfqRead.js';
 import { createRfq, sendRfq } from '../../src/modules/rfq/rfqService.js';
@@ -27,6 +30,9 @@ import { loadConfig } from '../../src/config.js';
 import { appRouter } from '../../src/trpc/router.js';
 import { createCallerFactory, type Context } from '../../src/trpc/trpc.js';
 import { actor, db, makeUser, runInvariants, uid } from './helpers.js';
+import { purgeAll, purgePreview } from '../../src/modules/ops/purge.js';
+import { deletePreview, deleteUser } from '../../src/modules/users/userDelete.js';
+import { listUsers } from '../../src/modules/users/usersService.js';
 
 const cmd = () => randomUUID();
 const wk = (n: number) => isoWeekOf(new Date(isoWeekMonday(isoWeekOf(new Date())).getTime() + n * 7 * 86_400_000));
@@ -213,7 +219,73 @@ describe('PO drafts and the SAP outbox (spec 23)', () => {
     expect(ct.executionRate).not.toBeNull();
     expect(ct.stages.find((x) => x.label === 'End to end')!.hours).not.toBeNull();
     expect(perf.sap.submitted).toBeGreaterThan(0);
+    // F01: absolute totals (not 1000× too small); the search narrows every Performance section to this demand
+    const own = (await performance(db, rep, { q: d.demandNo })).headline.find((x) => x.unit === 'CT')!;
+    expect([own.committed, own.executed, own.outstanding, own.executionRate, own.executionN]).toEqual(['2000.000', '2000.000', '0.000', 100, 1]);
+    expect(own.endToEndN).toBe(1);
+    // the tab-title counts equal the rows of each report (same filter, same scope)
+    const counts = await reportCounts(db, rep, { q: d.demandNo });
+    expect([counts.execution, counts.changeRequests, counts.arrivals]).toEqual([
+      (await executionSummary(db, rep, { q: d.demandNo })).length, (await crRegister(db, rep, { q: d.demandNo })).length, (await arrivals(db, rep, { q: d.demandNo })).rows.length]);
+    expect((await reportCounts(db, rep, { q: A })).suppliers).toBe((await scorecard(db, rep, { q: A })).rows.length);
     expect(Array.isArray(await crRegister(db, rep, {}))).toBe(true);
+
+    // Dashboard (spec 26): the cards read this demand's company; the shapes hold; another company sees none of it
+    const sup = await suppliers(db, rep, {});
+    expect(sup.rows.find((r) => r.supplierCode === A)?.containers).toBeGreaterThanOrEqual(2);
+    expect(sup.total).toBeGreaterThanOrEqual(2);
+    const st = await stability(db, rep, {});
+    expect(st.accepted).toBeGreaterThanOrEqual(1);
+    expect(st.units.find((u) => u.unit === 'CT')).toBeTruthy();
+    const fl = await flow(db, rep, {});
+    expect(fl.weeks.length).toBe(12);
+    expect(fl.weeks.reduce((s, w) => s + w.accepted, 0)).toBeGreaterThanOrEqual(2); // the 2 containers accepted this week
+    expect(fl.weeks.reduce((s, w) => s + w.ordered, 0)).toBeGreaterThanOrEqual(2); // and ordered this week
+    expect(fl.backlog).toBeGreaterThanOrEqual(0);
+    const wks = await weeks(db, rep, {});
+    expect(wks.weeks.length).toBe(10);
+    expect(wks.weeks[0].week).toBe(wk(0));
+    const pipe = await pipeline(db, rep, {});
+    expect(pipe.units.every((u) => u.unit.length > 0 && Number(u.total) >= 0)).toBe(true);
+    const cr = await changeRequests(db, rep, {});
+    expect(cr.waiting.map((w) => w.decidedBy).sort()).toEqual(['Procurement', 'Sales']);
+    expect(Array.isArray(cr.reasons) && Array.isArray(cr.decided)).toBe(true);
+    const qs = await queues(db, rep, {});
+    expect(qs.groups.every((g) => g.rows.length > 0 && g.rows.every((r) => r.open >= r.overdue))).toBe(true);
+    expect(Array.isArray((await atRisk(db, rep, {})).rows)).toBe(true);
+    expect(Array.isArray((await rfqsWaiting(db, rep, {})).rows)).toBe(true);
+    const other = actor({ id: rep.id, permissions: new Set(['reports.open']), companies: new Set(['9999']) });
+    expect((await suppliers(db, other, {})).total).toBe(0);
+    expect((await pipeline(db, other, {})).demands).toBe(0);
+    expect((await stability(db, other, {})).accepted).toBe(0);
+    expect((await atRisk(db, other, {})).lines).toBe(0);
+    await expect(pipeline(db, actor({ id: rep.id, companies: new Set(['1000']) }), {})).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    // Spec 28: arrivals (this week onward), the supplier scorecard (12 months) and the trend (12 months) see this demand; another company does not
+    const arr = await arrivals(db, rep, { q: d.demandNo });
+    const item = arr.rows.find((r) => r.demandNo === d.demandNo && r.supplierCode === A)!;
+    expect(item).toBeTruthy();
+    expect([item.status, item.week, item.containers, Number(item.qty)]).toEqual(['PO created', wk(24), 2, 2000]);
+    expect(item.sapPoNumber).toBeTruthy();
+    expect(item.skus).toContain(M1);
+    expect(arr.totals.containers).toBeGreaterThanOrEqual(2);
+    const sc = await scorecard(db, rep, { q: A });
+    const srow = sc.rows.find((r) => r.supplierCode === A)!;
+    expect(srow).toBeTruthy();
+    expect([srow.invited >= 1, srow.quoted >= 1, srow.containers >= 2, srow.handoffs >= 1, srow.posCreated >= 1]).toEqual([true, true, true, true, true]);
+    expect(srow.values.find((v) => v.currency === 'USD')?.value).toBeGreaterThan(0);
+    const detail = await supplierDetail(db, rep, { supplierCode: A });
+    expect(detail.rfqs.length).toBeGreaterThanOrEqual(1);
+    expect(detail.handoffs.some((h) => h.sapPoNumber)).toBe(true);
+    const tr = await trend(db, rep, {});
+    expect(tr.months.length).toBe(12);
+    const thisMonth = tr.months[tr.months.length - 1];
+    expect(thisMonth.month).toBe(new Date().toISOString().slice(0, 7));
+    expect(thisMonth.accepted).toBeGreaterThanOrEqual(1);
+    expect(thisMonth.units.find((u) => u.unit === 'CT')?.executionRate).not.toBeNull();
+    expect((await arrivals(db, other, { q: d.demandNo })).rows.length).toBe(0);
+    expect((await scorecard(db, other, { q: A })).rows.length).toBe(0);
+    expect((await trend(db, other, {})).months.every((m) => m.accepted === 0 && m.units.length === 0)).toBe(true);
 
     // another company's demand is not found; without reports.open nothing is readable
     await expect(demandReport(db, actor({ id: rep.id, permissions: new Set(['reports.open']), companies: new Set(['9999']) }), demandId)).rejects.toMatchObject({ code: 'NOT_FOUND' });
@@ -268,8 +340,111 @@ describe('PO drafts and the SAP outbox (spec 23)', () => {
       caller.handoff.list({ q: ho.hoNo, page: 1, pageSize: 25 }).then((r) => r.rows.length),
       caller.po.list({ q: d.poDraftNo, page: 1, pageSize: 25 }).then((r) => r.rows.length),
       caller.reports.execution({ q: ho.snapshot.award.demandNo }).then((r) => r.length),
+      caller.reports.dashboard.suppliers({}).then((r) => r.rows.filter((x) => x.supplierCode === A).length),
+      caller.reports.dashboard.atRisk({}).then((r) => r.rows.filter((x) => x.demandNo === ho.snapshot.award.demandNo).length),
+      caller.reports.arrivals({ q: ho.snapshot.award.demandNo }).then((r) => r.rows.length),
+      caller.reports.suppliers({ q: A }).then((r) => r.rows.length),
+      caller.reports.supplierDetail({ supplierCode: A }).then((r) => r.rfqs.length + r.handoffs.length),
     ]);
-    expect(lists).toEqual([0, 0, 0, 0]);
+    expect(lists).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0]);
     expect((await draft(d.poDraftId)).status).toBe('SUBMITTED'); // nothing changed
+  });
+
+  it('delete a user: outright when on no records, archived when on records; refused for yourself and demo accounts', async () => {
+    const admin = { id: 1, isAdmin: true };
+    const fresh = await makeUser();
+    await db.insertInto('app.UserRole').values({ UserId: fresh, RoleId: Number((await db.selectFrom('app.Role').select('RoleId').where('Name', '=', 'Sales').executeTakeFirstOrThrow()).RoleId) }).execute();
+    await db.insertInto('scm.UserCompany').values({ UserId: fresh, CompanyCode: '1000' }).execute();
+    expect((await deletePreview(db, admin, fresh)).mode).toBe('delete');
+    expect((await deleteUser(db, admin, fresh)).mode).toBe('delete');
+    expect(await db.selectFrom('app.User').select('UserId').where('UserId', '=', fresh).executeTakeFirst()).toBeUndefined();
+
+    // sales created demands: archived — hidden, cannot sign in, username freed, name kept on the records
+    const before = await db.selectFrom('app.User').select(['Username', 'DisplayName']).where('UserId', '=', sales.id).executeTakeFirstOrThrow();
+    const pv = await deletePreview(db, admin, sales.id);
+    expect([pv.mode, pv.references.some((r) => r.table === 'scm.Demand')]).toEqual(['archive', true]);
+    await deleteUser(db, admin, sales.id);
+    const after = await db.selectFrom('app.User').selectAll().where('UserId', '=', sales.id).executeTakeFirstOrThrow();
+    expect([after.IsActive, !!after.DeletedAt, after.Username.startsWith(`deleted.${sales.id}.`), after.DisplayName]).toEqual([false, true, true, before.DisplayName]);
+    expect((await listUsers(db)).some((u) => u.UserId === sales.id)).toBe(false);
+    expect(await db.selectFrom('app.User').select('UserId').where('Username', '=', before.Username).executeTakeFirst()).toBeUndefined(); // can be registered again
+
+    await expect(deleteUser(db, { id: proc.id, isAdmin: false }, proc.id)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    const demo = await db.selectFrom('app.User').select('UserId').where('IsDemo', '=', true).executeTakeFirst();
+    if (demo) await expect(deleteUser(db, admin, Number(demo.UserId))).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('outbox fencing: a live claim of another worker is left alone; a late "found" for a settled draft raises the late-reply exception', async () => {
+    sales = actor({ id: await makeUser(), permissions: sales.permissions, companies: sales.companies }); // the previous test archived the old one
+    const h = await accepted(wk(29), [[A, 1]]);
+    const d = await submitted(h[A], [[M1, '1000']]);
+    // another worker holds a live claim: nothing is sent, nothing recorded
+    await sql`UPDATE scm.SapSubmission SET Status = 'IN_FLIGHT', ClaimedBy = 'other#1', LeaseUntil = DATEADD(minute, 4, SYSUTCDATETIME()) WHERE PoDraftId = ${d.poDraftId}`.execute(db);
+    await run();
+    expect([(await draft(d.poDraftId)).status, (await draft(d.poDraftId)).submission?.status, await stubPos(d.poDraftNo)]).toEqual(['SUBMITTED', 'IN_FLIGHT', 0]);
+    // its lease runs out: unknown, asked (not found), resent once with the same key, created
+    await sql`UPDATE scm.SapSubmission SET LeaseUntil = DATEADD(minute, -1, SYSUTCDATETIME()) WHERE PoDraftId = ${d.poDraftId}`.execute(db);
+    await run(); // expired claim → unknown (never resent blindly)
+    await due(); await run(); // lookup: not found → pending again
+    await due(); await run(); // resent with the same key
+    expect([(await draft(d.poDraftId)).status, await stubPos(d.poDraftNo)]).toEqual(['CREATED', 1]);
+
+    // a draft settled as "not created", then SAP turns out to hold a PO for it (a racing lookup): late reply, submission parked
+    const h2 = await accepted(wk(30), [[A, 1]]);
+    const d2 = await submitted(h2[A], [[M1, '1000']]);
+    await db.insertInto('scm.StubSapFault').values({ Reference: d2.poDraftNo, Mode: 'reject', CreatedBy: null }).execute();
+    await run();
+    expect((await draft(d2.poDraftId)).status).toBe('REJECTED');
+    await db.insertInto('scm.StubSapPo').values({ PoNumber: '4577777777', IdempotencyKey: (await draft(d2.poDraftId)).submission!.key, Reference: d2.poDraftNo, PayloadSha256: 'x'.repeat(64) }).execute();
+    await sql`UPDATE scm.SapSubmission SET Status = 'UNKNOWN', NextActionAt = DATEADD(minute, -1, SYSUTCDATETIME()) WHERE PoDraftId = ${d2.poDraftId}`.execute(db);
+    await run();
+    expect([(await draft(d2.poDraftId)).status, (await draft(d2.poDraftId)).submission?.status]).toEqual(['REJECTED', 'MANUAL']);
+    expect(await listWork(db, po, { tab: 'EXCEPTIONS', q: d2.poDraftNo, page: 1, pageSize: 25 }).then((r) => r.rows.map((x) => x.title))).toContain(`${d2.poDraftNo}: late SAP reply`);
+    await due(); await run(); // parked: not asked again
+    expect((await draft(d2.poDraftId)).submission?.status).toBe('MANUAL');
+    expect(await runInvariants()).toEqual([]);
+    await sql`UPDATE scm.SapSubmission SET Status = 'REJECTED' WHERE PoDraftId = ${d2.poDraftId}`.execute(db); // settled by the PO team (the purge test needs no open SAP outcome)
+  });
+
+  it('start over: the purge deletes every workflow record in one go, keeps users and master data, restarts the numbers', async () => {
+    sales = actor({ id: await makeUser(), permissions: sales.permissions, companies: sales.companies }); // the previous test archived the old one
+    const h = await accepted(wk(26), [[A, 1]]);
+    await submitted(h[A], [[M1, '1000']]);
+    await run();
+    const users = await db.selectFrom('app.User').select((eb) => eb.fn.countAll<number>().as('n')).executeTakeFirstOrThrow();
+    const pv = await purgePreview(db, true);
+    expect([pv.allowed, pv.refusedBecause]).toEqual([true, null]);
+    expect(pv.deletes.find((x) => x.label === 'Demands')!.count).toBeGreaterThan(0);
+
+    // refused without ALLOW_PURGE, and while a PO is on its way to SAP (nothing is deleted)
+    expect((await purgePreview(db, false)).allowed).toBe(false);
+    await expect(purgeAll(db, '', false)).rejects.toMatchObject({ code: 'PURGE_REFUSED' });
+    const open = await submitted((await accepted(wk(28), [[A, 1]]))[A], [[M1, '1000']]); // PENDING, not sent yet
+    expect((await purgePreview(db, true)).refusedBecause).toMatch(/on their way to SAP/);
+    await expect(purgeAll(db, '', true)).rejects.toMatchObject({ code: 'SAP_IN_PROGRESS', status: 409 });
+    expect((await draft(open.poDraftId)).status).toBe('SUBMITTED');
+    await run();
+    expect((await draft(open.poDraftId)).status).toBe('CREATED');
+    const lastPod = (await draft(open.poDraftId)).poDraftNo;
+
+    const r = await purgeAll(db, '', true);
+    expect(r.deleted.find((x) => x.label === 'PO drafts')!.count).toBeGreaterThan(0);
+    for (const t of ['scm.Demand', 'scm.QtySlice', 'scm.Rfq', 'scm.AwardBatch', 'scm.Handoff', 'scm.PoDraft', 'scm.SapSubmission', 'scm.DemandVersion', 'scm.ThreadEntry', 'scm.DomainEvent', 'scm.ChangeRequest']) {
+      expect([t, Number((await sql<{ n: number }>`SELECT COUNT(*) AS n FROM ${sql.table(t)}`.execute(db)).rows[0].n)]).toEqual([t, 0]);
+    }
+    expect((await db.selectFrom('app.User').select((eb) => eb.fn.countAll<number>().as('n')).executeTakeFirstOrThrow()).n).toBe(users.n);
+    expect(await db.selectFrom('md.Material').select('MaterialCode').where('MaterialCode', '=', M1).executeTakeFirst()).toBeTruthy();
+    expect(await db.selectFrom('md.Supplier').select('SupplierCode').where('SupplierCode', '=', A).executeTakeFirst()).toBeTruthy();
+    expect(await runInvariants()).toEqual([]);
+
+    // numbers start again, and the history triggers are back on
+    const { demandId } = await createDemand(db, sales, cmd(), '1000');
+    expect((await getDemand(db, sales, demandId)).demandNo).toBe('D-000001');
+    await submitDemand(db, sales, cmd(), demandId, (await getDemand(db, sales, demandId)).rowVer, { notes: '', weeks: [{ etdWeek: wk(27), groups: [{ name: 'Gala', containerCount: 1, capacity: '1000', unit: 'CT',
+      items: [{ majorCategory: 'Apples', subMajorCategory: SUB, size: 'S-100', materialClass: 'Cat1', originCode: 'CL', materialCode: null, share: '100' }] }] }] });
+    await expect(sql`DELETE FROM scm.DemandVersion WHERE DemandId = ${demandId}`.execute(db)).rejects.toThrow(/cannot be changed or deleted/);
+    // PO draft numbers continue: POD numbers are the SAP reference and must never repeat
+    const next = (await sql<{ n: string }>`SELECT CAST(current_value AS nvarchar(20)) AS n FROM sys.sequences WHERE name = 'PoDraftNoSeq'`.execute(db)).rows[0].n;
+    expect(Number(next)).toBe(Number(lastPod.replace('POD-', '')));
   });
 });

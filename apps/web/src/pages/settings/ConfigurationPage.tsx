@@ -18,6 +18,7 @@ import { SupplierOriginsTab } from './workflow/SupplierOriginsTab';
 import { ReasonCodesTab } from './workflow/ReasonCodesTab';
 import { WorkflowSettingsTab } from './workflow/WorkflowSettingsTab';
 import { BackToWork } from '../../components/BackToWork';
+import { PurgeSection } from './PurgeSection';
 
 /**
  * Settings → Configuration: one section per area, shown only with its permission, listed in a vertical menu grouped by
@@ -53,13 +54,14 @@ export function ConfigurationPage() {
     can(P.configWfSettingsEdit) && { key: 'workflow', group: 'Workflow', label: 'Workflow', children: <WorkflowSettingsTab /> },
     can(P.configShippingEdit) && { key: 'shipping', group: 'Workflow', label: 'Shipping terms', children: <ShippingTermsTab /> },
     can(P.configAdEdit) && { key: 'ad', group: 'Sign-in', label: 'Active Directory', children: <ActiveDirectorySection /> },
+    can(P.configPurge) && { key: 'purge', group: 'Maintenance', label: 'Start over', children: <PurgeSection /> },
   ].filter((t): t is { key: string; group: string; label: string; children: JSX.Element } => !!t);
 
   const tab = tabs.some((t) => t.key === params.get('tab')) ? params.get('tab')! : tabs[0]?.key;
   // Table tabs use the full page width; form tabs stay narrow.
   const wide = ['companies', 'reasons', 'origins'].includes(tab ?? '');
 
-  const groups = ['General', 'SAP', 'Workflow', 'Sign-in'].map((g) => ({
+  const groups = ['General', 'SAP', 'Workflow', 'Sign-in', 'Maintenance'].map((g) => ({
     type: 'group' as const, key: g, label: g,
     children: tabs.filter((t) => t.group === g).map((t) => ({ key: t.key, label: t.label })),
   })).filter((g) => g.children.length > 0);

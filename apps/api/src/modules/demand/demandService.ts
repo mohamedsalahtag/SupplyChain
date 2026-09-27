@@ -51,7 +51,7 @@ export async function createDemand(db: Db, actor: Actor, commandId: string, comp
     const demandId = String(row.DemandId);
     await recordEvent(tx, { type: 'DEMAND_CREATED', entityType: 'DEMAND', entityId: demandId, demandId, actorUserId: actor.id });
     return { demandId, demandNo };
-  });
+  }, { companyCode });
 }
 
 /**
@@ -103,7 +103,7 @@ export async function saveDraft(db: Db, actor: Actor, commandId: string, demandI
     await updateWithRowVer(tx, 'scm.Demand', 'DemandId', demandId, rowVer, sql`Notes = ${input.notes}`);
     await writeContent(tx, demandId, weeks);
     return { rowVer: await currentRowVer(tx, demandId) };
-  });
+  }, { demandId, rowVer, input });
 }
 
 const currentRowVer = async (tx: Tx, demandId: string) =>
@@ -140,7 +140,7 @@ export async function submitDemand(db: Db, actor: Actor, commandId: string, dema
       number: d.DemandNo, title: await summary(tx, demandId), note: first ? null : `Resubmitted (version ${version})`, link: link(demandId), raisedBy: actor.id,
     });
     return { version };
-  });
+  }, { demandId, rowVer, input });
 }
 
 /** Accept: one Open slice per active line, holding its full quantity; the clock is the first submission. */
@@ -165,7 +165,7 @@ export async function acceptDemand(db: Db, actor: Actor, commandId: string, dema
     await addThreadEntry(tx, { entityType: 'DEMAND', entityId: demandId, kind: 'SYSTEM', body: 'Accepted by Procurement', authorUserId: actor.id, eventId });
     await closeInbox(tx, 'DEMAND_TO_ACCEPT', 'DEMAND', demandId, actor.id);
     return { slices: lines.length };
-  });
+  }, { demandId, rowVer });
 }
 
 export async function returnDemand(db: Db, actor: Actor, commandId: string, demandId: string, rowVer: string, comment: string): Promise<{ returned: true }> {
@@ -183,7 +183,7 @@ export async function returnDemand(db: Db, actor: Actor, commandId: string, dema
       number: d.DemandNo, title: await summary(tx, demandId), note: comment.trim().slice(0, 1000), link: link(demandId), raisedBy: actor.id,
     });
     return { returned: true };
-  });
+  }, { demandId, rowVer, comment });
 }
 
 /**
@@ -201,7 +201,7 @@ export async function recallDemand(db: Db, actor: Actor, commandId: string, dema
     await addThreadEntry(tx, { entityType: 'DEMAND', entityId: demandId, kind: 'SYSTEM', body: `Taken back by Sales to change it${text ? `: ${text}` : ''}`, authorUserId: actor.id, eventId });
     await closeInbox(tx, 'DEMAND_TO_ACCEPT', 'DEMAND', demandId, actor.id);
     return { recalled: true };
-  });
+  }, { demandId, rowVer, comment });
 }
 
 export async function addComment(db: Db, actor: Actor, commandId: string, demandId: string, body: string): Promise<{ entryId: string }> {
@@ -210,5 +210,5 @@ export async function addComment(db: Db, actor: Actor, commandId: string, demand
     const d = await lockDemand(tx, actor, demandId);
     assertCan(actor, P_DEMAND.comment, d.CompanyCode);
     return { entryId: await addThreadEntry(tx, { entityType: 'DEMAND', entityId: demandId, kind: 'COMMENT', body: body.trim(), authorUserId: actor.id }) };
-  });
+  }, { demandId, body });
 }

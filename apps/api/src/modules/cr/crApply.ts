@@ -222,5 +222,5 @@ export async function decideCr(db: Db, actor: Actor, commandId: string, crId: st
     await addThreadEntry(tx, { entityType: 'DEMAND', entityId: cr.DemandId, kind: 'SYSTEM', body: `${cr.CrNo} ${status.replace('_', ' ').toLowerCase()}${partial ? ' (partially applied)' : ''}`, authorUserId: actor.id, eventId });
     await queueNotification(tx, { type: 'CR_DECIDED', userId: Number(cr.RaisedBy), entityType: 'CR', entityId: crId, payload: { status } });
     return { status, applyStatus: status === 'REJECTED' ? 'NOT_REQUIRED' : partial ? 'PARTIALLY_APPLIED' : 'APPLIED' };
-  });
+  }, { crId, rowVer, decisions, decisionComment });
 }

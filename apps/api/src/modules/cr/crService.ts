@@ -204,7 +204,7 @@ export async function raiseContainerChange(db: Db, actor: Actor, commandId: stri
     return saveCr(tx, actor, demand, { crType: plan.crType, dept: 'SALES', reasonCode: input.reasonCode, comment: input.comment },
       plan.items.map((i) => ({ kind: i.kind, etdWeek: i.etdWeek, groupId: i.groupId, lineId: null, before: i.before, after: i.after, effect: i.effect, requestedCount: i.after?.containerCount ?? 0, requestedQty: null })),
       plan.problems, holdLines, plan.items.map((i) => i.etdWeek));
-  });
+  }, { demandId, input });
 }
 
 /** Procurement: quantity that cannot be sourced (Open only), and optionally a lower container count per week. */
@@ -248,7 +248,7 @@ export async function raiseNotSourced(
     if (items.length === 0) problems.push('Choose at least one line or week.');
     return saveCr(tx, actor, demand, { crType: 'NOT_SOURCED', dept: 'PROCUREMENT', reasonCode: input.reasonCode, comment: input.comment },
       items, problems, items.filter((i) => i.lineId).map((i) => i.lineId!), input.weeks.map((w) => w.etdWeek));
-  });
+  }, { demandId, input });
 }
 
 /** Releases every hold of a change request (operational lock rows only). */
@@ -274,5 +274,5 @@ export async function withdrawCr(db: Db, actor: Actor, commandId: string, crId: 
     const eventId = await recordEvent(tx, { type: 'CR_WITHDRAWN', entityType: 'CR', entityId: crId, demandId: String(cr.DemandId), payload: { comment }, actorUserId: actor.id });
     await addThreadEntry(tx, { entityType: 'CR', entityId: crId, kind: 'COMMENT', body: `Withdrawn: ${comment.trim()}`, authorUserId: actor.id, eventId });
     return { withdrawn: true };
-  });
+  }, { crId, rowVer, comment });
 }

@@ -2,18 +2,29 @@ import { P } from '@supplychain/shared';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { loadActor } from '../workflow/access.js';
-import { audit } from '../../auth/audit.js';
-import { DirectoryUnreachableError, findDirectoryUser, searchDirectory, WrongCredentialsError } from '../../auth/ldap.js';
+import { auditTx } from '../../auth/audit.js';
+import { endSessions } from '../../auth/authUser.js';
+import { startSession } from '../../auth/cookie.js';
+import { DirectoryConfigError, DirectoryUnreachableError, findDirectoryUser, searchDirectory, WrongCredentialsError } from '../../auth/ldap.js';
 import { loadAdConnection, toAdSettings } from '../../settings/adConnection.js';
 import { procedure, router, type Context } from '../../trpc/trpc.js';
 import { setUserCompanies } from '../workflowSetup/companies.js';
 import { assertMayGrant, assertRolesExist, listUsers, updateUser } from './usersService.js';
+import { deletePreview, deleteUser } from './userDelete.js';
 
 const open = procedure.meta({ permission: P.usersOpen });
 const add = procedure.meta({ permission: P.usersAdd });
 const edit = procedure.meta({ permission: P.usersEdit });
 
 const roleIds = z.array(z.number().int().positive()).max(50);
+
+/**
+ * An administrator who changed their own roles or companies ended their own sessions too (SessionVersion): this browser
+ * gets a fresh cookie so they stay signed in here; other devices are signed out.
+ */
+async function keepOwnSession(ctx: Context & { user: NonNullable<Context['user']> }, targetUserId: number) {
+  if (!ctx.user.viewAs && targetUserId === ctx.user.id) await startSession(ctx, ctx.user.id);
+}
 
 /** The saved AD settings with a search account, or a clear error. */
 async function directory(ctx: Context) {
@@ -32,6 +43,7 @@ const directoryError = (err: unknown): never => {
     throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'The Active Directory search account password is wrong. Update it in Configuration → Active Directory.' });
   }
   if (err instanceof DirectoryUnreachableError) throw new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: err.message });
+  if (err instanceof DirectoryConfigError) throw new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message });
   throw err;
 };
 
@@ -68,6 +80,7 @@ export const usersRouter = router({
     const exists = await ctx.db.selectFrom('app.User').select('UserId').where('Username', '=', person.username).executeTakeFirst();
     if (exists) throw new TRPCError({ code: 'CONFLICT', message: `${person.displayName || person.username} is already registered.` });
 
+    // The new user and the audit row commit together.
     const userId = await ctx.db.transaction().execute(async (trx) => {
       const created = await trx
         .insertInto('app.User')
@@ -86,9 +99,9 @@ export const usersRouter = router({
         .executeTakeFirstOrThrow();
       const id = Number(created.UserId);
       await trx.insertInto('app.UserRole').values([...new Set(input.roleIds)].map((RoleId) => ({ UserId: id, RoleId }))).execute();
+      await auditTx(trx, { userId: ctx.user.id, action: 'user.add', target: person.username, details: { roleIds: input.roleIds } });
       return id;
     });
-    await audit(ctx.db, { userId: ctx.user.id, action: 'user.add', target: person.username, details: { roleIds: input.roleIds } }, ctx.log);
     return { userId };
   }),
 
@@ -103,8 +116,12 @@ export const usersRouter = router({
         const outside = input.companyCodes.filter((c) => !mine.has(c));
         if (outside.length) throw new TRPCError({ code: 'FORBIDDEN', message: `You can only give companies you work for yourself (not ${outside.join(', ')}).` });
       }
-      await setUserCompanies(ctx.db, input.userId, input.companyCodes);
-      await audit(ctx.db, { userId: ctx.user.id, action: 'users.companies', target: String(input.userId), details: input }, ctx.log);
+      // A changed data scope ends the user's sessions; the change and its audit row commit together.
+      const { changed } = await setUserCompanies(ctx.db, input.userId, input.companyCodes, async (tx, changed) => {
+        if (changed) await endSessions(tx, input.userId);
+        await auditTx(tx, { userId: ctx.user.id, action: 'users.companies', target: String(input.userId), details: input });
+      });
+      if (changed) await keepOwnSession(ctx, input.userId);
       return { saved: true };
     }),
 
@@ -112,8 +129,20 @@ export const usersRouter = router({
     .input(z.object({ userId: z.number().int().positive(), roleIds, isActive: z.boolean() }))
     .mutation(async ({ ctx, input }) => {
       await assertMayGrant(ctx.db, ctx.user, input.roleIds, input.userId);
-      await updateUser(ctx.db, ctx.user.id, input);
-      await audit(ctx.db, { userId: ctx.user.id, action: 'user.update', target: String(input.userId), details: input }, ctx.log);
+      // Changed roles or a disabled account end the user's sessions (updateUser); the audit row commits with the change.
+      const r = await updateUser(ctx.db, ctx.user.id, input, (trx) =>
+        auditTx(trx, { userId: ctx.user.id, action: 'user.update', target: String(input.userId), details: input }));
+      if (r.sessionsEnded) await keepOwnSession(ctx, input.userId);
       return { saved: true };
     }),
+
+  /** What deleting this user would do: delete outright, or archive because their name is on records. */
+  deletePreview: procedure.meta({ permission: P.usersDelete }).input(z.object({ userId: z.number().int().positive() }))
+    .query(({ ctx, input }) => deletePreview(ctx.db, ctx.user, input.userId)),
+
+  delete: procedure.meta({ permission: P.usersDelete }).input(z.object({ userId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    const r = await deleteUser(ctx.db, ctx.user, input.userId, (trx, r) =>
+      auditTx(trx, { userId: ctx.user.id, action: r.mode === 'delete' ? 'user.delete' : 'user.archive', target: r.username, details: { userId: input.userId, references: r.references } }));
+    return { mode: r.mode, displayName: r.displayName };
+  }),
 });

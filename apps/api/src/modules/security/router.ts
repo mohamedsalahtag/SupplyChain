@@ -1,23 +1,25 @@
 import { ALL_PERMISSION_KEYS, P, PERMISSION_CATALOG } from '@supplychain/shared';
 import { TRPCError } from '@trpc/server';
-import type { Kysely } from 'kysely';
+import { sql, type Kysely } from 'kysely';
 import { z } from 'zod';
-import { audit } from '../../auth/audit.js';
+import { auditTx } from '../../auth/audit.js';
 import type { Database } from '../../db/schema.js';
 import { procedure, router } from '../../trpc/trpc.js';
 
 const open = procedure.meta({ permission: P.securityOpen });
 const edit = procedure.meta({ permission: P.securityRolesEdit });
 
+type Editor = { id: number; isAdmin: boolean; permissions: ReadonlySet<string> };
+
 /**
  * A non-administrator with security.roles.edit may not change a role they hold, nor grant a key they lack
- * (otherwise the key is as strong as Administrator — security review 2026-09).
+ * (otherwise the key is as strong as Administrator — security review 2026-09). Call it inside the change's transaction.
  */
-async function assertMayEditRole(ctx: { db: Kysely<Database>; user: { id: number; isAdmin: boolean; permissions: ReadonlySet<string> } }, roleId: number, keys: string[]) {
-  if (ctx.user.isAdmin) return;
-  const held = await ctx.db.selectFrom('app.UserRole').select('RoleId').where('UserId', '=', ctx.user.id).where('RoleId', '=', roleId).executeTakeFirst();
+export async function assertMayEditRole(db: Kysely<Database>, user: Editor, roleId: number, keys: string[]) {
+  if (user.isAdmin) return;
+  const held = await db.selectFrom('app.UserRole').select('RoleId').where('UserId', '=', user.id).where('RoleId', '=', roleId).executeTakeFirst();
   if (held) throw new TRPCError({ code: 'FORBIDDEN', message: 'You cannot change a role you hold — ask an administrator.' });
-  const missing = keys.filter((k) => !ctx.user.permissions.has(k));
+  const missing = keys.filter((k) => !user.permissions.has(k));
   if (missing.length) throw new TRPCError({ code: 'FORBIDDEN', message: `You can only grant permissions you hold yourself (missing: ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? '…' : ''}).` });
 }
 
@@ -27,13 +29,17 @@ const details = z.object({
   description: z.string().trim().max(400),
 });
 
-/** A role that may be changed: exists and is not built in. */
-async function editableRole(db: Kysely<Database>, id: number) {
-  const role = await db.selectFrom('app.Role').select(['RoleId', 'Name', 'IsBuiltIn']).where('RoleId', '=', id).executeTakeFirst();
+/** A role that may be changed: exists and is not built in. Locked (UPDLOCK) until the transaction ends. */
+async function editableRole(trx: Kysely<Database>, id: number) {
+  const role = (await sql<{ RoleId: number; Name: string; IsBuiltIn: boolean; IsAdmin: boolean; IsActive: boolean }>`
+    SELECT RoleId, Name, IsBuiltIn, IsAdmin, IsActive FROM app.Role WITH (UPDLOCK, ROWLOCK) WHERE RoleId = ${id}`.execute(trx)).rows[0];
   if (!role) throw new TRPCError({ code: 'NOT_FOUND', message: 'Role not found' });
   if (role.IsBuiltIn) throw new TRPCError({ code: 'BAD_REQUEST', message: `${role.Name} is built in and cannot be changed.` });
   return role;
 }
+
+const roleKeys = async (db: Kysely<Database>, id: number) =>
+  (await db.selectFrom('app.RolePermission').select('PermissionKey').where('RoleId', '=', id).execute()).map((p) => p.PermissionKey);
 
 const duplicateName = (err: unknown) => {
   if (String(err).includes('UQ_Role_Name')) throw new TRPCError({ code: 'CONFLICT', message: 'A role with that name already exists.' });
@@ -86,56 +92,65 @@ export const securityRouter = router({
     };
   }),
 
-  createRole: edit.input(details).mutation(async ({ ctx, input }) => {
-    const created = await ctx.db
-      .insertInto('app.Role')
-      .values({ Name: input.name, Description: input.description })
-      .output('inserted.RoleId')
-      .executeTakeFirstOrThrow()
-      .catch(duplicateName);
-    const id = Number(created.RoleId);
-    await audit(ctx.db, { userId: ctx.user.id, action: 'role.create', target: input.name }, ctx.log);
-    return { roleId: id };
-  }),
+  // Security changes and their audit rows commit together (auditTx).
+  createRole: edit.input(details).mutation(({ ctx, input }) =>
+    ctx.db.transaction().execute(async (trx) => {
+      const created = await trx
+        .insertInto('app.Role')
+        .values({ Name: input.name, Description: input.description })
+        .output('inserted.RoleId')
+        .executeTakeFirstOrThrow()
+        .catch(duplicateName);
+      await auditTx(trx, { userId: ctx.user.id, action: 'role.create', target: input.name });
+      return { roleId: Number(created.RoleId) };
+    }),
+  ),
 
-  updateRole: edit.input(details.extend({ roleId, isActive: z.boolean() })).mutation(async ({ ctx, input }) => {
-    await editableRole(ctx.db, input.roleId);
-    await assertMayEditRole(ctx, input.roleId, []);
-    await ctx.db
-      .updateTable('app.Role')
-      .set({ Name: input.name, Description: input.description, IsActive: input.isActive })
-      .where('RoleId', '=', input.roleId)
-      .execute()
-      .catch(duplicateName);
-    await audit(ctx.db, { userId: ctx.user.id, action: 'role.update', target: input.name, details: input }, ctx.log);
-    return { saved: true };
-  }),
+  /** Re-activating a role hands its keys back to its holders: a non-administrator must hold them all (F06). */
+  updateRole: edit.input(details.extend({ roleId, isActive: z.boolean() })).mutation(({ ctx, input }) =>
+    ctx.db.transaction().execute(async (trx) => {
+      const role = await editableRole(trx, input.roleId);
+      const reactivating = !role.IsActive && input.isActive;
+      if (reactivating && role.IsAdmin && !ctx.user.isAdmin) throw new TRPCError({ code: 'FORBIDDEN', message: 'Only an administrator can re-activate an administrator role.' });
+      await assertMayEditRole(trx, ctx.user, input.roleId, reactivating ? await roleKeys(trx, input.roleId) : []);
+      await trx
+        .updateTable('app.Role')
+        .set({ Name: input.name, Description: input.description, IsActive: input.isActive })
+        .where('RoleId', '=', input.roleId)
+        .execute()
+        .catch(duplicateName);
+      await auditTx(trx, { userId: ctx.user.id, action: 'role.update', target: input.name, details: input });
+      return { saved: true };
+    }),
+  ),
 
   /** Replaces the role's granted keys. Only keys from the catalogue are accepted. */
   setPermissions: edit
     .input(z.object({ roleId, permissionKeys: z.array(z.string()).max(500) }))
     .mutation(async ({ ctx, input }) => {
-      const role = await editableRole(ctx.db, input.roleId);
       const unknown = input.permissionKeys.filter((k) => !ALL_PERMISSION_KEYS.includes(k));
       if (unknown.length) throw new TRPCError({ code: 'BAD_REQUEST', message: `Unknown permission: ${unknown.join(', ')}` });
-      await assertMayEditRole(ctx, input.roleId, input.permissionKeys);
       const keys = [...new Set(input.permissionKeys)];
-      await ctx.db.transaction().execute(async (trx) => {
+      return ctx.db.transaction().execute(async (trx) => {
+        const role = await editableRole(trx, input.roleId);
+        await assertMayEditRole(trx, ctx.user, input.roleId, keys);
         await trx.deleteFrom('app.RolePermission').where('RoleId', '=', input.roleId).execute();
         if (keys.length) await trx.insertInto('app.RolePermission').values(keys.map((PermissionKey) => ({ RoleId: input.roleId, PermissionKey }))).execute();
+        await auditTx(trx, { userId: ctx.user.id, action: 'role.permissions', target: role.Name, details: { permissionKeys: keys } });
+        return { saved: true, count: keys.length };
       });
-      await audit(ctx.db, { userId: ctx.user.id, action: 'role.permissions', target: role.Name, details: { permissionKeys: keys } }, ctx.log);
-      return { saved: true, count: keys.length };
     }),
 
   /** Only a role nobody holds can be deleted. */
-  deleteRole: edit.input(z.object({ roleId })).mutation(async ({ ctx, input }) => {
-    const role = await editableRole(ctx.db, input.roleId);
-    await assertMayEditRole(ctx, input.roleId, []);
-    const holder = await ctx.db.selectFrom('app.UserRole').select('UserId').where('RoleId', '=', input.roleId).executeTakeFirst();
-    if (holder) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Remove this role from its users before deleting it.' });
-    await ctx.db.deleteFrom('app.Role').where('RoleId', '=', input.roleId).execute();
-    await audit(ctx.db, { userId: ctx.user.id, action: 'role.delete', target: role.Name }, ctx.log);
-    return { deleted: true };
-  }),
+  deleteRole: edit.input(z.object({ roleId })).mutation(({ ctx, input }) =>
+    ctx.db.transaction().execute(async (trx) => {
+      const role = await editableRole(trx, input.roleId);
+      await assertMayEditRole(trx, ctx.user, input.roleId, []);
+      const holder = await trx.selectFrom('app.UserRole').select('UserId').where('RoleId', '=', input.roleId).executeTakeFirst();
+      if (holder) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Remove this role from its users before deleting it.' });
+      await trx.deleteFrom('app.Role').where('RoleId', '=', input.roleId).execute();
+      await auditTx(trx, { userId: ctx.user.id, action: 'role.delete', target: role.Name });
+      return { deleted: true };
+    }),
+  ),
 });

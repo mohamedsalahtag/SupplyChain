@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import Fastify from 'fastify';
+import Fastify, { type FastifyError } from 'fastify';
 import fastifyStatic from '@fastify/static';
 import cookie from '@fastify/cookie';
 import { fastifyTRPCPlugin, type CreateFastifyContextOptions } from '@trpc/server/adapters/fastify';
@@ -16,6 +16,7 @@ import { refreshAging } from './modules/rfq/aging.js';
 import { runOutbox } from './modules/po/outbox.js';
 import { workerId } from './modules/po/router.js';
 import { poAdapter } from './modules/po/sapAdapter.js';
+import { newErrorId } from './trpc/errorId.js';
 import { appRouter } from './trpc/router.js';
 import type { Context } from './trpc/trpc.js';
 
@@ -42,15 +43,42 @@ const app = Fastify({
 const threads = Number(process.env.UV_THREADPOOL_SIZE ?? 4);
 if (threads <= cfg.DB_POOL_MAX) app.log.warn({ threads, pool: cfg.DB_POOL_MAX }, 'UV_THREADPOOL_SIZE should be above DB_POOL_MAX, or blocked reads can stall transactions');
 if (cfg.ALLOW_TEST_LOGIN) app.log.warn('ALLOW_TEST_LOGIN is on — for local testing only, never on a server');
+if (process.env.NODE_ENV === 'production' && cfg.DB_TRUST_SERVER_CERT) app.log.warn('DB_TRUST_SERVER_CERT is on: the database certificate is not checked — install the SQL Server certificate and set it to false');
+
+/**
+ * Content-Security-Policy for the pages of the built web app (SERVE_WEB): scripts only from this server, no inline script.
+ * Inline styles stay allowed (Ant Design writes its CSS at runtime); icons may be data:/blob: (Configuration → General).
+ */
+const CSP = [
+  "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'", "img-src 'self' data: blob:", "font-src 'self' data:",
+  "connect-src 'self'", "object-src 'none'", "base-uri 'self'", "form-action 'self'",
+].join('; ');
+/** The user guide (/help/…) is shown inside the app in a frame; everything else may never be framed. */
+const framableByApp = (url: string) => url.startsWith('/help/');
 
 await app.register(cookie);
 // Basic security headers on every reply (the web app is served by the same origin through the proxy).
-app.addHook('onSend', async (_req, reply) => {
+app.addHook('onSend', async (req, reply) => {
+  const framable = framableByApp(req.url);
   reply.header('X-Content-Type-Options', 'nosniff');
-  reply.header('X-Frame-Options', 'DENY');
+  reply.header('X-Frame-Options', framable ? 'SAMEORIGIN' : 'DENY');
   reply.header('Referrer-Policy', 'same-origin');
   reply.header('Cross-Origin-Opener-Policy', 'same-origin');
   if (https || cfg.TRUST_PROXY) reply.header('Strict-Transport-Security', 'max-age=31536000');
+  // HTML pages only: a CSP on a PDF can stop the browser's own PDF viewer.
+  if (cfg.SERVE_WEB && String(reply.getHeader('content-type') ?? '').startsWith('text/html')) {
+    reply.header('Content-Security-Policy', `${CSP}; frame-ancestors ${framable ? "'self'" : "'none'"}`);
+  }
+});
+
+// Faults outside tRPC (/files, static files): 4xx keep their message; anything else is logged in full and the reply
+// only carries an error id (security review 2026-09-26). tRPC formats its own errors (trpc.ts).
+app.setErrorHandler((err: FastifyError, req, reply) => {
+  const status = err.statusCode && err.statusCode >= 400 && err.statusCode < 500 ? err.statusCode : 500;
+  if (status < 500) return reply.code(status).send({ code: err.code, message: err.message });
+  const errorId = newErrorId();
+  req.log.error({ errorId, err }, 'Unhandled error');
+  return reply.code(500).send({ message: `Internal error. Quote this reference to IT: ${errorId}`, errorId });
 });
 await registerFileRoutes(app, db, cfg);
 await app.register(fastifyTRPCPlugin, {
@@ -62,7 +90,8 @@ await app.register(fastifyTRPCPlugin, {
       return { db, cfg, user, encKey: cfg.SETTINGS_ENCRYPTION_KEY, log: app.log, req, res };
     },
     onError: ({ path, error }: { path?: string; error: { code: string } & Error }) => {
-      if (['UNAUTHORIZED', 'FORBIDDEN', 'TOO_MANY_REQUESTS', 'NOT_FOUND', 'CONFLICT', 'UNPROCESSABLE_CONTENT', 'BAD_REQUEST'].includes(error.code)) return; // expected, not a fault
+      // Expected answers are not faults; INTERNAL_SERVER_ERROR is logged by the error formatter (with its error id).
+      if (['UNAUTHORIZED', 'FORBIDDEN', 'TOO_MANY_REQUESTS', 'NOT_FOUND', 'CONFLICT', 'UNPROCESSABLE_CONTENT', 'BAD_REQUEST', 'INTERNAL_SERVER_ERROR'].includes(error.code)) return;
       app.log.error({ path, err: error }, 'tRPC error');
     },
   },
@@ -78,7 +107,7 @@ if (cfg.SERVE_WEB) {
   if (!existsSync(join(dist, 'index.html'))) throw new Error(`SERVE_WEB is on but ${dist} has no index.html — run "npm run build" first`);
   // Hashed build files (/assets/…) never change: cached for a year; index.html is re-checked so an update shows at once.
   await app.register(fastifyStatic, { root: dist, wildcard: false, cacheControl: false,
-    setHeaders: (res, path) => res.setHeader('Cache-Control', /[\\/]assets[\\/]/.test(path) ? 'public, max-age=31536000, immutable' : 'no-cache') });
+    setHeaders: (reply, path) => reply.header('Cache-Control', /[\\/]assets[\\/]/.test(path) ? 'public, max-age=31536000, immutable' : 'no-cache') });
   app.setNotFoundHandler((req, reply) => (req.method === 'GET' && !req.url.startsWith('/trpc') && !req.url.startsWith('/files')
     ? reply.header('Cache-Control', 'no-cache').sendFile('index.html') // client-side routes (/demands/12 …)
     : reply.code(404).send({ message: 'Not found' })));

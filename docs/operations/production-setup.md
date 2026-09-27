@@ -39,12 +39,24 @@ TLS_PFX_PASSPHRASE=<the pfx password>
 ALLOW_TEST_LOGIN=false
 ALLOW_VIEW_AS=false
 ATTACHMENTS_DIR=D:\SupplyChainData\attachments
+DB_ENCRYPT=true
+DB_TRUST_SERVER_CERT=false
+AD_URL=ldaps://<domain controller>:636
 ```
 To generate a key: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`.
 
-With `NODE_ENV=production`, the app **refuses to start** if a test switch is on or if HTTPS is missing, so a mistake is caught at start, not in use.
+With `NODE_ENV=production`, the app **refuses to start** (so a mistake is caught at start, not in use) when:
+- a test switch is on (`ALLOW_TEST_LOGIN`, `ALLOW_VIEW_AS`);
+- HTTPS is missing (no certificate and no `TRUST_PROXY`);
+- `TRUST_PROXY=true` while `HOST` is not `127.0.0.1` — anyone who can reach the port could then fake their address and "https";
+- `DB_ENCRYPT` is not `true` — the database connection must be encrypted. Install the SQL Server certificate (or the company CA) on the app server and keep `DB_TRUST_SERVER_CERT=false`; with `true` the app starts but logs a warning, because the certificate is then not checked;
+- `AD_URL` is not `ldaps://`.
 
-**Behind a reverse proxy instead** (IIS ARR or nginx already terminating HTTPS): set `HOST=127.0.0.1`, `API_PORT=4300` and `TRUST_PROXY=true`, and leave the `TLS_*` values empty. The proxy forwards everything to `http://127.0.0.1:4300`.
+Active Directory settings saved in Configuration are held to the same rule: on a production server `ldap://` and *allow self-signed* are refused when saving, and again before every sign-in. Install the company CA in the server's certificate store so the domain controller's certificate is trusted.
+
+**Behind a reverse proxy instead** (IIS ARR or nginx already terminating HTTPS): leave the `TLS_*` values empty, set `API_PORT=4300`, and either
+- the proxy runs on this server: `HOST=127.0.0.1` and `TRUST_PROXY=true`. The proxy forwards everything to `http://127.0.0.1:4300`; or
+- the proxy runs on another machine: `HOST=0.0.0.0` and `TRUST_PROXY=<the proxy's IP addresses or CIDRs, comma-separated>`, e.g. `TRUST_PROXY=10.0.0.5,10.0.0.6`. Only those addresses are believed for `X-Forwarded-For` / `X-Forwarded-Proto`; firewall the port so only the proxy can reach it.
 
 ## 4. Database and build
 ```powershell

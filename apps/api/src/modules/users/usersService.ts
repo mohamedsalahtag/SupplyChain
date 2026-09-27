@@ -1,6 +1,7 @@
 /** Registered users and their roles. */
 import { TRPCError } from '@trpc/server';
-import type { Kysely, Transaction } from 'kysely';
+import { sql, type Kysely, type Transaction } from 'kysely';
+import { endSessions } from '../../auth/authUser.js';
 import type { Database } from '../../db/schema.js';
 
 export type UserListRow = {
@@ -20,7 +21,7 @@ export type UserListRow = {
 
 export async function listUsers(db: Kysely<Database>): Promise<UserListRow[]> {
   const [users, links, companies] = await Promise.all([
-    db.selectFrom('app.User').selectAll().orderBy('DisplayName').execute(),
+    db.selectFrom('app.User').selectAll().where('DeletedAt', 'is', null).orderBy('DisplayName').execute(), // archived (deleted) users are hidden
     db
       .selectFrom('app.UserRole as ur')
       .innerJoin('app.Role as r', 'r.RoleId', 'ur.RoleId')
@@ -99,26 +100,36 @@ export async function countActiveAdmins(db: Kysely<Database> | Transaction<Datab
 }
 
 /**
+ * The user row, locked (UPDLOCK) until the transaction ends; an archived (deleted) user is "not found" — nothing about
+ * them can be changed any more (security review 2026-09-26, F07a).
+ */
+export async function lockLiveUser(trx: Kysely<Database>, userId: number) {
+  const u = (await sql<{ UserId: number; IsActive: boolean; IsDemo: boolean; DeletedAt: Date | null }>`
+    SELECT UserId, IsActive, IsDemo, DeletedAt FROM app.[User] WITH (UPDLOCK, ROWLOCK) WHERE UserId = ${userId}`.execute(trx)).rows[0];
+  if (!u || u.DeletedAt) throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
+  return u;
+}
+
+/**
  * Sets a user's roles and active flag. Refuses changes that would lock people
  * out: disabling yourself, removing your own admin role, or leaving the app
- * without any active administrator.
+ * without any active administrator. When the roles or the active flag change, every session of the user ends
+ * (SessionVersion). `inTx` runs in the same transaction (the audit row).
  */
 export async function updateUser(
   db: Kysely<Database>,
   actorId: number,
   input: { userId: number; roleIds: number[]; isActive: boolean },
-): Promise<void> {
+  inTx?: (trx: Transaction<Database>) => Promise<void>,
+): Promise<{ sessionsEnded: boolean }> {
   await assertRolesExist(db, input.roleIds);
-  await db.transaction().execute(async (trx) => {
-    const exists = await trx.selectFrom('app.User').select('UserId').where('UserId', '=', input.userId).executeTakeFirst();
-    if (!exists) throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
+  return db.transaction().execute(async (trx) => {
+    const before = await lockLiveUser(trx, input.userId);
+    const oldRoles = (await trx.selectFrom('app.UserRole').select('RoleId').where('UserId', '=', input.userId).execute()).map((r) => Number(r.RoleId));
 
     if (input.userId === actorId) {
       if (!input.isActive) throw new TRPCError({ code: 'BAD_REQUEST', message: 'You cannot disable your own account.' });
-      const wasAdmin = await isAdminRoleSet(
-        trx,
-        (await trx.selectFrom('app.UserRole').select('RoleId').where('UserId', '=', actorId).execute()).map((r) => Number(r.RoleId)),
-      );
+      const wasAdmin = await isAdminRoleSet(trx, oldRoles);
       if (wasAdmin && !(await isAdminRoleSet(trx, input.roleIds))) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'You cannot remove your own Administrator role.' });
       }
@@ -133,5 +144,11 @@ export async function updateUser(
     if ((await countActiveAdmins(trx)) === 0) {
       throw new TRPCError({ code: 'BAD_REQUEST', message: 'At least one active user must keep the Administrator role.' });
     }
+
+    const newRoles = new Set(input.roleIds);
+    const changed = Boolean(before.IsActive) !== input.isActive || oldRoles.length !== newRoles.size || oldRoles.some((r) => !newRoles.has(r));
+    if (changed) await endSessions(trx, input.userId);
+    await inTx?.(trx);
+    return { sessionsEnded: changed };
   });
 }

@@ -2,7 +2,7 @@ import { StrictMode, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { httpBatchLink, TRPCClientError } from '@trpc/client';
+import { httpBatchLink, httpLink, splitLink, TRPCClientError } from '@trpc/client';
 import { App as AntApp, ConfigProvider, theme, type ThemeConfig } from 'antd';
 import type { MappingAlgorithm } from 'antd/es/theme/interface';
 import { trpc } from './lib/trpc';
@@ -11,7 +11,7 @@ import { LoginPage } from './pages/LoginPage';
 
 /** Used until the saved appearance loads (and if it cannot). */
 const DEFAULT_FONT_SIZE = 13;
-const DEFAULT_ICON = '/favicon.svg';
+const DEFAULT_ICON = '/logo.ico';
 
 /**
  * antd's compact algorithm also shrinks text (it uses fontSizeSM as the base),
@@ -73,7 +73,11 @@ function Root() {
     });
     return client;
   });
-  const [trpcClient] = useState(() => trpc.createClient({ links: [httpBatchLink({ url: '/trpc' })] }));
+  // Report queries go as their own requests: a batched reply waits for its slowest query, so one heavy report
+  // (e.g. the monthly trend) used to hold back every other query of the page. Everything else stays batched.
+  const [trpcClient] = useState(() => trpc.createClient({
+    links: [splitLink({ condition: (op) => op.path.startsWith('reports.'), true: httpLink({ url: '/trpc' }), false: httpBatchLink({ url: '/trpc' }) })],
+  }));
 
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
