@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, App, Button, Card, Col, Descriptions, Input, Modal, Radio, Row, Skeleton, Space, Table, Tooltip, Typography } from 'antd';
+import { Alert, App, Button, Card, Col, Descriptions, Input, Modal, Radio, Row, Skeleton, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import { CheckOutlined, SendOutlined, SyncOutlined } from '@ant-design/icons';
 import { Link, useParams } from 'react-router-dom';
 import { P } from '@supplychain/shared';
@@ -63,8 +63,11 @@ export function PoDraftPage() {
       <Space wrap style={{ justifyContent: 'space-between', width: '100%' }}>
         <Space size={10} align="baseline" wrap>
           <Typography.Title level={5} style={{ margin: 0 }}>{d.poDraftNo}</Typography.Title>
-          <StatusTag def={PO_STATUS[d.status]} />
-          {d.sapPoNumber && <Typography.Text strong copyable>SAP PO {d.sapPoNumber}</Typography.Text>}
+          <StatusTag def={PO_STATUS[d.status]} label={d.simulated && d.status === 'CREATED' ? 'Created in simulator — not in SAP' : undefined} />
+          {d.sapPoNumber && (d.simulated
+            ? <Tag color="orange" title="Created by the SAP simulator (Configuration → SAP purchase orders). Nothing was created in SAP.">Simulated PO {d.sapPoNumber} — not in SAP</Tag>
+            : <Typography.Text strong copyable>SAP PO {d.sapPoNumber}</Typography.Text>)}
+          {!d.sapPoNumber && d.simulatorActive && ['DRAFT', 'VALIDATED', 'SUBMITTED', 'UNKNOWN'].includes(d.status) && <Tag color="orange">Simulator — nothing is sent to SAP</Tag>}
           <Typography.Text type="secondary">{d.supplierName} · {d.hoNo} · {d.abNo} · company {d.companyCode}</Typography.Text>
         </Space>
         <Space wrap>
@@ -73,8 +76,11 @@ export function PoDraftPage() {
             if (r.problems.length) throw Object.assign(new Error('Not valid'), { data: { details: { problems: r.problems } } });
           }, 'Validated — ready to submit')}>Validate</Button>}
           {d.actions.submit && <Button type="primary" icon={<SendOutlined />} loading={submit.isPending} onClick={() => modal.confirm({
-            title: `Submit ${d.poDraftNo} to SAP?`, okText: 'Submit to SAP',
-            content: `${d.supplierName} · ${d.containers} container(s) · ${total.toLocaleString('en-GB', { maximumFractionDigits: 2 })} ${d.currency}. The draft is frozen and cannot be changed after this; SAP creates one purchase order.`,
+            title: d.simulatorActive ? `Submit ${d.poDraftNo} to the SAP simulator?` : `Submit ${d.poDraftNo} to SAP?`,
+            content: d.simulatorActive
+              ? `SAP SIMULATOR: nothing is sent to SAP — the simulator answers with a test PO number (Configuration → SAP purchase orders). ${d.supplierName} · ${d.containers} container(s) · ${total.toLocaleString('en-GB', { maximumFractionDigits: 2 })} ${d.currency}. The draft is frozen after this.`
+              : `${d.supplierName} · ${d.containers} container(s) · ${total.toLocaleString('en-GB', { maximumFractionDigits: 2 })} ${d.currency}. The draft is frozen and cannot be changed after this; SAP creates one purchase order.`,
+            okText: d.simulatorActive ? 'Submit to the simulator' : 'Submit to SAP',
             onOk: () => run(() => submit.mutateAsync({ commandId: newCommandId(), poDraftId, rowVer: d.rowVer }), `${d.poDraftNo} submitted to SAP`),
           })}>Submit to SAP</Button>}
           {d.status === 'REJECTED' && <Link to={`/handoffs/${d.handoffId}`}><Button type="primary">Go to PO preparation</Button></Link>}

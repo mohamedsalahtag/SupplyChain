@@ -5,7 +5,11 @@ import { hasPermission, type Actor } from '../workflow/access.js';
 import { NotFoundError } from '../workflow/errors.js';
 import { formatQty, fromDb } from '../workflow/qty.js';
 import { rowVerHex, type Db } from '../workflow/tx.js';
+import { sapPoMode } from '../../settings/sapPoApi.js';
 import { candidateSkus, draftWarnings, P_PO } from './poService.js';
+
+/** 1 when the draft's PO number came from the SAP simulator (scm.StubSapPo), not from SAP: nothing was created in SAP. */
+const simulated = () => sql<number>`CASE WHEN EXISTS (SELECT 1 FROM scm.StubSapPo x WHERE x.PoNumber = d.SapPoNumber AND x.Reference = d.PoDraftNo) THEN 1 ELSE 0 END`.as('Simulated');
 
 const day = (d: Date | string | null) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 
@@ -22,7 +26,7 @@ export async function preparation(db: Db, actor: Actor, handoffId: string) {
     ids.length ? db.selectFrom('scm.AwardItemSku as a').leftJoin('md.Material as m', 'm.MaterialCode', 'a.MaterialCode').select(['a.AwardItemId', 'a.MaterialCode', 'm.Description', 'a.Qty', 'a.SetStage'])
       .where('a.AwardItemId', 'in', ids).where('a.IsActive', '=', true).execute() : [],
     ids.length ? db.selectFrom('scm.MasterDataRequest').select(['MdrId', 'AwardItemId', 'Note', 'CreatedAt']).where('AwardItemId', 'in', ids).where('Status', '=', 'OPEN').execute() : [],
-    db.selectFrom('scm.PoDraft').select(['PoDraftId', 'PoDraftNo', 'Status', 'SapPoNumber', 'CreatedAt']).where('HandoffId', '=', handoffId).orderBy('PoDraftId', 'desc').execute(),
+    db.selectFrom('scm.PoDraft as d').select(['d.PoDraftId', 'd.PoDraftNo', 'd.Status', 'd.SapPoNumber', 'd.CreatedAt', simulated()]).where('d.HandoffId', '=', handoffId).orderBy('d.PoDraftId', 'desc').execute(),
   ]);
   const manage = hasPermission(actor, P_PO.manage) && h.Status === 'ACCEPTED';
   const live = drafts.find((d) => ['DRAFT', 'VALIDATED', 'SUBMITTED', 'UNKNOWN', 'CREATED'].includes(d.Status));
@@ -38,7 +42,7 @@ export async function preparation(db: Db, actor: Actor, handoffId: string) {
         canSelect: manage && !live?.Status.match(/SUBMITTED|UNKNOWN|CREATED/) && ['PENDING', 'RESOLVED_AT_PO'].includes(i.SkuStatus),
       };
     }),
-    drafts: drafts.map((d) => ({ poDraftId: String(d.PoDraftId), poDraftNo: d.PoDraftNo, status: d.Status, sapPoNumber: d.SapPoNumber, createdAt: d.CreatedAt.toISOString() })),
+    drafts: drafts.map((d) => ({ poDraftId: String(d.PoDraftId), poDraftNo: d.PoDraftNo, status: d.Status, sapPoNumber: d.SapPoNumber, simulated: Number(d.Simulated) === 1, createdAt: d.CreatedAt.toISOString() })),
     canBuild: manage && !live,
   };
 }
@@ -57,7 +61,7 @@ export async function getDraft(db: Db, actor: Actor, draftId: string) {
     .leftJoin('app.User as u', 'u.UserId', 'd.CreatedBy').leftJoin('app.User as su', 'su.UserId', 'd.SubmittedBy')
     .select(['d.PoDraftId', 'd.PoDraftNo', 'd.HandoffId', 'h.HoNo', 'b.AwardBatchId', 'b.AbNo', 'b.DemandId', 'dm.DemandNo', 'd.CompanyCode', 'd.SupplierCode', 'sp.Name as SupplierName', 'd.Plant',
       'd.PurchasingOrg', 'd.PurchasingGroup', 'd.Incoterm', 'd.PortOfLoading', 'd.PortOfDischarge', 'd.PaymentTerms', 'd.Currency', 'd.ContainerCount', 'd.Status', 'd.SapPoNumber',
-      'd.SapCreatedAt', 'd.Resolution', 'd.LastError', 'd.ValidatedAt', 'd.SubmittedAt', 'su.DisplayName as SubmittedBy', 'd.CreatedAt', 'u.DisplayName as CreatedBy', rowVerHex('d.RowVer').as('RowVer')])
+      'd.SapCreatedAt', 'd.Resolution', 'd.LastError', 'd.ValidatedAt', 'd.SubmittedAt', 'su.DisplayName as SubmittedBy', 'd.CreatedAt', 'u.DisplayName as CreatedBy', rowVerHex('d.RowVer').as('RowVer'), simulated()])
     .where('d.PoDraftId', '=', draftId).executeTakeFirst();
   if (!d || !actor.companies.has(d.CompanyCode) || !hasPermission(actor, P_PO.open)) throw new NotFoundError(`PO draft ${draftId}`);
   const [items, sub] = await Promise.all([
@@ -74,6 +78,8 @@ export async function getDraft(db: Db, actor: Actor, draftId: string) {
     companyCode: d.CompanyCode, supplierCode: d.SupplierCode, supplierName: d.SupplierName, plant: d.Plant, purchasingOrg: d.PurchasingOrg, purchasingGroup: d.PurchasingGroup,
     incoterm: d.Incoterm, portOfLoading: d.PortOfLoading, portOfDischarge: d.PortOfDischarge, paymentTerms: d.PaymentTerms, currency: d.Currency, containers: d.ContainerCount,
     status: d.Status, sapPoNumber: d.SapPoNumber, sapCreatedAt: d.SapCreatedAt?.toISOString() ?? null, resolution: d.Resolution,
+    /** The PO number is the simulator's; and whether a submit now would go to the simulator (Configuration → SAP purchase orders). */
+    simulated: Number(d.Simulated) === 1, simulatorActive: (await sapPoMode(db)) === 'stub',
     /** Live and never blocking, while the draft can still be validated or submitted. */
     warnings: ['DRAFT', 'VALIDATED'].includes(d.Status) ? await draftWarnings(db) : [],
     problems: d.LastError ? d.LastError.split('\n') : [],
@@ -100,7 +106,7 @@ export async function listDrafts(db: Db, actor: Actor, f: DraftFilter) {
   if (f.q) { const p = `%${f.q.replace(/[[%_]/g, '[$&]')}%`; q = q.where((eb) => eb.or([eb('d.PoDraftNo', 'like', p), eb('h.HoNo', 'like', p), eb('dm.DemandNo', 'like', p), eb('sp.Name', 'like', p), eb('d.SapPoNumber', 'like', p)])); }
   const [rows, count] = await Promise.all([
     q.leftJoin('scm.SapSubmission as s', 's.PoDraftId', 'd.PoDraftId')
-      .select(['d.PoDraftId', 'd.PoDraftNo', 'h.HandoffId', 'h.HoNo', 'dm.DemandNo', 'd.CompanyCode', 'sp.Name', 'd.SupplierCode', 'd.Status', 'd.SapPoNumber', 'd.ContainerCount', 'd.Currency', 'd.SubmittedAt', 'd.CreatedAt', 's.Attempts', 'd.LastError'])
+      .select(['d.PoDraftId', 'd.PoDraftNo', 'h.HandoffId', 'h.HoNo', 'dm.DemandNo', 'd.CompanyCode', 'sp.Name', 'd.SupplierCode', 'd.Status', 'd.SapPoNumber', 'd.ContainerCount', 'd.Currency', 'd.SubmittedAt', 'd.CreatedAt', 's.Attempts', 'd.LastError', simulated()])
       .orderBy('d.PoDraftId', 'desc').offset((f.page - 1) * f.pageSize).fetch(f.pageSize).execute(),
     q.select((eb) => eb.fn.countAll<number>().as('n')).executeTakeFirstOrThrow(),
   ]);
@@ -108,7 +114,7 @@ export async function listDrafts(db: Db, actor: Actor, f: DraftFilter) {
     total: Number(count.n),
     rows: rows.map((r) => ({
       poDraftId: String(r.PoDraftId), poDraftNo: r.PoDraftNo, handoffId: String(r.HandoffId), hoNo: r.HoNo, demandNo: r.DemandNo, companyCode: r.CompanyCode, supplierName: r.Name, supplierCode: r.SupplierCode,
-      status: r.Status, sapPoNumber: r.SapPoNumber, containers: r.ContainerCount, currency: r.Currency, submittedAt: r.SubmittedAt?.toISOString() ?? null, createdAt: r.CreatedAt.toISOString(),
+      status: r.Status, sapPoNumber: r.SapPoNumber, simulated: Number(r.Simulated) === 1, containers: r.ContainerCount, currency: r.Currency, submittedAt: r.SubmittedAt?.toISOString() ?? null, createdAt: r.CreatedAt.toISOString(),
       attempts: r.Attempts ?? 0, lastError: r.LastError?.split('\n')[0] ?? null,
     })),
   };

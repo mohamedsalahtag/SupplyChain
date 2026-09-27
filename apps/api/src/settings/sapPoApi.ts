@@ -49,6 +49,12 @@ const storedSchema = sapPoApiSchema.omit({ password: true }).extend({
   timeoutSeconds: z.number().int().default(60).transform((n) => Math.min(MAX_TIMEOUT_SECONDS, Math.max(5, n))),
 });
 
+/** Only the mode (no password decrypted): 'stub' = the simulator, nothing is sent to SAP. */
+export async function sapPoMode(db: Kysely<Database>): Promise<SapPoApi['mode']> {
+  const stored = (await readSetting(db, KEY)) as { mode?: unknown } | null;
+  return stored?.mode === 'api' ? 'api' : 'stub';
+}
+
 export async function loadSapPoApi(db: Kysely<Database>, encKey: string): Promise<SapPoApi> {
   const stored = await readSetting(db, KEY);
   if (!stored) return sapPoApiSchema.parse({});

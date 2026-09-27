@@ -63,7 +63,7 @@ export function PoPreparation({ handoffId }: { handoffId: string }) {
       {p.drafts.length > 0 && (
         <div style={{ marginTop: 10 }}>
           <Typography.Text type="secondary">PO drafts of this handoff: </Typography.Text>
-          {p.drafts.map((d) => <Link key={d.poDraftId} to={`/po-drafts/${d.poDraftId}`} style={{ marginRight: 10 }}>{d.poDraftNo} <StatusTag def={PO_STATUS[d.status]} />{d.sapPoNumber ? ` SAP ${d.sapPoNumber}` : ''}</Link>)}
+          {p.drafts.map((d) => <Link key={d.poDraftId} to={`/po-drafts/${d.poDraftId}`} style={{ marginRight: 10 }}>{d.poDraftNo} <StatusTag def={PO_STATUS[d.status]} label={d.simulated && d.status === 'CREATED' ? 'Created in simulator — not in SAP' : undefined} />{d.sapPoNumber ? (d.simulated ? <Tag color="orange" style={{ marginInlineStart: 4 }}>{d.sapPoNumber} simulated</Tag> : ` SAP ${d.sapPoNumber}`) : ''}</Link>)}
         </div>
       )}
       <SkuModal item={picking} onClose={() => setPicking(null)} />

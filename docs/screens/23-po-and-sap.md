@@ -132,3 +132,6 @@ flowchart TD
 - The real SAP (ZCON) adapter and the SAP field that stores the portal reference (Stage 9; **required before production**)
 - Changes after the PO is created
 - E-mailing the PO to the supplier
+
+## Simulator labels (2026-09-27)
+While Configuration → SAP purchase orders is on the **simulator** (the default until the company's PO API is set up), nothing reaches SAP. The screens say so: an open draft shows *Simulator — nothing is sent to SAP*, the submit dialog asks *Submit … to the SAP simulator?*, and a draft whose PO number came from the simulator (`scm.StubSapPo`, same number and reference) shows *Simulated PO … — not in SAP* and the status *Created in simulator — not in SAP* on the draft, the PO drafts list and PO preparation. The label follows where the number came from, so it stays right after the mode is switched to the PO API.

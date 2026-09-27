@@ -54,11 +54,11 @@ function Drafts() {
   const list = trpc.po.list.useQuery({ page, pageSize: prefs.pageSize, q, status }, { enabled: prefs.ready, placeholderData: (p) => p });
   const columns: AppColumn<Row>[] = [
     { title: 'PO draft', key: 'no', dataIndex: 'poDraftNo', width: 115 },
-    { title: 'SAP PO', key: 'sap', dataIndex: 'sapPoNumber', width: 110, render: (v: string | null) => v ?? '—' },
+    { title: 'SAP PO', key: 'sap', dataIndex: 'sapPoNumber', width: 110, render: (v: string | null, r: { simulated: boolean }) => (v ? (r.simulated ? <Tag color="orange" title="From the SAP simulator: nothing was created in SAP">{v}</Tag> : v) : '—') },
     { title: 'Supplier', key: 's', width: 220, render: (_: unknown, r) => <>{r.supplierName} <Typography.Text type="secondary" style={{ fontSize: 12 }}>{r.supplierCode}</Typography.Text></> },
     { title: 'Handoff · demand', key: 'h', width: 170, render: (_: unknown, r) => `${r.hoNo} · ${r.demandNo}` },
     { title: 'Containers', key: 'c', dataIndex: 'containers', width: 90, align: 'right' },
-    { title: 'Status', key: 'st', width: 230, render: (_: unknown, r) => <StatusTag def={PO_STATUS[r.status]} /> },
+    { title: 'Status', key: 'st', width: 230, render: (_: unknown, r) => <StatusTag def={PO_STATUS[r.status]} label={r.simulated && r.status === 'CREATED' ? 'Created in simulator — not in SAP' : undefined} /> },
     { title: 'Last message', key: 'e', width: 260, render: (_: unknown, r) => <Typography.Text type="secondary" ellipsis={{ tooltip: r.lastError }} style={{ fontSize: 12 }}>{r.lastError ?? '—'}</Typography.Text> },
     { title: 'Submitted', key: 'sub', width: 150, render: (_: unknown, r) => formatDateTime(r.submittedAt) },
   ];
