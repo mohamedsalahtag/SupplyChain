@@ -32,7 +32,7 @@ export function staleSources(last: Record<MasterDataSource, Date | null>, maxAge
   return MASTER_DATA_SOURCES.filter((s) => !last[s] || last[s]!.getTime() < limit);
 }
 
-/** Blocks PO submission when master data is too old (warning elsewhere). */
+/** Throws when master data is too old. Not used to block PO drafts any more (2026-09-27: a warning there, `draftWarnings`). */
 export async function assertMasterDataFresh(db: Db | Tx, maxAgeHours: number, now = new Date()): Promise<void> {
   const stale = staleSources(await lastSuccessfulSyncs(db), maxAgeHours, now);
   if (stale.length) {

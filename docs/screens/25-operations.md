@@ -18,7 +18,7 @@ It refreshes every minute, and **Check now** refreshes it at once. Each card has
   - the last call to SAP
   - whether SAP is the stub
   - a link to the PO drafts
-- **Master data from SAP:** the last successful materials, suppliers and purchase-order syncs. Each is *fresh* or *older than n h*, where *n* is the workflow setting; stale master data blocks PO submission.
+- **Master data from SAP:** the last successful materials, suppliers and purchase-order syncs. Each is *fresh* or *older than n h*, where *n* is the workflow setting; stale master data is a warning on PO drafts (it no longer blocks submission, 2026-09-27).
 - **Overdue work:** open My work items past their due time, per type (task or exception), with the oldest due date.
 - **Users and roles:**
   - **Separation of duties** lists active non-admin users holding a conflicting pair:

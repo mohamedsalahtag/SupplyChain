@@ -18,7 +18,7 @@ The PO team turns an **accepted handoff** into **one SAP purchase order**: it pi
 5. **Validate**, which lists every problem. It checks:
    - SKUs are set and valid
    - the supplier is usable in SAP
-   - master data is fresh (see the settings)
+   - master data is fresh (see the settings) — **a warning only** since 2026-09-27: older data is shown on the draft and noted in its history at submit, but does not block Validate or Submit
    - currency and prices are complete
    - the plant and purchasing org exist
 6. **Submit to SAP** (after a confirmation). The checks run again. The payload is **frozen**, with a SHA-256 hash and one idempotency key. The quantity moves to *PO submitted*.

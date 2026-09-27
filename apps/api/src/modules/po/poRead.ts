@@ -5,7 +5,7 @@ import { hasPermission, type Actor } from '../workflow/access.js';
 import { NotFoundError } from '../workflow/errors.js';
 import { formatQty, fromDb } from '../workflow/qty.js';
 import { rowVerHex, type Db } from '../workflow/tx.js';
-import { candidateSkus, P_PO } from './poService.js';
+import { candidateSkus, draftWarnings, P_PO } from './poService.js';
 
 const day = (d: Date | string | null) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 
@@ -73,7 +73,10 @@ export async function getDraft(db: Db, actor: Actor, draftId: string) {
     poDraftId: String(d.PoDraftId), poDraftNo: d.PoDraftNo, handoffId: String(d.HandoffId), hoNo: d.HoNo, awardBatchId: String(d.AwardBatchId), abNo: d.AbNo, demandId: String(d.DemandId), demandNo: d.DemandNo,
     companyCode: d.CompanyCode, supplierCode: d.SupplierCode, supplierName: d.SupplierName, plant: d.Plant, purchasingOrg: d.PurchasingOrg, purchasingGroup: d.PurchasingGroup,
     incoterm: d.Incoterm, portOfLoading: d.PortOfLoading, portOfDischarge: d.PortOfDischarge, paymentTerms: d.PaymentTerms, currency: d.Currency, containers: d.ContainerCount,
-    status: d.Status, sapPoNumber: d.SapPoNumber, sapCreatedAt: d.SapCreatedAt?.toISOString() ?? null, resolution: d.Resolution, problems: d.LastError ? d.LastError.split('\n') : [],
+    status: d.Status, sapPoNumber: d.SapPoNumber, sapCreatedAt: d.SapCreatedAt?.toISOString() ?? null, resolution: d.Resolution,
+    /** Live and never blocking, while the draft can still be validated or submitted. */
+    warnings: ['DRAFT', 'VALIDATED'].includes(d.Status) ? await draftWarnings(db) : [],
+    problems: d.LastError ? d.LastError.split('\n') : [],
     validatedAt: d.ValidatedAt?.toISOString() ?? null, submittedAt: d.SubmittedAt?.toISOString() ?? null, submittedBy: d.SubmittedBy ?? null, createdAt: d.CreatedAt.toISOString(), createdBy: d.CreatedBy ?? '', rowVer: d.RowVer,
     items: items.map((i) => ({
       itemNo: i.ItemNo, material: i.MaterialCode, description: i.Description ?? '', spec: `${lineLabel({ SubMajorCategory: i.SubMajorCategory, Size: i.Size, MaterialClass: i.MaterialClass, MaterialCode: null })} ${i.OriginCode}`,

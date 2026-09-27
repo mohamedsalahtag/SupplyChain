@@ -162,6 +162,12 @@ async function lockDraft(tx: Tx, actor: Actor, draftId: string): Promise<DraftRo
   return { ...d, PoDraftId: String(d.PoDraftId), HandoffId: String(d.HandoffId), AwardBatchId: String(d.AwardBatchId), DemandId: String(d.DemandId) };
 }
 
+/** Warnings never block Validate or Submit: SAP master data older than the configured age (the sync is advised, not required). */
+export async function draftWarnings(tx: Tx | Db): Promise<string[]> {
+  const stale = staleSources(await lastSuccessfulSyncs(tx), (await loadWfSettings(tx)).masterDataMaxAgeHours, new Date());
+  return stale.length ? [`SAP data is older than the configured age (${stale.join(', ')}) — running the sync first is advised`] : [];
+}
+
 /** Plan §7 rule 7 — checked at Validate and again at Submit (master data may have changed in between). */
 export async function draftProblems(tx: Tx | Db, d: DraftRow): Promise<string[]> {
   const p: string[] = [];
@@ -189,8 +195,6 @@ export async function draftProblems(tx: Tx | Db, d: DraftRow): Promise<string[]>
   }
   const boxes = (await sql<{ n: number | null }>`SELECT SUM(ContainerCount) AS n FROM scm.AwardShipment WHERE AwardBatchId = ${d.AwardBatchId} AND SupplierCode = ${d.SupplierCode} AND IsActive = 1`.execute(tx)).rows[0].n;
   if (Number(boxes ?? 0) !== d.ContainerCount) p.push(`Containers: the draft has ${d.ContainerCount}, the shipments now ${boxes ?? 0} — build a new draft`);
-  const stale = staleSources(await lastSuccessfulSyncs(tx), (await loadWfSettings(tx)).masterDataMaxAgeHours, new Date());
-  if (stale.length) p.push(`SAP data is too old (${stale.join(', ')}) — run the sync first`);
   return [...new Set(p)];
 }
 
@@ -201,7 +205,7 @@ export async function validateDraft(db: Db, actor: Actor, commandId: string, dra
     const problems = await draftProblems(tx, d);
     await updateWithRowVer(tx, 'scm.PoDraft', 'PoDraftId', draftId, rowVer,
       problems.length ? sql`Status = 'DRAFT', ValidatedAt = NULL, LastError = ${problems.join('\n')}` : sql`Status = 'VALIDATED', ValidatedAt = SYSUTCDATETIME(), LastError = NULL`);
-    return { problems };
+    return { problems, warnings: await draftWarnings(tx) };
   }, { draftId, rowVer });
 }
 
@@ -228,16 +232,17 @@ export async function submitDraft(db: Db, actor: Actor, commandId: string, draft
     if (d.Status !== 'VALIDATED') throw new DomainError('BAD_STATE', 'Validate the draft first', 409);
     const problems = await draftProblems(tx, d);
     if (problems.length) throw new DomainError('REVALIDATION_FAILED', 'The draft is no longer valid', 422, { problems });
+    const warnings = await draftWarnings(tx);
     const json = JSON.stringify(await buildPayload(tx, draftId));
     await updateWithRowVer(tx, 'scm.PoDraft', 'PoDraftId', draftId, rowVer, sql`Status = 'SUBMITTED', SubmittedBy = ${actor.id}, SubmittedAt = SYSUTCDATETIME(), LastError = NULL`);
     await tx.insertInto('scm.SapSubmission').values({ PoDraftId: draftId, IdempotencyKey: randomUUID(), Reference: d.PoDraftNo, PayloadJson: json, PayloadSha256: sha256(json), ClaimedBy: null, LeaseUntil: null }).execute();
     await runSliceBatch(tx, [
       moveSlicesSql(0, { from: sql`FROM scm.QtySlice s WITH (UPDLOCK, ROWLOCK)`, where: sql`s.HandoffId = ${d.HandoffId}`, states: ['PO_PREPARATION'], trigger: 'PO_SUBMIT', ctx: { actorUserId: actor.id, docType: 'PO_DRAFT', docId: draftId } }),
       eventSql('ev', { type: 'PO_SUBMITTED', entityType: 'PO_DRAFT', entityId: draftId, demandId: d.DemandId, payload: { poDraftNo: d.PoDraftNo }, actorUserId: actor.id }),
-      threadEntrySql(1, { entityType: 'PO_DRAFT', entityId: draftId, kind: 'SYSTEM', authorUserId: actor.id, body: `Submitted to SAP (reference ${d.PoDraftNo})` }, 'ev'),
+      threadEntrySql(1, { entityType: 'PO_DRAFT', entityId: draftId, kind: 'SYSTEM', authorUserId: actor.id, body: `Submitted to SAP (reference ${d.PoDraftNo})${warnings.length ? ` with a warning: ${warnings.join('; ')}` : ''}` }, 'ev'),
     ]);
     await closeInbox(tx, 'PO_TO_PREPARE', 'HANDOFF', d.HandoffId, actor.id);
-    return { submitted: true };
+    return { submitted: true, warnings };
   }, { draftId, rowVer });
 }
 

@@ -83,6 +83,7 @@ export function PoDraftPage() {
         </Space>
       </Space>
       <ProcessSteps steps={PO_STEPS} current={PO_STATUS[d.status]?.step ?? -1} />
+      {d.warnings.length > 0 && <Alert type="warning" showIcon message="Warning — you can still validate and submit" description={<ul style={{ margin: 0, paddingInlineStart: 18 }}>{d.warnings.map((w) => <li key={w}>{w}</li>)}</ul>} />}
       {problems && <Alert type="error" showIcon message="Not possible" description={<ul style={{ margin: 0, paddingInlineStart: 18 }}>{problems.map((p) => <li key={p}>{p}</li>)}</ul>} />}
       {!problems && d.problems.length > 0 && <Alert type={d.status === 'REJECTED' ? 'error' : 'warning'} showIcon message={d.status === 'REJECTED' ? 'Not created in SAP' : d.status === 'UNKNOWN' ? 'SAP outcome unknown' : 'Last validation'}
         description={<ul style={{ margin: 0, paddingInlineStart: 18 }}>{d.problems.map((p) => <li key={p}>{p}</li>)}</ul>} />}
