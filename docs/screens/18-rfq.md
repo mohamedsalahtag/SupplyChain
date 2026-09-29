@@ -129,3 +129,6 @@ The same derived stages as demands and awards (`modules/demand/progress.ts`, RFQ
 - *Quoted* is now its own stage everywhere (Procurement to compare and award), separate from *in RFQ* (waiting for quotes).
 - **Company** columns start hidden in the Demands, RFQs and Awards lists (Columns → tick Company to show it).
 
+## Record quotes defaults (2026-09-29)
+*Containers offered* starts at the containers asked for the week (or the supplier's earlier offer); change it when the supplier offers fewer or more. A week is saved only when it has a priced row, had an offer before, or its containers were changed by hand — a pre-filled week alone is not an offer. **Price** fields without a value have a warning background (and *no price* placeholder) so missing prices stand out; rows without a price are not saved.
+

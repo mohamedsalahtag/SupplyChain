@@ -26,6 +26,7 @@ const LABEL: Record<string, string> = {
   'scm.Demand': 'demands', 'scm.Rfq': 'RFQs', 'scm.SupplierQuote': 'quotes', 'scm.AwardBatch': 'awards', 'scm.Handoff': 'handoffs', 'scm.PoDraft': 'PO drafts',
   'scm.ChangeRequest': 'change requests', 'scm.MergeRecord': 'merges', 'scm.DomainEvent': 'history events', 'scm.ThreadEntry': 'comments', 'scm.Attachment': 'attachments',
   'scm.SliceHistory': 'quantity history', 'scm.DemandVersion': 'demand versions', 'scm.InboxItem': 'work items',
+  'scm.ContainerCapacity': 'container capacities',
 };
 
 const quote = (name: string) => name.split('.').map((p) => `[${p.replace(/]/g, ']]')}]`).join('.');

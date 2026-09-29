@@ -147,6 +147,18 @@ export interface Database {
     CountsAgainstProcurement: Generated<boolean>;
     IsActive: Generated<boolean>;
   };
+  /** Spec 32, migration 0034: maximum payload per container per product; NULL sub-major / size = any. */
+  'scm.ContainerCapacity': {
+    CapacityId: Generated<number>;
+    MajorCategory: string;
+    SubMajorCategory: string | null;
+    Size: string | null;
+    Unit: string;
+    Capacity: number;
+    IsActive: Generated<boolean>;
+    UpdatedBy: number | null;
+    UpdatedAt: Generated<Date>;
+  };
   'scm.RefOrigin': {
     OriginName: string;
     CountryCode: string | null;
@@ -256,6 +268,9 @@ export interface Database {
     SubmittedAt: Date | null;
     AcceptedAt: Date | null;
     AcceptedBy: number | null;
+    /** Migration 0035: a deleted draft (never accepted), hidden everywhere. */
+    DeletedAt: Date | null;
+    DeletedBy: number | null;
   };
   'scm.DemandWeek': { DemandWeekId: Generated<string>; DemandId: string; EtdWeek: string; ContainerCount: number };
   'scm.DemandLine': {

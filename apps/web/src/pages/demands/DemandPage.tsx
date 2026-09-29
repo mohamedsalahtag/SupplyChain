@@ -1,8 +1,10 @@
-import { Alert, Descriptions, Result, Skeleton, Space, Typography } from 'antd';
-import { Link, useParams } from 'react-router-dom';
+import { Alert, App, Button, Descriptions, Result, Skeleton, Space, Typography } from 'antd';
+import { DeleteOutlined } from '@ant-design/icons';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { BackToWork } from '../../components/BackToWork';
 import { formatDateTime } from '../../lib/format';
 import { trpc } from '../../lib/trpc';
+import { errorText, newCommandId } from '../../lib/workflow';
 import { DemandEditor } from './DemandEditor';
 import { DemandStatus } from './DemandStatus';
 import { DemandTabs } from './DemandTabs';
@@ -13,6 +15,10 @@ import { RequestChangePanel } from '../changes/RequestChangePanel';
 export function DemandPage() {
   const { demandId = '' } = useParams();
   const demand = trpc.demand.get.useQuery({ demandId }, { enabled: /^\d+$/.test(demandId), retry: false });
+  const { message, modal } = App.useApp();
+  const navigate = useNavigate();
+  const utils = trpc.useUtils();
+  const del = trpc.demand.delete.useMutation();
 
   if (demand.error) {
     return demand.error.data?.code === 'NOT_FOUND'
@@ -21,6 +27,19 @@ export function DemandPage() {
   }
   if (!demand.data) return <Skeleton active />;
   const d = demand.data;
+  /** Only a draft (or returned) demand that was never accepted, by its creator or an administrator (the server checks again). */
+  const onDelete = () => modal.confirm({
+    title: `Delete ${d.demandNo}?`, okText: 'Delete', okButtonProps: { danger: true },
+    content: 'The draft disappears from every list and cannot be opened or changed any more. Its number is not reused; the history keeps a note that it was deleted.',
+    onOk: async () => {
+      try {
+        await del.mutateAsync({ commandId: newCommandId(), demandId: d.demandId, rowVer: d.rowVer });
+        message.success(`${d.demandNo} deleted`);
+        await Promise.all([utils.demand.invalidate(), utils.work.invalidate()]);
+        navigate('/demands');
+      } catch (err) { message.error(errorText(err)); }
+    },
+  });
 
   return (
     <Space direction="vertical" size={10} style={{ width: '100%' }}>
@@ -34,6 +53,7 @@ export function DemandPage() {
           <StatusTag status={d.status} mergedInto={d.mergedIntoDemand} />
           <Typography.Text type="secondary">{d.companyCode} · {d.companyName}</Typography.Text>
         </Space>
+        {d.actions.delete && <Button danger icon={<DeleteOutlined />} loading={del.isPending} onClick={onDelete}>Delete draft</Button>}
       </Space>
       <DemandStatus demand={d} />
       <Descriptions size="small" column={{ xs: 1, sm: 2, lg: 4 }} bordered items={[

@@ -48,8 +48,10 @@ test('18 · build an RFQ from the shortlist, send, record a quote, release, canc
   await drawer.getByLabel(/^Price /).first().fill('18.5');
   await drawer.getByLabel(/^All weeks /).first().click(); // the same price in the other week
   await expect(drawer.getByLabel(/^Price /).nth(1)).toHaveValue('18.5');
+  await expect(drawer.getByLabel(/^Containers /).nth(1)).not.toHaveValue(''); // containers offered start at the containers asked
   await drawer.getByLabel(/^Containers /).first().fill('2'); // containers per week, not per material
-  await expect(drawer.getByText(/Enter the containers offered for .* before saving/)).toBeVisible(); // no quote without containers
+  await drawer.getByLabel(/^Containers /).nth(1).fill(''); // emptied: no quote without containers
+  await expect(drawer.getByText(/Enter the containers offered for .* before saving/)).toBeVisible();
   await expect(drawer.getByRole('button', { name: 'Save quotes' })).toBeDisabled();
   await drawer.getByLabel(/^Containers /).nth(1).fill('2');
   await drawer.getByRole('button', { name: 'Save quotes' }).click();

@@ -9,6 +9,7 @@ import { assertEntityAccess } from '../workflow/entityAccess.js';
 import { listThread } from '../workflow/threads.js';
 import './access.js';
 import { draftInput } from './content.js';
+import { deleteDemand } from './demandDelete.js';
 import { demandFilterOptions, demandHistory, getDemand, listDemands } from './demandRead.js';
 import { progressFor, TEAMS, waitingFor, whatsLeft } from './progress.js';
 import { acceptDemand, addComment, createDemand, recallDemand, returnDemand, saveDraft, submitDemand } from './demandService.js';
@@ -116,6 +117,9 @@ export const demandRouter = router({
     .mutation(async ({ ctx, input }) => acceptDemand(ctx.db, await loadActor(ctx.db, ctx.user), input.commandId, input.demandId, input.rowVer)),
 
   /** Sales takes a submitted demand back to change it (before Procurement accepts). */
+  /** Delete a draft demand that was never accepted (its creator or an administrator). */
+  delete: procedure.meta({ permission: P.demandDelete }).input(withVersion)
+    .mutation(async ({ ctx, input }) => deleteDemand(ctx.db, await loadActor(ctx.db, ctx.user), input.commandId, input.demandId, input.rowVer)),
   recall: procedure.meta({ permission: P.demandSubmit }).input(withVersion.extend({ comment: z.string().trim().max(2000).default('') }))
     .mutation(async ({ ctx, input }) => recallDemand(ctx.db, await loadActor(ctx.db, ctx.user), input.commandId, input.demandId, input.rowVer, input.comment)),
   return: procedure.meta({ permission: P.demandReturn }).input(withVersion.extend({ comment: z.string().trim().min(1).max(2000) }))

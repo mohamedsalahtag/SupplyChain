@@ -4,8 +4,13 @@ import { CopyOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { trpc } from '../../lib/trpc';
 import { qtyText, shareHundredths, weekLabel } from '../../lib/workflow';
 import { AddMaterialsDrawer, type ItemDraft } from './AddMaterialsDrawer';
+import { CapacityHint, useCapacitySuggestion } from './capacitySuggestion';
 
-export type GroupDraft = { uid: string; groupId?: string | null; name: string; containerCount: number; capacity: string; unit: string; items: ItemDraft[] };
+export type GroupDraft = {
+  uid: string; groupId?: string | null; name: string; containerCount: number; capacity: string; unit: string; items: ItemDraft[];
+  /** Spec 32: the capacity last filled in from Container capacity (editor only, never saved). */
+  capacitySuggested?: string;
+};
 
 /** Same capacity, unit and composition: the containers are identical (the server merges these too). */
 export function sameMakeUp(a: GroupDraft, b: GroupDraft): boolean {
@@ -64,6 +69,7 @@ export function GroupCard({ group, index, week, copyTargets, onChange, onRemove,
   const [adding, setAdding] = useState(false);
   const [copying, setCopying] = useState(false);
   const [target, setTarget] = useState<string>();
+  const capacityDefault = useCapacitySuggestion(group, onChange);
   const total = group.items.reduce((s, i) => s + (shareHundredths(i.share) ?? 0), 0);
 
   /** Shares never exceed 100%: a share is capped at what the other materials leave. */
@@ -95,6 +101,7 @@ export function GroupCard({ group, index, week, copyTargets, onChange, onRemove,
             <InputNumber size="small" min={1} max={99_999} precision={0} value={group.capacity === '' ? null : Number(group.capacity)}
               onChange={(v) => onChange({ ...group, capacity: v == null ? '' : String(Math.trunc(v)) })} style={{ width: 90 }} aria-label="Capacity" />
             <Typography.Text>{group.unit || '(unit from the first material)'}</Typography.Text>
+            <CapacityHint hint={capacityDefault.hint} capacity={group.capacity} />
           </Space>
           <Space size={4}>
             <Typography.Text type="secondary">Number of containers</Typography.Text>
@@ -132,7 +139,11 @@ export function GroupCard({ group, index, week, copyTargets, onChange, onRemove,
       />
       <AddMaterialsDrawer open={adding} title={`Add materials to ${week} · ${label}`} unit={group.items.length ? group.unit : null}
         remainingShare={Math.max(0, (10_000 - total) / 100)} onClose={() => setAdding(false)}
-        onAdd={(items, unit) => onChange({ ...group, unit, items: [...group.items, ...items] })} />
+        onAdd={(items, unit) => {
+          const next = { ...group, unit, items: [...group.items, ...items] };
+          onChange(next);
+          void capacityDefault.suggest(next);
+        }} />
       <Modal open={copying} title={`Copy ${label} to…`} okText="Copy" okButtonProps={{ disabled: !target }} onCancel={() => setCopying(false)}
         onOk={() => { if (target) onCopy(target); setCopying(false); }}>
         <Select id="copyTarget" showSearch style={{ width: '100%' }} value={target} onChange={setTarget} placeholder="ETD week"

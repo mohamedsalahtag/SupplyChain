@@ -30,13 +30,18 @@ const shown = (l: QtyLedger) => ({
 });
 
 /** What this user may do with this demand now (hard rule 2: the UI only renders this). */
-export function allowedActions(actor: Actor, d: { CompanyCode: string; WorkflowStatus: DemandWorkflowStatus; CreatedBy?: number | string }) {
+export function allowedActions(actor: Actor, d: { CompanyCode: string; WorkflowStatus: DemandWorkflowStatus; CreatedBy?: number | string; AcceptedAt?: Date | null }) {
   const can = (p: string) => hasPermission(actor, p) && actor.companies.has(d.CompanyCode);
   const editable = d.WorkflowStatus === 'DRAFT' || d.WorkflowStatus === 'RETURNED';
   return {
     edit: editable && can(P_DEMAND.create),
     submit: editable && can(P_DEMAND.submit),
     accept: d.WorkflowStatus === 'SUBMITTED' && can(P_DEMAND.accept) && (actor.isAdmin || Number(d.CreatedBy) !== actor.id), // not one's own demand
+    /** Why Accept is not offered to someone who may accept demands (separation of duties): shown instead of the button. */
+    acceptBlocked: d.WorkflowStatus === 'SUBMITTED' && can(P_DEMAND.accept) && !actor.isAdmin && Number(d.CreatedBy) === actor.id
+      ? 'You created this demand, so another Procurement user must accept or return it (separation of duties).' : null,
+    /** A draft (or returned) demand that was never accepted: its creator or an administrator may delete it. */
+    delete: (d.WorkflowStatus === 'DRAFT' || d.WorkflowStatus === 'RETURNED') && !d.AcceptedAt && can('demand.delete') && (actor.isAdmin || Number(d.CreatedBy) === actor.id),
     return: d.WorkflowStatus === 'SUBMITTED' && can(P_DEMAND.return),
     /** Change requests on an accepted demand (spec 14). */
     changeContainers: d.WorkflowStatus === 'ACCEPTED' && can('cr.raise.sales'),
@@ -61,6 +66,7 @@ export async function getDemand(db: Db, actor: Actor, demandId: string) {
     .select(['d.DemandId', 'd.DemandNo', 'd.CompanyCode', 'c.Name as CompanyName', 'd.WorkflowStatus', 'd.CurrentVersion', 'd.BaselineVersion', 'd.Notes',
       'd.CreatedAt', 'd.SubmittedAt', 'd.AcceptedAt', 'cu.DisplayName as CreatedByName', 'au.DisplayName as AcceptedByName', 'd.CreatedBy', rowVerHex('d.RowVer').as('RowVer')])
     .where('d.DemandId', '=', demandId)
+    .where('d.DeletedAt', 'is', null) // a deleted draft is gone
     .executeTakeFirst();
   if (!d || !actor.companies.has(d.CompanyCode) || !hasPermission(actor, P_DEMAND.open)) throw new NotFoundError(`Demand ${demandId}`);
 
@@ -136,7 +142,7 @@ export async function getDemand(db: Db, actor: Actor, demandId: string) {
     status: deriveStatus(status, total), currentVersion: Number(d.CurrentVersion), baselineVersion: d.BaselineVersion, notes: d.Notes,
     createdBy: d.CreatedByName ?? '', createdAt: d.CreatedAt.toISOString(), submittedAt: d.SubmittedAt?.toISOString() ?? null,
     acceptedAt: d.AcceptedAt?.toISOString() ?? null, acceptedBy: d.AcceptedByName ?? null, mine: Number(d.CreatedBy) === actor.id,
-    rowVer: d.RowVer, weeks: weekViews, actions: allowedActions(actor, { CompanyCode: d.CompanyCode, WorkflowStatus: status, CreatedBy: d.CreatedBy }),
+    rowVer: d.RowVer, weeks: weekViews, actions: allowedActions(actor, { CompanyCode: d.CompanyCode, WorkflowStatus: status, CreatedBy: d.CreatedBy, AcceptedAt: d.AcceptedAt }),
     /** Spec 21: every business step (oldest first) and, for a merged demand, where it went. */
     steps: (await demandSteps(db, [String(d.DemandId)])).get(String(d.DemandId)) ?? [],
     mergedIntoDemand: (await mergedIntoOf(db, [String(d.DemandId)])).get(String(d.DemandId)) ?? null,
@@ -153,7 +159,7 @@ export async function listDemands(db: Db, actor: Actor, f: ListFilter) {
   if (companies.length === 0) return { total: 0, rows: [] };
   // The status is only computed for the page — or, with a status filter, as a filter (database review 2026-09: joining it
   // before paging worked out the status of every demand of the company to show 50).
-  let q = db.selectFrom('scm.Demand as d').where('d.CompanyCode', 'in', companies);
+  let q = db.selectFrom('scm.Demand as d').where('d.CompanyCode', 'in', companies).where('d.DeletedAt', 'is', null);
   if (f.mine) q = q.where('d.CreatedBy', '=', actor.id);
   if (f.company?.length) q = q.where('d.CompanyCode', 'in', f.company);
   if (f.status?.length) {
@@ -267,11 +273,11 @@ export async function demandFilterOptions(db: Db, actor: Actor) {
   if (!companies.length) return { categories: [], origins: [], creators: [] };
   const [cats, origins, creators] = await Promise.all([
     sql<{ MajorCategory: string; SubMajorCategory: string }>`SELECT DISTINCT l.MajorCategory, l.SubMajorCategory FROM scm.DemandLine l JOIN scm.Demand d ON d.DemandId = l.DemandId
-      WHERE d.CompanyCode IN (${sql.join(companies)}) AND l.IsActive = 1 ORDER BY l.MajorCategory, l.SubMajorCategory`.execute(db).then((r) => r.rows),
+      WHERE d.CompanyCode IN (${sql.join(companies)}) AND d.DeletedAt IS NULL AND l.IsActive = 1 ORDER BY l.MajorCategory, l.SubMajorCategory`.execute(db).then((r) => r.rows),
     sql<{ OriginCode: string; Name: string | null }>`SELECT l.OriginCode, MIN(o.OriginName) AS Name FROM scm.DemandLine l JOIN scm.Demand d ON d.DemandId = l.DemandId
-      LEFT JOIN scm.RefOrigin o ON o.CountryCode = l.OriginCode WHERE d.CompanyCode IN (${sql.join(companies)}) AND l.IsActive = 1 GROUP BY l.OriginCode ORDER BY l.OriginCode`.execute(db).then((r) => r.rows),
+      LEFT JOIN scm.RefOrigin o ON o.CountryCode = l.OriginCode WHERE d.CompanyCode IN (${sql.join(companies)}) AND d.DeletedAt IS NULL AND l.IsActive = 1 GROUP BY l.OriginCode ORDER BY l.OriginCode`.execute(db).then((r) => r.rows),
     sql<{ UserId: number; DisplayName: string }>`SELECT DISTINCT u.UserId, u.DisplayName FROM scm.Demand d JOIN app.[User] u ON u.UserId = d.CreatedBy
-      WHERE d.CompanyCode IN (${sql.join(companies)}) ORDER BY u.DisplayName`.execute(db).then((r) => r.rows),
+      WHERE d.CompanyCode IN (${sql.join(companies)}) AND d.DeletedAt IS NULL ORDER BY u.DisplayName`.execute(db).then((r) => r.rows),
   ]);
   return {
     categories: cats.map((c) => ({ major: c.MajorCategory, subMajor: c.SubMajorCategory })),

@@ -156,7 +156,7 @@ export function DemandEditor({ demand }: { demand: Demand }) {
             }
             extra={
               <Space>
-                <Button size="small" icon={<PlusOutlined />} onClick={() => setWeek(w.uid, { groups: [...w.groups, { uid: uid(), name: '', containerCount: 1, capacity: w.groups[0]?.capacity ?? '', unit: '', items: [] }] })}>
+                <Button size="small" icon={<PlusOutlined />} onClick={() => setWeek(w.uid, { groups: [...w.groups, { uid: uid(), name: '', containerCount: 1, capacity: w.groups[0]?.capacity ?? '', capacitySuggested: w.groups[0]?.capacitySuggested, unit: '', items: [] }] })}>
                   Add container group
                 </Button>
                 <Button size="small" danger icon={<DeleteOutlined />} onClick={() => change(weeks.filter((x) => x.uid !== w.uid))}>Remove week</Button>

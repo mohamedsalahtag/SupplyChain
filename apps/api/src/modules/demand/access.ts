@@ -9,7 +9,7 @@ registerParent('LINE', parentBy('scm.DemandLine', 'LineId', 'DemandId'));
 
 registerEntityAccess('DEMAND', async (db, actor, entityId, write) => {
   if (!/^\d+$/.test(entityId)) return null;
-  const d = await db.selectFrom('scm.Demand').select('CompanyCode').where('DemandId', '=', entityId).executeTakeFirst();
+  const d = await db.selectFrom('scm.Demand').select('CompanyCode').where('DemandId', '=', entityId).where('DeletedAt', 'is', null).executeTakeFirst();
   if (!d || !actor.companies.has(d.CompanyCode)) return null;
   const ok = write ? hasPermission(actor, P_DEMAND.attach) : hasPermission(actor, P_DEMAND.open);
   return ok ? { companyCode: d.CompanyCode } : null;

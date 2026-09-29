@@ -1,4 +1,4 @@
-/** Workflow setup (spec 11): companies, reason codes, origin map, workflow settings. Every save is audited. */
+/** Workflow setup (spec 11): companies, reason codes, origin map, workflow settings; container capacity (spec 32). Every save is audited. */
 import { P, SIGNED_IN } from '@supplychain/shared';
 import { z } from 'zod';
 import { audit } from '../../auth/audit.js';
@@ -7,10 +7,13 @@ import { ITEM_TYPES } from '../workflow/inbox.js';
 import { countryOptions, listOrigins, setOrigin } from '../workflow/origins.js';
 import { loadWfSettings, saveWfSettings, wfSettingsSchema, wfSettingsVersion } from '../workflow/settings.js';
 import { addManualOrigin, listSupplierOrigins, removeManualOrigin } from '../workflow/supplierOrigins.js';
+import { capacityChoices, capacityFor, capacityInput, capacityItemsInput, capacitySizes, deleteCapacity, listCapacities, saveCapacity, setCapacityActive } from './capacity.js';
 import { companyInput, companyOptions, listCompanies, saveCompany } from './companies.js';
 import { listReasons, REASON_CONTEXTS, reasonInput, saveReason } from './reasons.js';
 
 const view = procedure.meta({ permission: P.configOpen });
+const capacityEdit = procedure.meta({ permission: P.configCapacityEdit });
+const capacityRef = z.object({ capacityId: z.number().int().positive(), rowVer: z.string() });
 
 export const workflowSetupRouter = router({
   companies: view.query(({ ctx }) => listCompanies(ctx.db)),
@@ -34,6 +37,29 @@ export const workflowSetupRouter = router({
       await audit(ctx.db, { userId: ctx.user.id, action: 'config.workflow.reason', target: input.reasonCode, details: input }, ctx.log);
       return { saved: true };
     }),
+
+  /** Spec 32: maximum payload per container per product. */
+  capacities: view.query(({ ctx }) => listCapacities(ctx.db)),
+  capacityChoices: view.query(({ ctx }) => capacityChoices(ctx.db)),
+  capacitySizes: view.input(z.object({ majorCategory: z.string().max(80), subMajorCategory: z.string().max(80) }))
+    .query(({ ctx, input }) => capacitySizes(ctx.db, input.majorCategory, input.subMajorCategory)),
+  saveCapacity: capacityEdit.input(capacityInput).mutation(async ({ ctx, input }) => {
+    const capacityId = await saveCapacity(ctx.db, ctx.user.id, input);
+    await audit(ctx.db, { userId: ctx.user.id, action: 'config.workflow.capacity', target: String(capacityId), details: { ...input, rowVer: undefined } }, ctx.log);
+    return { saved: true, capacityId };
+  }),
+  setCapacityActive: capacityEdit.input(capacityRef.extend({ isActive: z.boolean() })).mutation(async ({ ctx, input }) => {
+    await setCapacityActive(ctx.db, ctx.user.id, input.capacityId, input.rowVer, input.isActive);
+    await audit(ctx.db, { userId: ctx.user.id, action: 'config.workflow.capacity.active', target: String(input.capacityId), details: { isActive: input.isActive } }, ctx.log);
+    return { saved: true };
+  }),
+  deleteCapacity: capacityEdit.input(capacityRef).mutation(async ({ ctx, input }) => {
+    const removed = await deleteCapacity(ctx.db, input.capacityId, input.rowVer);
+    await audit(ctx.db, { userId: ctx.user.id, action: 'config.workflow.capacity.delete', target: String(input.capacityId), details: removed }, ctx.log);
+    return { deleted: true };
+  }),
+  /** The demand editor's default for a group's capacity per container (smallest of its products). */
+  capacityFor: procedure.meta({ permission: P.demandsOpen }).input(capacityItemsInput).query(({ ctx, input }) => capacityFor(ctx.db, input.items)),
 
   origins: view.input(z.object({ unmatchedOnly: z.boolean().default(false) })).query(({ ctx, input }) => listOrigins(ctx.db, input.unmatchedOnly)),
   countries: view.query(() => countryOptions()),

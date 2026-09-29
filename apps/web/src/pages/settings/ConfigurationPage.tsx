@@ -14,6 +14,7 @@ import { ShippingTermsTab } from './ShippingTermsTab';
 import { SuppliersSyncTab } from './SuppliersSyncTab';
 import { SyncScheduleSection } from './SyncScheduleSection';
 import { CompaniesTab } from './workflow/CompaniesTab';
+import { ContainerCapacityTab } from './workflow/ContainerCapacityTab';
 import { OriginsTab } from './workflow/OriginsTab';
 import { SupplierOriginsTab } from './workflow/SupplierOriginsTab';
 import { ReasonCodesTab } from './workflow/ReasonCodesTab';
@@ -52,6 +53,7 @@ export function ConfigurationPage() {
     can(P.configWfCompaniesEdit) && { key: 'companies', group: 'Workflow', label: 'Companies', children: <CompaniesTab /> },
     can(P.configWfReasonsEdit) && { key: 'reasons', group: 'Workflow', label: 'Reason codes', children: <ReasonCodesTab /> },
     can(P.configWfOriginsEdit) && { key: 'origins', group: 'Workflow', label: 'Origins', children: <OriginsTab /> },
+    can(P.configOpen) && { key: 'capacity', group: 'Workflow', label: 'Container capacity', children: <ContainerCapacityTab /> },
     can(P.configOpen) && { key: 'supplier-origins', group: 'Workflow', label: 'Supplier origins', children: <SupplierOriginsTab /> },
     can(P.configWfSettingsEdit) && { key: 'workflow', group: 'Workflow', label: 'Workflow', children: <WorkflowSettingsTab /> },
     can(P.configShippingEdit) && { key: 'shipping', group: 'Workflow', label: 'Shipping terms', children: <ShippingTermsTab /> },
@@ -61,7 +63,7 @@ export function ConfigurationPage() {
 
   const tab = tabs.some((t) => t.key === params.get('tab')) ? params.get('tab')! : tabs[0]?.key;
   // Table tabs use the full page width; form tabs stay narrow.
-  const wide = ['companies', 'reasons', 'origins'].includes(tab ?? '');
+  const wide = ['companies', 'reasons', 'origins', 'capacity'].includes(tab ?? '');
 
   const groups = ['General', 'SAP', 'Workflow', 'Sign-in', 'Maintenance'].map((g) => ({
     type: 'group' as const, key: g, label: g,

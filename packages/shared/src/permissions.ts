@@ -25,6 +25,7 @@ export const PERMISSION_CATALOG: CatalogScreen[] = [
     actions: [
       { key: 'demand.create', label: 'Create and edit draft demands' },
       { key: 'demand.submit', label: 'Submit demands to Procurement' },
+      { key: 'demand.delete', label: 'Delete a draft demand that was never accepted' },
       { key: 'demand.accept', label: 'Accept submitted demands' },
       { key: 'demand.return', label: 'Return submitted demands to Sales' },
       { key: 'demand.comment', label: 'Comment on demands' },
@@ -126,6 +127,7 @@ export const PERMISSION_CATALOG: CatalogScreen[] = [
       { key: 'configuration.workflow.origins.edit', label: 'Map SAP origins to countries' },
       { key: 'configuration.workflow.supplierOrigins.edit', label: 'Add or remove origins a supplier can supply' },
       { key: 'configuration.workflow.settings.edit', label: 'Change workflow settings (due times, limits)' },
+      { key: 'configuration.workflow.capacity.edit', label: 'Keep the container capacity per product (maximum payload per container)' },
       { key: 'configuration.shipping.edit', label: 'Keep the shipping-term lists (Incoterms, ports, payment-term descriptions)' },
       { key: 'configuration.ad.edit', label: 'Change and test the Active Directory connection' },
       { key: 'configuration.purge', label: 'Purge all workflow data and start over (test servers only)' },
@@ -144,6 +146,7 @@ export const P = {
   demandsOpen: 'demands.open',
   demandCreate: 'demand.create',
   demandSubmit: 'demand.submit',
+  demandDelete: 'demand.delete',
   demandAccept: 'demand.accept',
   demandReturn: 'demand.return',
   demandComment: 'demand.comment',
@@ -196,6 +199,7 @@ export const P = {
   configWfReasonsEdit: 'configuration.workflow.reasons.edit',
   configWfOriginsEdit: 'configuration.workflow.origins.edit',
   configWfSettingsEdit: 'configuration.workflow.settings.edit',
+  configCapacityEdit: 'configuration.workflow.capacity.edit',
   configShippingEdit: 'configuration.shipping.edit',
   configAdEdit: 'configuration.ad.edit',
 } as const;

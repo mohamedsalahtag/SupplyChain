@@ -140,3 +140,8 @@ Two editable roles are seeded:
 Users still need a company (spec 11).
 
 Mockup: `docs/mockups/stage-1.html`.
+
+## Delete a draft, and why Accept can be missing (2026-09-29)
+- **Delete draft** (button beside the title, permission `demand.delete`, Sales): a *draft* or *returned* demand that was **never accepted** and that nothing points at (no quantity ledger, RFQ, award, change request or merge). Only its creator or an administrator. It is **marked deleted** (`scm.Demand.DeletedAt`, migration 0035), not removed — versions and comments are immutable history — and from then on it is hidden everywhere (lists, filters, the page, its comments and attachments); its open My work items close; the thread and the events record *D-… deleted*. The number is never reused.
+- **Accept** is never offered on a demand you created yourself (separation of duties) — e.g. *Demo Sales + Procurement* on its own demand. Instead of a missing button, the demand now says so: *"You created this demand, so another Procurement user must accept or return it."*
+

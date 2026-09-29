@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
-import { Alert, App, Button, Drawer, Input, InputNumber, Select, Space, Tag, Tooltip, Typography } from 'antd';
+import { Alert, App, Button, Drawer, Input, InputNumber, Select, Space, Tag, Tooltip, Typography, theme } from 'antd';
 import { CopyOutlined, SaveOutlined } from '@ant-design/icons';
 import type { RouterOutputs } from '../../lib/format';
 import { trpc } from '../../lib/trpc';
@@ -17,12 +17,15 @@ type Entry = { unitPrice: string; available: number | null; sku: string | null }
  */
 export function RecordQuotesDrawer({ rfq, open, onClose }: { rfq: Rfq; open: boolean; onClose: () => void }) {
   const { message } = App.useApp();
+  const { token } = theme.useToken();
   const utils = trpc.useUtils();
   const save = trpc.rfq.recordQuotes.useMutation();
   const [supplier, setSupplier] = useState<string>();
   const [currency, setCurrency] = useState('USD');
   const [entries, setEntries] = useState<Record<string, Entry>>({});
   const [containers, setContainers] = useState<Record<string, number | null>>({});
+  /** Weeks whose containers were typed or saved before: saved even without a price (a pre-filled week alone is not an offer). */
+  const [offered, setOffered] = useState<Set<string>>(new Set());
   const [allPrice, setAllPrice] = useState('');
   const [problems, setProblems] = useState<string[]>([]);
   const s = rfq.suppliers.find((x) => x.supplierCode === supplier);
@@ -43,7 +46,10 @@ export function RecordQuotesDrawer({ rfq, open, onClose }: { rfq: Rfq; open: boo
       const q = rfq.quotes.find((x) => x.supplierCode === s.supplierCode && x.week === v.week && x.key === v.key);
       return [key(v), { unitPrice: q?.unitPrice ?? '', available: q ? Number(q.available) : Number(v.qty), sku: q?.quotedSku ?? null }];
     })));
-    setContainers(Object.fromEntries(rfq.weeks.map((w) => [w.etdWeek, rfq.weekOffers.find((o) => o.supplierCode === s.supplierCode && o.week === w.etdWeek)?.containers ?? null])));
+    // Containers offered start at the containers asked; the user changes them when the supplier offers fewer or more.
+    const saved = (w: string) => rfq.weekOffers.find((o) => o.supplierCode === s.supplierCode && o.week === w)?.containers;
+    setContainers(Object.fromEntries(rfq.weeks.map((w) => [w.etdWeek, saved(w.etdWeek) ?? w.containerCount ?? null])));
+    setOffered(new Set(rfq.weeks.filter((w) => saved(w.etdWeek) != null).map((w) => w.etdWeek)));
     setProblems([]);
   }, [s, rfq.supplierView, rfq.quotes, rfq.weeks, rfq.weekOffers]);
   const set = (v: ViewRow, patch: Partial<Entry>) => setEntries((e) => ({ ...e, [key(v)]: { ...e[key(v)], ...patch } }));
@@ -56,7 +62,8 @@ export function RecordQuotesDrawer({ rfq, open, onClose }: { rfq: Rfq; open: boo
   });
 
   const priced = rows.filter((v) => entries[key(v)]?.unitPrice && entries[key(v)]?.available != null);
-  const weeksToSave = weeks.filter((w) => containers[w] != null);
+  const pricedWeeks = new Set(priced.map((v) => v.week));
+  const weeksToSave = weeks.filter((w) => containers[w] != null && (pricedWeeks.has(w) || offered.has(w)));
   /** No quote without the containers offered for its week (at least 1). */
   const missing = [...new Set(priced.map((v) => v.week))].filter((w) => !((containers[w] ?? 0) >= 1));
   const onSave = async () => {
@@ -114,7 +121,7 @@ export function RecordQuotesDrawer({ rfq, open, onClose }: { rfq: Rfq; open: boo
                       <Tag>{rfq.weeks.find((x) => x.etdWeek === w)?.containerCount ?? 0} containers asked</Tag>
                       <Typography.Text>Containers offered</Typography.Text>
                       <InputNumber size="small" min={0} max={999} precision={0} value={containers[w] ?? undefined} style={{ width: 70 }} aria-label={`Containers ${w}`}
-                        status={missing.includes(w) ? 'error' : undefined} onChange={(x) => setContainers((c) => ({ ...c, [w]: x }))} />
+                        status={missing.includes(w) ? 'error' : undefined} onChange={(x) => { setContainers((c) => ({ ...c, [w]: x })); setOffered((o) => new Set(o).add(w)); }} />
                       {missing.includes(w)
                         ? <Typography.Text type="danger">required to save this week's quotes (at least 1)</Typography.Text>
                         : <Typography.Text type="secondary">for the whole week — one container can carry several sizes and grades</Typography.Text>}
@@ -127,7 +134,8 @@ export function RecordQuotesDrawer({ rfq, open, onClose }: { rfq: Rfq; open: boo
                     <td style={{ ...cell, textAlign: 'right' }}>{n(v.qty)} {v.unit}</td>
                     <td style={cell}>
                       <Space.Compact>
-                        <Input size="small" inputMode="decimal" value={entries[key(v)]?.unitPrice} aria-label={`Price ${v.label}`} style={{ width: 90 }}
+                        <Input size="small" inputMode="decimal" value={entries[key(v)]?.unitPrice} aria-label={`Price ${v.label}`} placeholder="no price"
+                          style={{ width: 90, background: entries[key(v)]?.unitPrice ? undefined : token.colorWarningBg, borderColor: entries[key(v)]?.unitPrice ? undefined : token.colorWarningBorder }}
                           onChange={(e) => set(v, { unitPrice: e.target.value.replace(/[^\d.]/g, '') })} />
                         {inManyWeeks(v) && <Tooltip title="Same price (and SKU) in all weeks for this material"><Button size="small" icon={<CopyOutlined />} aria-label={`All weeks ${v.label}`} disabled={!entries[key(v)]?.unitPrice} onClick={() => allWeeks(v)} /></Tooltip>}
                       </Space.Compact>
@@ -142,7 +150,7 @@ export function RecordQuotesDrawer({ rfq, open, onClose }: { rfq: Rfq; open: boo
             ))}
           </tbody>
         </table>
-        <Typography.Text type="secondary">Blue rows already have a quote from this supplier: saving replaces it (the earlier one stays in history). Rows without a price are not saved. Available starts at the quantity asked.</Typography.Text>
+        <Typography.Text type="secondary">Blue rows already have a quote from this supplier: saving replaces it (the earlier one stays in history). Rows without a price (highlighted) are not saved. Available starts at the quantity asked, containers offered at the containers asked.</Typography.Text>
         {missing.length > 0 && <Alert type="warning" showIcon message={`Enter the containers offered for ${missing.join(', ')} before saving`} />}
         {problems.length > 0 && <Alert type="error" showIcon message="Some quotes cannot be saved" description={<ul style={{ margin: 0, paddingInlineStart: 18 }}>{problems.map((p) => <li key={p}>{p}</li>)}</ul>} />}
       </Space>

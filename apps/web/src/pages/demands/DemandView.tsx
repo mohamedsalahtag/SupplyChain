@@ -152,7 +152,7 @@ export function DemandView({ demand }: { demand: Demand }) {
             </Space>
           } />
       ) : (
-        <Alert type="info" showIcon message="Waiting for Procurement to accept or return this demand." />
+        <Alert type="info" showIcon message="Waiting for Procurement to accept or return this demand." description={demand.actions.acceptBlocked ?? undefined} />
       ))}
       {demand.notes && <Card size="small" title="Notes"><Typography.Text style={{ whiteSpace: 'pre-wrap' }}>{demand.notes}</Typography.Text></Card>}
       {demand.weeks.map((w) => (

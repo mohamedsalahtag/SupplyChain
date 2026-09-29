@@ -30,7 +30,7 @@ type DemandRow = { DemandId: string; DemandNo: string; CompanyCode: string; Work
 export async function lockDemand(tx: Tx, actor: Actor, demandId: string): Promise<DemandRow> {
   const d = (await sql<DemandRow>`
     SELECT DemandId, DemandNo, CompanyCode, WorkflowStatus, SubmittedAt, CreatedBy, ${rowVerHex()} AS RowVer
-    FROM scm.Demand WITH (UPDLOCK, ROWLOCK) WHERE DemandId = ${demandId}`.execute(tx)).rows[0];
+    FROM scm.Demand WITH (UPDLOCK, ROWLOCK) WHERE DemandId = ${demandId} AND DeletedAt IS NULL`.execute(tx)).rows[0]; // a deleted draft is gone
   if (!d || !actor.companies.has(d.CompanyCode) || !(actor.isAdmin || actor.permissions.has(P_DEMAND.open))) throw new NotFoundError(`Demand ${demandId}`);
   return { ...d, DemandId: String(d.DemandId) };
 }
