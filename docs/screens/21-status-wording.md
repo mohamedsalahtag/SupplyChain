@@ -23,7 +23,7 @@ Everyone who reads a status: Sales, Procurement, the PO team later.
 | RETURNED | Returned | **Returned to Sales** | Sales | Change and submit again |
 | NOT_STARTED | Not started | **Accepted · nothing sourced yet** | Procurement | Create an RFQ |
 | PARTIALLY_IN_EXECUTION | Partially in execution | **Partly in sourcing** | Procurement | Source the open part |
-| FULLY_IN_EXECUTION | Fully in execution | **All in sourcing** | Procurement | Quote, award, hand off |
+| FULLY_IN_EXECUTION | Fully in execution | **In execution · nothing open** (was *All in sourcing* until 2026-09-29: it covers handed-off and PO quantity too) | See Waiting on | See What's left |
 | CLOSED_FULLY_EXECUTED | Closed · fully executed | **Closed · all ordered** | — | Nothing |
 | CLOSED_PARTIALLY_EXECUTED | Closed · partially executed | **Closed · partly ordered, rest cancelled** | — | Nothing |
 | CANCELLED | Cancelled | **Cancelled** (+ by whom, reason) | — | Nothing |
