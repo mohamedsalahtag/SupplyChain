@@ -9,9 +9,12 @@ import { trpc } from '../../lib/trpc';
 import { useTablePrefs } from '../../lib/useTablePrefs';
 import { ACK_STATUS } from './awardLabels';
 import { StatusLegend, StatusTag } from '../../components/StatusTag';
+import { Progress, TEAM_LOOK, WaitingOn } from '../../components/DemandProgress';
 
 type Row = RouterOutputs['award']['list']['rows'][number];
-type Filters = { q?: string; ack?: string[] };
+type Team = keyof typeof TEAM_LOOK;
+type Filters = { q?: string; ack?: string[]; waitingOn?: Team[] };
+const TEAM_BY_LABEL = Object.fromEntries(Object.entries(TEAM_LOOK).map(([k, v]) => [v.label, k as Team]));
 const ackByLabel = Object.fromEntries(Object.entries(ACK_STATUS).map(([k, v]) => [v.label, k]));
 
 const ackTag = (r: Row) => <StatusTag def={ACK_STATUS[r.ackStatus]} label={`${ACK_STATUS[r.ackStatus]?.label ?? r.ackStatus}${r.revision > 1 ? ` · revision ${r.revision}` : ''}`} />;
@@ -33,7 +36,9 @@ export function AwardsListPage() {
     { title: 'Company', key: 'companyCode', dataIndex: 'companyCode', width: 80 },
     { title: 'Suppliers', key: 'suppliers', dataIndex: 'suppliers', width: 90, align: 'right' },
     { title: 'Quantity', key: 'quantity', dataIndex: 'quantity', width: 180 },
-    { title: 'Sales acknowledgement', key: 'ack', width: 250, render: (_: unknown, r) => ackTag(r) },
+    { title: 'Progress', key: 'progress', width: 200, render: (_: unknown, r) => <Progress p={r.progress} /> },
+    { title: 'Waiting on', key: 'waitingOn', width: 200, render: (_: unknown, r) => <WaitingOn w={r.waitingOn} /> },
+    { title: 'Sales acknowledgement', key: 'ack', width: 200, render: (_: unknown, r) => ackTag(r) },
     { title: 'Created', key: 'created', width: 200, render: (_: unknown, r) => `${r.createdBy} · ${formatDateTime(r.createdAt)}` },
   ];
 
@@ -41,7 +46,7 @@ export function AwardsListPage() {
     <Space direction="vertical" size={10} style={{ width: '100%' }}>
       <Space size={10} align="baseline">
         <Typography.Title level={5} style={{ margin: 0 }}>Awards</Typography.Title>
-        <Typography.Text type="secondary">Quantities awarded to suppliers, and Sales' acknowledgement</Typography.Text>
+        <Typography.Text type="secondary">Quantities awarded to suppliers, where they are now, and Sales' acknowledgement</Typography.Text>
         <StatusLegend title="What do the acknowledgement statuses mean?" defs={ACK_STATUS} />
       </Space>
       {list.error && <Alert type="error" showIcon message="Awards could not be loaded" description={list.error.message} />}
@@ -55,6 +60,8 @@ export function AwardsListPage() {
               onChange={(e) => { setSearch(e.target.value); if (!e.target.value) setFilter({ q: undefined }); }} onSearch={(v) => setFilter({ q: v.trim() || undefined })} />
             <MultiFilter id="f-ack" placeholder="Sales" options={Object.values(ACK_STATUS).map((s) => s.label)} value={filters.ack?.map((s) => ACK_STATUS[s].label)}
               onChange={(v) => setFilter({ ack: v?.map((l) => ackByLabel[l]) })} width={200} />
+            <MultiFilter id="f-waiting" placeholder="Waiting on" options={Object.values(TEAM_LOOK).map((t) => t.label)}
+              value={filters.waitingOn?.map((t) => TEAM_LOOK[t].label)} onChange={(v) => setFilter({ waitingOn: v?.map((l) => TEAM_BY_LABEL[l]) })} width={160} />
             <Button icon={<ReloadOutlined />} onClick={() => { setFilters({}); setSearch(''); setPage(1); }}>Reset</Button>
           </>
         }

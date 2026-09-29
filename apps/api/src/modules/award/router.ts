@@ -1,6 +1,7 @@
 /** Awards (spec 20). Thin: rules live in awardCheck / awardService / ack / awardRead. */
 import { DEFAULT_TABLE_PAGE_SIZE, P, TABLE_PAGE_SIZES } from '@supplychain/shared';
 import { z } from 'zod';
+import { awardProgressFor, TEAMS, whatsLeft } from '../demand/progress.js';
 import { procedure, router } from '../../trpc/trpc.js';
 import { skusForSpec } from '../demand/lookups.js';
 import { hasPermission, loadActor } from '../workflow/access.js';
@@ -36,10 +37,17 @@ const batch = z.object({ awardBatchId: idOf });
 
 export const awardRouter = router({
   list: open.input(z.object({
-    q: z.string().trim().max(60).optional(), rfqId: idOf.optional(), demandId: idOf.optional(), ack: z.array(z.string().max(20)).max(5).optional(),
+    q: z.string().trim().max(60).optional(), rfqId: idOf.optional(), demandId: idOf.optional(), ack: z.array(z.string().max(20)).max(5).optional(), waitingOn: z.array(z.enum(TEAMS)).max(4).optional(),
     page: z.number().int().min(1).default(1), pageSize: z.number().int().refine((n) => (TABLE_PAGE_SIZES as readonly number[]).includes(n)).default(DEFAULT_TABLE_PAGE_SIZE),
   })).query(async ({ ctx, input }) => listBatches(ctx.db, await loadActor(ctx.db, ctx.user), input)),
   get: open.input(batch).query(async ({ ctx, input }) => getBatch(ctx.db, await loadActor(ctx.db, ctx.user), input.awardBatchId)),
+  /** The award page's "Where it is": per supplier, the same rows as the demand's What's left (demand progress). */
+  progress: open.input(batch).query(async ({ ctx, input }) => {
+    await assertEntityAccess(ctx.db, await loadActor(ctx.db, ctx.user), 'AWARD_BATCH', input.awardBatchId, false);
+    const b = await ctx.db.selectFrom('scm.AwardBatch').select('DemandId').where('AwardBatchId', '=', input.awardBatchId).executeTakeFirstOrThrow();
+    const [left, progress] = await Promise.all([whatsLeft(ctx.db, String(b.DemandId), { awardBatchId: input.awardBatchId }), awardProgressFor(ctx.db, [input.awardBatchId])]);
+    return { ...left, progress: progress.get(input.awardBatchId) ?? null };
+  }),
   thread: open.input(batch).query(async ({ ctx, input }) => {
     await assertEntityAccess(ctx.db, await loadActor(ctx.db, ctx.user), 'AWARD_BATCH', input.awardBatchId, false);
     return listThread(ctx.db, 'AWARD_BATCH', input.awardBatchId);

@@ -16,6 +16,7 @@ import { ACK_CAUSE, ACK_STATUS, CHANGE_TYPE, CONTAINER_CHANGE, SKU_STATUS } from
 import { ContainerUnawardModal, ShipmentModal, SkuModal, UnawardModal } from './AwardDialogs';
 import { LoadError } from '../../components/LoadError';
 import { countOf, TabLabel } from '../../components/TabLabel';
+import { Progress, WhatsLeft } from '../../components/DemandProgress';
 
 type Batch = RouterOutputs['award']['get'];
 type Item = Batch['items'][number];
@@ -30,6 +31,7 @@ export function AwardBatchPage() {
   const { message } = App.useApp();
   const utils = trpc.useUtils();
   const batch = trpc.award.get.useQuery({ awardBatchId }, { retry: false });
+  const prog = trpc.award.progress.useQuery({ awardBatchId }, { retry: false }); // where each supplier's part is (demand progress)
   const thread = trpc.award.thread.useQuery({ awardBatchId });
   const [showOld, setShowOld] = useState(false);
   const attachments = trpc.award.attachments.useQuery({ awardBatchId, includeOld: showOld });
@@ -66,6 +68,8 @@ export function AwardBatchPage() {
         {a && <StatusTag def={ACK_STATUS[a.status]} label={`${ACK_STATUS[a.status].label} · revision ${a.revision}`} />}
         <Typography.Text type="secondary">{b.rfqNo} · {b.demandNo} · {b.companyCode} · by {b.createdBy} {formatDateTime(b.createdAt)}</Typography.Text>
       </Space>
+      {prog.data?.progress && <div style={{ maxWidth: 520 }}><Progress p={prog.data.progress} /></div>}
+      {prog.data && <WhatsLeft data={prog.data} title="Where it is" note="per supplier: handoff, PO, and who acts next" />}
 
       {a?.canRespond && (
         <Alert type="info" showIcon message="Procurement awarded your demand — have a look"

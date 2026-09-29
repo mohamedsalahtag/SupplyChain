@@ -5,7 +5,7 @@ import type { RouterOutputs } from '../lib/format';
 type Stage = 'onPo' | 'onPoSimulated' | 'poPrep' | 'handedOff' | 'awarded' | 'inRfq' | 'open' | 'cancelled';
 type Progress = Record<Stage, number>;
 type Waiting = RouterOutputs['demand']['list']['rows'][number]['waitingOn'][number];
-type Left = RouterOutputs['demand']['progress'];
+type Left = Pick<RouterOutputs['demand']['progress'], 'rows' | 'procurementDone'>;
 
 const SIM_BG = 'repeating-linear-gradient(45deg,#95de64 0 4px,#237804 4px 8px)';
 /** Each stage: label, colour, whose turn (the server decides the stages; these are only their names and colours). */
@@ -69,11 +69,11 @@ export function WaitingOn({ w }: { w: Waiting[] | undefined }) {
 }
 
 /** The demand page's "What's left": one line per part that is not finished, where it is, who acts next, a link. */
-export function WhatsLeft({ data }: { data: Left }) {
+export function WhatsLeft({ data, title = "What's left", note = 'one line per part that is not finished' }: { data: Left; title?: string; note?: string }) {
   const { token } = theme.useToken();
   const small = { fontSize: token.fontSizeSM, color: token.colorTextSecondary };
   return (
-    <Card size="small" title={<Space size={8}><span>What&apos;s left</span><Typography.Text type="secondary" style={{ fontWeight: 400 }}>one line per part that is not finished</Typography.Text></Space>}
+    <Card size="small" title={<Space size={8}><span>{title}</span><Typography.Text type="secondary" style={{ fontWeight: 400 }}>{note}</Typography.Text></Space>}
       extra={data.procurementDone ? <Tag color="green">Procurement: nothing left to do</Tag> : <Tag color="gold">Procurement has work here</Tag>}>
       {data.rows.length === 0
         ? <Typography.Text type="secondary">Nothing left — every part is on a purchase order or cancelled.</Typography.Text>

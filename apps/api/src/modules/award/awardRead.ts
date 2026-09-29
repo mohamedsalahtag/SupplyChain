@@ -1,5 +1,6 @@
 /** Reading awards (spec 20): one award batch, the Awards list. (The award grid is containerGrid.ts.) */
-import { sql } from 'kysely';
+import { sql, type SqlBool } from 'kysely';
+import { awardProgressFor, awardWaitingFor, awardWaitingSql, type Team } from '../demand/progress.js';
 import { hasPermission, type Actor } from '../workflow/access.js';
 import { NotFoundError } from '../workflow/errors.js';
 import { formatQty, fromDb } from '../workflow/qty.js';
@@ -95,7 +96,7 @@ export async function getBatch(db: Db, actor: Actor, batchId: string) {
   };
 }
 
-export async function listBatches(db: Db, actor: Actor, f: { q?: string; rfqId?: string; demandId?: string; ack?: string[]; page: number; pageSize: number }) {
+export async function listBatches(db: Db, actor: Actor, f: { q?: string; rfqId?: string; demandId?: string; ack?: string[]; waitingOn?: Team[]; page: number; pageSize: number }) {
   const companies = [...actor.companies];
   if (!companies.length) return { rows: [], total: 0 };
   let q = db.selectFrom('scm.AwardBatch as b').innerJoin('scm.Rfq as r', 'r.RfqId', 'b.RfqId').innerJoin('scm.Demand as d', 'd.DemandId', 'b.DemandId')
@@ -103,6 +104,7 @@ export async function listBatches(db: Db, actor: Actor, f: { q?: string; rfqId?:
   if (f.rfqId) q = q.where('b.RfqId', '=', f.rfqId);
   if (f.demandId) q = q.where('b.DemandId', '=', f.demandId);
   if (f.ack?.length) q = q.where('a.Status', 'in', f.ack as never[]);
+  if (f.waitingOn?.length) q = q.where(sql<SqlBool>`(${sql.join(f.waitingOn.map(awardWaitingSql), sql` OR `)})`);
   if (f.q) { const p = `%${f.q.replace(/[[%_]/g, '[$&]')}%`; q = q.where((eb) => eb.or([eb('b.AbNo', 'like', p), eb('r.RfqNo', 'like', p), eb('d.DemandNo', 'like', p)])); }
   const [rows, count] = await Promise.all([
     q.select(['b.AwardBatchId', 'b.AbNo', 'r.RfqNo', 'b.RfqId', 'd.DemandNo', 'b.DemandId', 'b.CompanyCode', 'b.CreatedAt', 'u.DisplayName as CreatedByName', 'a.Status as AckStatus', 'a.Revision'])
@@ -113,11 +115,16 @@ export async function listBatches(db: Db, actor: Actor, f: { q?: string; rfqId?:
   const ids = rows.map((r) => String(r.AwardBatchId));
   const qty = ids.length ? await db.selectFrom('scm.AwardItem').select(['AwardBatchId', 'Unit']).select((eb) => eb.fn.sum<string>('Qty').as('Q'))
     .where('AwardBatchId', 'in', ids).where('IsActive', '=', true).groupBy(['AwardBatchId', 'Unit']).execute() : [];
+  // Where each award's quantity is and whose turn it is (the same stages as the demands).
+  const [progress, waiting] = await Promise.all([
+    awardProgressFor(db, ids), awardWaitingFor(db, ids),
+  ]);
   return {
     total: Number(count.n),
     rows: rows.map((r) => ({
       awardBatchId: String(r.AwardBatchId), abNo: r.AbNo, rfqId: String(r.RfqId), rfqNo: r.RfqNo, demandId: String(r.DemandId), demandNo: r.DemandNo, companyCode: r.CompanyCode,
       createdBy: r.CreatedByName ?? '', createdAt: r.CreatedAt.toISOString(), ackStatus: r.AckStatus ?? 'PENDING', revision: Number(r.Revision ?? 1), suppliers: Number(r.Suppliers ?? 0),
+      progress: progress.get(String(r.AwardBatchId)) ?? null, waitingOn: waiting.get(String(r.AwardBatchId)) ?? [],
       quantity: qty.filter((x) => String(x.AwardBatchId) === String(r.AwardBatchId)).map((x) => `${Number(formatQty(fromDb(x.Q))).toLocaleString('en-GB')} ${x.Unit}`).join(' · '),
     })),
   };

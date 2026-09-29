@@ -93,3 +93,9 @@ flowchart TD
 ## Out of scope
 - Shipping terms and the handoff to the PO team (Stage 6); PO creation and SAP (Stage 7).
 - Emailing award letters to suppliers (plan Stage 9).
+
+## Progress and Waiting on for awards (2026-09-29)
+An award batch still has no stored status (its acknowledgement is Sales' response, not its progress). What it shows is **derived**, with the same stages as the demands (`modules/demand/progress.ts`):
+- **Awards list:** a **Progress** bar (awarded · handed off · PO preparation · on PO · on PO simulated) and a **Waiting on** column and filter (Procurement: hand off a supplier, answer a Sales query · PO team: accept HO-…, build / validate / submit / resolve POD-… · Sales: acknowledge, optional · Nobody: done, or *nothing awarded any more* when every container was un-awarded or cancelled). The filter (`awardWaitingSql`) and the column use the same rules.
+- **Award page:** the bar under the title and **Where it is** — per supplier: quantity, stage, handoff → PO draft → SAP PO, who acts next and a link; plus the Sales acknowledgement row. It is the demand's *What's left*, limited to this award (`whatsLeft(…, { awardBatchId })`).
+

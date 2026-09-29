@@ -140,10 +140,18 @@ export async function waitingFor(db: Db, demandIds: string[]): Promise<Map<strin
 export type LeftRow = {
   key: string; what: string; supplier: string | null; award: string | null; quantity: string;
   stages: { stage: Stage; quantity: string }[]; where: string; team: Team; next: string; link: { label: string; to: string } | null;
+  /** Short, for lists ("accept HO-000027"); defaults to `next`. */
+  action?: string;
 };
 
-/** One row per part of the demand that is not finished: not awarded (per RFQ), per award × supplier, acknowledgements, change requests. */
-export async function whatsLeft(db: Db, demandId: string): Promise<{ rows: LeftRow[]; procurementDone: boolean }> {
+/**
+ * One row per part that is not finished: not awarded (per RFQ), per award × supplier, acknowledgements, change requests.
+ * `scope` AWARD: only that award batch's suppliers and its acknowledgement (the award page).
+ */
+export async function whatsLeft(db: Db, demandId: string, scope: { awardBatchId: string } | null = null): Promise<{ rows: LeftRow[]; procurementDone: boolean }> {
+  const inScope = scope ? sql`i.AwardBatchId = ${scope.awardBatchId}` : sql`l.DemandId = ${demandId}`;
+  const batchScope = scope ? sql`b.AwardBatchId = ${scope.awardBatchId}` : sql`b.DemandId = ${demandId}`;
+  const ackScope = scope ? sql`a.AwardBatchId = ${scope.awardBatchId}` : sql`a.DemandId = ${demandId}`;
   const slices = (await sql<{ ExecState: string; Sim: number; Unit: string; Q: string; RfqId: string | null; RfqNo: string | null; AwardBatchId: string | null; AbNo: string | null;
     SupplierCode: string | null; SupplierName: string | null; EtdWeek: string | null }>`
     SELECT s.ExecState, f.Sim, l.Unit, SUM(s.Qty) AS Q, r.RfqId, r.RfqNo, b.AwardBatchId, b.AbNo, i.SupplierCode, sp.Name AS SupplierName, MIN(i.EtdWeek) AS EtdWeek
@@ -151,20 +159,20 @@ export async function whatsLeft(db: Db, demandId: string): Promise<{ rows: LeftR
     LEFT JOIN scm.RfqLine rl ON rl.RfqLineId = s.RfqLineId LEFT JOIN scm.Rfq r ON r.RfqId = rl.RfqId
     LEFT JOIN scm.AwardItem i ON i.AwardItemId = s.AwardItemId LEFT JOIN scm.AwardBatch b ON b.AwardBatchId = i.AwardBatchId
     LEFT JOIN md.Supplier sp ON sp.SupplierCode = i.SupplierCode
-    WHERE l.DemandId = ${demandId} AND l.IsActive = 1 AND s.ExecState NOT IN ('MERGED_OUT', 'CANCELLED') AND s.Qty > 0
+    WHERE ${inScope} AND l.IsActive = 1 AND s.ExecState NOT IN ('MERGED_OUT', 'CANCELLED') AND s.Qty > 0
     GROUP BY s.ExecState, f.Sim, l.Unit, r.RfqId, r.RfqNo, b.AwardBatchId, b.AbNo, i.SupplierCode, sp.Name`.execute(db)).rows;
   const [handoffs, drafts, acks, crs] = await Promise.all([
     sql<{ HandoffId: string; HoNo: string; Status: string; AwardBatchId: string; SupplierCode: string; SentAt: Date }>`
       SELECT h.HandoffId, h.HoNo, h.Status, h.AwardBatchId, h.SupplierCode, h.SentAt FROM scm.Handoff h JOIN scm.AwardBatch b ON b.AwardBatchId = h.AwardBatchId
-      WHERE b.DemandId = ${demandId} ORDER BY h.HandoffId DESC`.execute(db).then((r) => r.rows),
+      WHERE ${batchScope} ORDER BY h.HandoffId DESC`.execute(db).then((r) => r.rows),
     sql<{ PoDraftId: string; PoDraftNo: string; Status: string; HandoffId: string; SapPoNumber: string | null; Sim: number }>`
       SELECT pd.PoDraftId, pd.PoDraftNo, pd.Status, pd.HandoffId, pd.SapPoNumber,
         CASE WHEN EXISTS (SELECT 1 FROM scm.StubSapPo x WHERE x.Reference = pd.PoDraftNo) THEN 1 ELSE 0 END AS Sim
       FROM scm.PoDraft pd JOIN scm.Handoff h ON h.HandoffId = pd.HandoffId JOIN scm.AwardBatch b ON b.AwardBatchId = h.AwardBatchId
-      WHERE b.DemandId = ${demandId} AND pd.Status NOT IN ('VOID') ORDER BY pd.PoDraftId DESC`.execute(db).then((r) => r.rows),
+      WHERE ${batchScope} AND pd.Status NOT IN ('VOID') ORDER BY pd.PoDraftId DESC`.execute(db).then((r) => r.rows),
     sql<{ AwardBatchId: string; AbNo: string; Status: string }>`SELECT a.AwardBatchId, b.AbNo, a.Status FROM scm.SalesAck a JOIN scm.AwardBatch b ON b.AwardBatchId = a.AwardBatchId
-      WHERE a.DemandId = ${demandId} AND a.Status IN ('PENDING', 'QUERY_RAISED') AND EXISTS (SELECT 1 FROM scm.AwardItem i WHERE i.AwardBatchId = a.AwardBatchId AND i.IsActive = 1)`.execute(db).then((r) => r.rows),
-    sql<{ CrId: string; CrNo: string; RaisedByDept: string }>`SELECT CrId, CrNo, RaisedByDept FROM scm.ChangeRequest WHERE DemandId = ${demandId} AND Status = 'SUBMITTED'`.execute(db).then((r) => r.rows),
+      WHERE ${ackScope} AND a.Status IN ('PENDING', 'QUERY_RAISED') AND EXISTS (SELECT 1 FROM scm.AwardItem i WHERE i.AwardBatchId = a.AwardBatchId AND i.IsActive = 1)`.execute(db).then((r) => r.rows),
+    scope ? [] : sql<{ CrId: string; CrNo: string; RaisedByDept: string }>`SELECT CrId, CrNo, RaisedByDept FROM scm.ChangeRequest WHERE DemandId = ${demandId} AND Status = 'SUBMITTED'`.execute(db).then((r) => r.rows),
   ]);
   const rows: LeftRow[] = [];
   const stagesOf = (part: typeof slices) => STAGES.map((st) => ({ stage: st, quantity: perUnit(part.filter((s) => (STATE_STAGE[s.ExecState] === 'onPo' && Number(s.Sim) === 1 ? 'onPoSimulated' : STATE_STAGE[s.ExecState]) === st)) }))
@@ -195,14 +203,14 @@ export async function whatsLeft(db: Db, demandId: string): Promise<{ rows: LeftR
       quantity: perUnit(part), stages: stagesOf(part) };
     if (has('AWARDED')) {
       rows.push({ ...base, where: returned ? `Awarded — ${returned.HoNo} was returned` : 'Awarded, not handed off', team: 'PROCUREMENT',
-        next: returned ? 'fix and hand off again' : 'complete the shipping terms and hand off', link: { label: `Open ${part[0].AbNo}`, to: `/awards/${batchId}` } });
+        next: returned ? 'fix and hand off again' : 'complete the shipping terms and hand off', action: `hand off ${part[0].SupplierName ?? supplier}`, link: { label: `Open ${part[0].AbNo}`, to: `/awards/${batchId}` } });
     } else if (has('HANDED_OFF')) {
       rows.push({ ...base, where: `Handed off — ${live?.HoNo ?? ''}, sent ${live ? live.SentAt.toISOString().slice(0, 10) : ''}, not accepted yet`, team: 'PO_TEAM',
-        next: 'accept, then build and submit the PO', link: live ? { label: `Open ${live.HoNo}`, to: `/handoffs/${live.HandoffId}` } : null });
+        next: 'accept, then build and submit the PO', action: live ? `accept ${live.HoNo}` : undefined, link: live ? { label: `Open ${live.HoNo}`, to: `/handoffs/${live.HandoffId}` } : null });
     } else if (has('PO_PREPARATION')) {
       const next = !draft ? 'build the PO draft' : draft.Status === 'VALIDATED' ? `submit ${draft.PoDraftNo} to SAP` : draft.Status === 'UNKNOWN' ? `resolve ${draft.PoDraftNo}`
         : draft.Status === 'REJECTED' ? `fix ${draft.PoDraftNo} (rejected by SAP) and build a new draft` : `validate ${draft.PoDraftNo}`;
-      rows.push({ ...base, where: `PO preparation — ${live?.HoNo ?? ''} accepted${draft ? `, ${draft.PoDraftNo} ${draft.Status.toLowerCase()}` : ', no PO draft yet'}`, team: 'PO_TEAM', next,
+      rows.push({ ...base, where: `PO preparation — ${live?.HoNo ?? ''} accepted${draft ? `, ${draft.PoDraftNo} ${draft.Status.toLowerCase()}` : ', no PO draft yet'}`, team: 'PO_TEAM', next, action: next.replace(' to SAP', ''),
         link: draft ? { label: `Open ${draft.PoDraftNo}`, to: `/po-drafts/${draft.PoDraftId}` } : live ? { label: `Open ${live.HoNo}`, to: `/handoffs/${live.HandoffId}` } : null });
     } else {
       const sim = part.some((s) => Number(s.Sim) === 1);
@@ -221,4 +229,72 @@ export async function whatsLeft(db: Db, demandId: string): Promise<{ rows: LeftR
       team: c.RaisedByDept === 'SALES' ? 'PROCUREMENT' : 'SALES', next: 'decide', link: { label: `Open ${c.CrNo}`, to: `/change-requests/${c.CrId}` } });
   }
   return { rows, procurementDone: !rows.some((r) => r.team === 'PROCUREMENT') };
+}
+
+// ─── Awards (the Awards list and the award page): the same stages, per award batch ───
+/** Share of each award batch's quantity per stage (its active award items), in percent. */
+export async function awardProgressFor(db: Db, batchIds: string[]): Promise<Map<string, Progress | null>> {
+  const out = new Map<string, Progress | null>(batchIds.map((id) => [id, null]));
+  if (!batchIds.length) return out;
+  const rows = (await sql<{ AwardBatchId: string; ExecState: string; Sim: number; Q: string }>`
+    SELECT i.AwardBatchId, s.ExecState, f.Sim, SUM(s.Qty) AS Q
+    FROM scm.QtySlice s JOIN scm.AwardItem i ON i.AwardItemId = s.AwardItemId ${SIM_APPLY}
+    WHERE i.AwardBatchId IN (${sql.join(batchIds)}) AND i.IsActive = 1 AND s.ExecState <> 'MERGED_OUT'
+    GROUP BY i.AwardBatchId, s.ExecState, f.Sim`.execute(db)).rows;
+  for (const id of batchIds) out.set(id, progressOf(rows.filter((r) => String(r.AwardBatchId) === id)));
+  return out;
+}
+
+const batchSlice = (states: string) => sql`EXISTS (SELECT 1 FROM scm.QtySlice s JOIN scm.AwardItem i ON i.AwardItemId = s.AwardItemId
+  WHERE i.AwardBatchId = b.AwardBatchId AND i.IsActive = 1 AND s.ExecState IN (${sql.raw(states)}))`;
+const batchAck = (status: string) => sql`EXISTS (SELECT 1 FROM scm.SalesAck a WHERE a.AwardBatchId = b.AwardBatchId AND a.Status = ${status})`;
+const batchUnknownPo = sql`EXISTS (SELECT 1 FROM scm.PoDraft pd JOIN scm.Handoff h ON h.HandoffId = pd.HandoffId WHERE h.AwardBatchId = b.AwardBatchId AND pd.Status = 'UNKNOWN')`;
+
+/** SQL (on scm.AwardBatch as b) that is true when the award waits on `team` — the same rules as a demand's award part. */
+export function awardWaitingSql(team: Team): RawBuilder<SqlBool> {
+  const proc = sql`(${batchSlice("'AWARDED'")} OR ${batchAck('QUERY_RAISED')})`;
+  const po = sql`(${batchSlice("'HANDED_OFF','PO_PREPARATION'")} OR ${batchUnknownPo})`;
+  const sales = sql`(${batchAck('PENDING')} AND ${batchSlice("'AWARDED','HANDED_OFF','PO_PREPARATION','PO_SUBMITTED','PO_CREATED'")})`;
+  if (team === 'PROCUREMENT') return sql<SqlBool>`${proc}`;
+  if (team === 'PO_TEAM') return sql<SqlBool>`${po}`;
+  if (team === 'SALES') return sql<SqlBool>`${sales}`;
+  return sql<SqlBool>`(NOT ${proc} AND NOT ${po} AND NOT ${sales})`;
+}
+
+/** Who each award waits on and for what (the page of the Awards list): a few set-based queries for the whole page. */
+export async function awardWaitingFor(db: Db, batchIds: string[]): Promise<Map<string, Waiting[]>> {
+  const out = new Map<string, Waiting[]>(batchIds.map((id) => [id, []]));
+  if (!batchIds.length) return out;
+  const ids = sql.join(batchIds);
+  const [flags, toHandOff, hos, drafts, noDraft, acks] = await Promise.all([
+    sql<{ AwardBatchId: string; P: number; O: number; S: number; Items: number }>`SELECT b.AwardBatchId,
+      (SELECT COUNT(*) FROM scm.AwardItem i WHERE i.AwardBatchId = b.AwardBatchId AND i.IsActive = 1) AS Items, CASE WHEN ${awardWaitingSql('PROCUREMENT')} THEN 1 ELSE 0 END AS P,
+      CASE WHEN ${awardWaitingSql('PO_TEAM')} THEN 1 ELSE 0 END AS O, CASE WHEN ${awardWaitingSql('SALES')} THEN 1 ELSE 0 END AS S FROM scm.AwardBatch b WHERE b.AwardBatchId IN (${ids})`.execute(db),
+    sql<{ AwardBatchId: string; Name: string }>`SELECT DISTINCT i.AwardBatchId, ISNULL(sp.Name, i.SupplierCode) AS Name FROM scm.QtySlice s JOIN scm.AwardItem i ON i.AwardItemId = s.AwardItemId
+      LEFT JOIN md.Supplier sp ON sp.SupplierCode = i.SupplierCode WHERE i.AwardBatchId IN (${ids}) AND i.IsActive = 1 AND s.ExecState = 'AWARDED'`.execute(db),
+    sql<{ AwardBatchId: string; HoNo: string }>`SELECT AwardBatchId, HoNo FROM scm.Handoff WHERE AwardBatchId IN (${ids}) AND Status = 'HANDED_OFF' ORDER BY HoNo`.execute(db),
+    sql<{ AwardBatchId: string; PoDraftNo: string; Status: string }>`SELECT h.AwardBatchId, pd.PoDraftNo, pd.Status FROM scm.PoDraft pd JOIN scm.Handoff h ON h.HandoffId = pd.HandoffId
+      WHERE h.AwardBatchId IN (${ids}) AND pd.Status IN ('DRAFT', 'VALIDATED', 'UNKNOWN') ORDER BY pd.PoDraftNo`.execute(db),
+    sql<{ AwardBatchId: string; HoNo: string }>`SELECT DISTINCT h.AwardBatchId, h.HoNo FROM scm.Handoff h JOIN scm.QtySlice s ON s.HandoffId = h.HandoffId
+      WHERE h.AwardBatchId IN (${ids}) AND s.ExecState = 'PO_PREPARATION' AND NOT EXISTS (SELECT 1 FROM scm.PoDraft pd WHERE pd.HandoffId = h.HandoffId AND pd.Status IN ('DRAFT', 'VALIDATED', 'UNKNOWN', 'SUBMITTED', 'CREATED'))`.execute(db),
+    sql<{ AwardBatchId: string; Status: string }>`SELECT AwardBatchId, Status FROM scm.SalesAck WHERE AwardBatchId IN (${ids})`.execute(db),
+  ]);
+  for (const f of flags.rows) {
+    const id = String(f.AwardBatchId);
+    const of = <T extends { AwardBatchId: string }>(rows: T[]) => rows.filter((r) => String(r.AwardBatchId) === id);
+    const list: Waiting[] = [];
+    if (Number(f.P)) {
+      const t = of(toHandOff.rows).map((r) => `hand off ${r.Name}`);
+      if (of(acks.rows).some((a) => a.Status === 'QUERY_RAISED')) t.push("answer Sales' query");
+      list.push({ team: 'PROCUREMENT', text: t.join(', ') || 'open the award' });
+    }
+    if (Number(f.O)) {
+      const t = [...of(hos.rows).map((h) => `accept ${h.HoNo}`), ...of(drafts.rows).map((d) => (d.Status === 'VALIDATED' ? `submit ${d.PoDraftNo}` : d.Status === 'UNKNOWN' ? `resolve ${d.PoDraftNo}` : `validate ${d.PoDraftNo}`)),
+        ...of(noDraft.rows).map((h) => `build the PO draft for ${h.HoNo}`)];
+      list.push({ team: 'PO_TEAM', text: t.join(', ') || 'open the handoffs' });
+    }
+    if (Number(f.S)) list.push({ team: 'SALES', text: 'acknowledge (optional)' });
+    out.set(id, list.length ? list : [{ team: 'NONE', text: Number(f.Items) ? 'done' : 'nothing awarded any more (un-awarded or cancelled)' }]);
+  }
+  return out;
 }
