@@ -5,6 +5,7 @@ import type { RouterOutputs } from '../../lib/format';
 import { trpc } from '../../lib/trpc';
 import { errorText, newCommandId, problemsOf, qtyText, weekLabel, weekOptions } from '../../lib/workflow';
 import { GroupCard, sameMakeUp, type GroupDraft } from './GroupCard';
+import { DEFAULT_UNIT } from './AddMaterialsDrawer';
 
 type Demand = RouterOutputs['demand']['get'];
 type WeekDraft = { uid: string; etdWeek: string; groups: GroupDraft[] };
@@ -74,7 +75,7 @@ export function DemandEditor({ demand }: { demand: Demand }) {
   const used = new Set(weeks.map((w) => w.etdWeek));
   const addWeek = () => {
     const free = allWeeks.find((w) => !used.has(w));
-    if (free) change([...weeks, { uid: uid(), etdWeek: free, groups: [{ uid: uid(), name: '', containerCount: 1, capacity: '', unit: '', items: [] }] }]);
+    if (free) change([...weeks, { uid: uid(), etdWeek: free, groups: [{ uid: uid(), name: '', containerCount: 1, capacity: '', unit: DEFAULT_UNIT, items: [] }] }]);
   };
   /**
    * Copies a group into another week, adding the week when it is not there yet.
@@ -156,7 +157,7 @@ export function DemandEditor({ demand }: { demand: Demand }) {
             }
             extra={
               <Space>
-                <Button size="small" icon={<PlusOutlined />} onClick={() => setWeek(w.uid, { groups: [...w.groups, { uid: uid(), name: '', containerCount: 1, capacity: w.groups[0]?.capacity ?? '', capacitySuggested: w.groups[0]?.capacitySuggested, unit: '', items: [] }] })}>
+                <Button size="small" icon={<PlusOutlined />} onClick={() => setWeek(w.uid, { groups: [...w.groups, { uid: uid(), name: '', containerCount: 1, capacity: w.groups[0]?.capacity ?? '', capacitySuggested: w.groups[0]?.capacitySuggested, unit: DEFAULT_UNIT, items: [] }] })}>
                   Add container group
                 </Button>
                 <Button size="small" danger icon={<DeleteOutlined />} onClick={() => change(weeks.filter((x) => x.uid !== w.uid))}>Remove week</Button>

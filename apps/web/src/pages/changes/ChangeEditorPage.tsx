@@ -7,6 +7,7 @@ import { trpc } from '../../lib/trpc';
 import { errorText, newCommandId, problemsOf, weekLabel, weekOptions } from '../../lib/workflow';
 import { GroupCard, sameMakeUp, type GroupDraft } from '../demands/GroupCard';
 import { LoadError } from '../../components/LoadError';
+import { DEFAULT_UNIT } from '../demands/AddMaterialsDrawer';
 
 type Demand = RouterOutputs['demand']['get'];
 type WeekDraft = { uid: string; etdWeek: string; groups: GroupDraft[] };
@@ -160,7 +161,7 @@ export function ChangeEditorPage() {
           }
           extra={
             <Space>
-              <Button size="small" icon={<PlusOutlined />} onClick={() => setWeek(w.uid, { groups: [...w.groups, { uid: uid(), groupId: null, name: '', containerCount: 1, capacity: w.groups[0]?.capacity ?? '', unit: '', items: [] }] })}>Add container group</Button>
+              <Button size="small" icon={<PlusOutlined />} onClick={() => setWeek(w.uid, { groups: [...w.groups, { uid: uid(), groupId: null, name: '', containerCount: 1, capacity: w.groups[0]?.capacity ?? '', unit: DEFAULT_UNIT, items: [] }] })}>Add container group</Button>
               {w.groups.length > 0 && <Button size="small" danger onClick={() => setWeek(w.uid, { groups: [] })}>Cancel this week</Button>}
             </Space>
           }>

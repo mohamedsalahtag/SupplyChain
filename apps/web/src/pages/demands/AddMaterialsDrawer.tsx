@@ -29,6 +29,9 @@ export function evenShares(remaining: number, n: number): string[] {
  * classes compose into one item each (3 sizes × 2 classes = 6 items), with an
  * optional SKU per combination and a share of the container.
  */
+/** The unit a new container group starts in (most purchases are in cartons). */
+export const DEFAULT_UNIT = 'CT';
+
 export function AddMaterialsDrawer({ open, title, unit, remainingShare, onClose, onAdd }: {
   open: boolean;
   title: string;
@@ -58,7 +61,8 @@ export function AddMaterialsDrawer({ open, title, unit, remainingShare, onClose,
   const o = options.data;
   const units = o?.units ?? [];
   useEffect(() => {
-    if (!unit && origin && units.length && !units.some((u) => u.unit === chosenUnit)) setChosenUnit(units[0].unit);
+    // Carton first: most purchases are in cartons (CT); otherwise the most common unit of these materials.
+    if (!unit && origin && units.length && !units.some((u) => u.unit === chosenUnit)) setChosenUnit((units.find((u) => u.unit === DEFAULT_UNIT) ?? units[0]).unit);
   }, [units, origin, unit, chosenUnit]);
 
   const ready = !!(cat && sub && origin && chosenUnit);
