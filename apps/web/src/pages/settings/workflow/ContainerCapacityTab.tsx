@@ -43,7 +43,7 @@ export function ContainerCapacityTab() {
 
   const current = editing && editing !== 'new' ? editing : null;
   const initial = (r: Row | 'new' | null): FormValues => (!r || r === 'new'
-    ? { majorCategory: undefined, subMajorCategory: ANY, size: ANY, capacity: undefined, unit: '', isActive: true }
+    ? { majorCategory: undefined, subMajorCategory: ANY, size: ANY, capacity: undefined, unit: 'CT', isActive: true } // carton by default
     : { majorCategory: r.MajorCategory, subMajorCategory: r.SubMajorCategory ?? ANY, size: r.Size ?? ANY, capacity: r.Capacity, unit: r.Unit, isActive: r.IsActive });
   const openModal = (r: Row | 'new') => { setEditing(r); form.resetFields(); form.setFieldsValue(initial(r)); };
   const refresh = () => utils.workflowSetup.capacities.invalidate();

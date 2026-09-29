@@ -8,7 +8,7 @@ import { progressFor, waitingFor, waitingSql, type Team } from './progress.js';
 import { addLedgers, buildLedger, deriveStatus, emptyLedger, inProgress, type QtyLedger } from '../workflow/ledger.js';
 import { formatQty, fromDb } from '../workflow/qty.js';
 import { rowVerHex, type Db } from '../workflow/tx.js';
-import { P_DEMAND } from './demandService.js';
+import { mayAcceptOwnDemand, P_DEMAND } from './demandService.js';
 import { formatShare } from './compose.js';
 import { mergeInfo } from '../merge/mergeInfo.js';
 import { anyClass, anySize } from './lookups.js';
@@ -36,9 +36,9 @@ export function allowedActions(actor: Actor, d: { CompanyCode: string; WorkflowS
   return {
     edit: editable && can(P_DEMAND.create),
     submit: editable && can(P_DEMAND.submit),
-    accept: d.WorkflowStatus === 'SUBMITTED' && can(P_DEMAND.accept) && (actor.isAdmin || Number(d.CreatedBy) !== actor.id), // not one's own demand
+    accept: d.WorkflowStatus === 'SUBMITTED' && can(P_DEMAND.accept) && (Number(d.CreatedBy) !== actor.id || mayAcceptOwnDemand(actor)), // own: only with both roles
     /** Why Accept is not offered to someone who may accept demands (separation of duties): shown instead of the button. */
-    acceptBlocked: d.WorkflowStatus === 'SUBMITTED' && can(P_DEMAND.accept) && !actor.isAdmin && Number(d.CreatedBy) === actor.id
+    acceptBlocked: d.WorkflowStatus === 'SUBMITTED' && can(P_DEMAND.accept) && Number(d.CreatedBy) === actor.id && !mayAcceptOwnDemand(actor)
       ? 'You created this demand, so another Procurement user must accept or return it (separation of duties).' : null,
     /** A draft (or returned) demand that was never accepted: its creator or an administrator may delete it. */
     delete: (d.WorkflowStatus === 'DRAFT' || d.WorkflowStatus === 'RETURNED') && !d.AcceptedAt && can('demand.delete') && (actor.isAdmin || Number(d.CreatedBy) === actor.id),

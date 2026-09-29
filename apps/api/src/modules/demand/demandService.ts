@@ -19,6 +19,12 @@ import { rowVerHex, updateWithRowVer, type Db, type Tx } from '../workflow/tx.js
 import { assertNoProblems, normalize, type DraftInput, type NormalWeek } from './content.js';
 import { snapshotVersion } from './versions.js';
 
+/**
+ * Separation of duties (plan v5 §0.4), relaxed 2026-09-29 for stage one: the creator of a demand may accept it only when
+ * they hold both sides — Sales (submit) and Procurement (accept) — or are an administrator. Anyone else needs a second person.
+ */
+export const mayAcceptOwnDemand = (actor: Actor) => actor.isAdmin || (actor.permissions.has('demand.submit') && actor.permissions.has('demand.accept'));
+
 export const P_DEMAND = {
   open: 'demands.open', create: 'demand.create', submit: 'demand.submit', accept: 'demand.accept', return: 'demand.return',
   comment: 'demand.comment', attach: 'demand.attach',
@@ -149,8 +155,9 @@ export async function acceptDemand(db: Db, actor: Actor, commandId: string, dema
     const d = await lockDemand(tx, actor, demandId);
     assertCan(actor, P_DEMAND.accept, d.CompanyCode);
     assertStatus(d, ['SUBMITTED'], 'accepted');
-    // Separation of duties (plan v5 §0.4): the person who raised the demand does not accept it (administrators excepted).
-    if (!actor.isAdmin && Number(d.CreatedBy) === actor.id) throw new DomainError('OWN_DEMAND', 'You created this demand, so someone else in Procurement must accept it', 403);
+    // Separation of duties (plan v5 §0.4): the creator does not accept it — unless they hold Sales and Procurement (mayAcceptOwnDemand).
+    const own = Number(d.CreatedBy) === actor.id;
+    if (own && !mayAcceptOwnDemand(actor)) throw new DomainError('OWN_DEMAND', 'You created this demand, so someone else in Procurement must accept it', 403);
     await updateWithRowVer(tx, 'scm.Demand', 'DemandId', demandId, rowVer, sql`WorkflowStatus = 'ACCEPTED', AcceptedAt = SYSUTCDATETIME(), AcceptedBy = ${actor.id}`);
     const lines = await tx
       .selectFrom('scm.DemandLine as l').innerJoin('scm.DemandWeek as w', 'w.DemandWeekId', 'l.DemandWeekId')
@@ -162,7 +169,7 @@ export async function acceptDemand(db: Db, actor: Actor, commandId: string, dema
       }, { actorUserId: actor.id, docType: 'DEMAND', docId: demandId, comment: 'Accepted' });
     }
     const eventId = await recordEvent(tx, { type: 'DEMAND_ACCEPTED', entityType: 'DEMAND', entityId: demandId, demandId, payload: { lines: lines.length }, actorUserId: actor.id });
-    await addThreadEntry(tx, { entityType: 'DEMAND', entityId: demandId, kind: 'SYSTEM', body: 'Accepted by Procurement', authorUserId: actor.id, eventId });
+    await addThreadEntry(tx, { entityType: 'DEMAND', entityId: demandId, kind: 'SYSTEM', body: own ? 'Accepted by Procurement — by its creator, who holds Sales and Procurement' : 'Accepted by Procurement', authorUserId: actor.id, eventId });
     await closeInbox(tx, 'DEMAND_TO_ACCEPT', 'DEMAND', demandId, actor.id);
     return { slices: lines.length };
   }, { demandId, rowVer });
