@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demand progress</title>
+<style>
+  :root { --green:#1f6f43; --line:#f0f0f0; --border:#d9d9d9; --bg:#f5f5f5; --text:#1f1f1f; --muted:#8c8c8c; --blue:#1677ff; --red:#cf1322; --amber:#d48806; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:13px/1.5 -apple-system,"Segoe UI",Roboto,Arial,sans-serif; color:var(--text); background:var(--bg); }
+  header { height:40px; background:#001529; color:#fff; display:flex; align-items:center; padding:0 16px; gap:8px; }
+  header .logo { width:22px; height:22px; border-radius:4px; background:var(--green); }
+  .shell { display:flex; min-height:calc(100vh - 40px); }
+  nav { width:210px; background:#fff; border-right:1px solid var(--line); padding:6px 0; flex-shrink:0; }
+  nav .grp { color:var(--muted); padding:8px 16px 2px; font-size:12px; }
+  nav a { display:block; padding:5px 16px 5px 28px; color:var(--text); cursor:pointer; }
+  nav a.active { background:#e6f4ea; color:var(--green); border-right:3px solid var(--green); }
+  main { flex:1; padding:12px 16px 40px; min-width:0; }
+  h5 { font-size:16px; margin:0; }
+  .muted { color:var(--muted); } .small { font-size:12px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:8px; margin-bottom:12px; }
+  .card-h { padding:8px 12px; border-bottom:1px solid var(--line); display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .pad { padding:10px 12px; }
+  table { width:100%; border-collapse:collapse; table-layout:fixed; }
+  th, td { padding:6px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; overflow:hidden; text-overflow:ellipsis; }
+  th { background:#fafafa; font-size:12px; color:#595959; }
+  .num { text-align:right; }
+  .tag { display:inline-block; border-radius:4px; padding:0 7px; font-size:12px; border:1px solid; white-space:nowrap; }
+  .t-grey { color:#595959; border-color:#d9d9d9; background:#fafafa; } .t-blue { color:#0958d9; border-color:#91caff; background:#e6f4ff; }
+  .t-green { color:#389e0d; border-color:#b7eb8f; background:#f6ffed; } .t-gold { color:#d48806; border-color:#ffe58f; background:#fffbe6; }
+  .t-orange { color:#d46b08; border-color:#ffd591; background:#fff7e6; } .t-purple { color:#531dab; border-color:#d3adf7; background:#f9f0ff; }
+  .t-cyan { color:#08979c; border-color:#87e8de; background:#e6fffb; }
+  button { font:inherit; border:1px solid var(--border); background:#fff; border-radius:4px; padding:3px 12px; cursor:pointer; }
+  button.primary { background:var(--green); color:#fff; border-color:var(--green); }
+  a { color:var(--blue); cursor:pointer; text-decoration:none; }
+  select, input { font:inherit; border:1px solid var(--border); border-radius:4px; padding:3px 6px; background:#fff; }
+  .page { display:none; } .page.active { display:block; }
+  .banner { border-radius:6px; padding:8px 12px; margin-bottom:10px; }
+  .b-info { background:#e6f4ff; border:1px solid #91caff; } .b-ok { background:#f6ffed; border:1px solid #b7eb8f; }
+  .note { font-size:12px; color:var(--muted); margin-top:4px; }
+  .review { border-left:3px solid var(--amber); background:#fffbe6; padding:6px 10px; margin:0 0 12px; font-size:12px; }
+
+  /* the bar */
+  .bar { display:flex; height:9px; border-radius:4px; overflow:hidden; background:#f0f0f0; margin-top:3px; }
+  .bar span { display:block; height:100%; }
+  .s-open { background:#bfbfbf; } .s-rfq { background:#722ed1; } .s-awd { background:#faad14; } .s-ho { background:#1677ff; }
+  .s-prep { background:#13c2c2; } .s-po { background:#237804; } .s-sim { background:repeating-linear-gradient(45deg,#95de64 0 4px,#237804 4px 8px); }
+  .s-old-awd { background:#52c41a; } .s-old-po { background:#237804; }
+  .bartext { font-size:11px; color:#595959; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .who { font-size:11px; font-weight:600; }
+  .w-proc { color:#d48806; } .w-po { color:#0958d9; } .w-sales { color:#531dab; } .w-none { color:#389e0d; }
+  .legend { display:flex; flex-wrap:wrap; gap:6px 16px; font-size:12px; }
+  .legend i { display:inline-block; width:12px; height:9px; border-radius:2px; margin-right:5px; vertical-align:middle; }
+  .steps { display:flex; gap:0; margin:8px 0 12px; }
+  .step { flex:1; text-align:center; font-size:12px; color:var(--muted); border-top:3px solid #f0f0f0; padding-top:4px; }
+  .step.done { color:var(--green); border-color:var(--green); } .step.cur { color:var(--text); font-weight:600; border-color:#1677ff; }
+  .kv { display:grid; grid-template-columns:110px 1fr; gap:4px 10px; }
+  .kv > div:nth-child(odd) { color:#595959; }
+  .tip { position:relative; cursor:help; }
+  .tip .tt { display:none; position:absolute; left:0; top:100%; z-index:5; background:#1f1f1f; color:#fff; border-radius:6px; padding:6px 9px; font-size:12px; width:330px; white-space:normal; }
+  .tip:hover .tt { display:block; }
+  td:has(> .tip) { overflow:visible; } /* the tooltip must not be clipped by its cell */
+  .tip .tt { z-index:50; box-shadow:0 6px 16px rgba(0,0,0,.2); }
+</style>
+</head>
+<body>
+<header><div class="logo"></div><b>Supply Chain</b><span style="margin-left:auto" class="small">Mockup — demand progress · switch screens in the menu</span></header>
+<div class="shell">
+<nav>
+  <div class="grp">Mockup screens</div>
+  <a data-p="list" class="active">1 · Demands list</a>
+  <a data-p="demand">2 · Demand D-000451</a>
+  <a data-p="compare">3 · Before / after</a>
+</nav>
+<main>
+
+<!-- ============ 1 · DEMANDS LIST ============ -->
+<section class="page active" id="p-list">
+  <div class="review"><b>What changes here:</b> the Progress bar shows the real stages with their own colours, and says whose turn it is. New filter <b>Waiting on</b> (Procurement / PO team / Sales / Nobody). Hover a bar for the detail.</div>
+  <div style="display:flex; gap:10px; align-items:baseline; margin-bottom:8px"><h5>Demands</h5><span class="muted">Everything Sales asked for, and where it is</span></div>
+  <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px">
+    <input placeholder="Search demand number" style="width:210px">
+    <select><option>Status</option></select>
+    <select id="waitOn" onchange="filterWait()">
+      <option value="">Waiting on: anyone</option>
+      <option value="proc">Waiting on: Procurement</option>
+      <option value="po">Waiting on: PO team</option>
+      <option value="sales">Waiting on: Sales</option>
+      <option value="none">Waiting on: nobody (done)</option>
+    </select>
+    <button onclick="document.getElementById('waitOn').value='';filterWait()">Reset</button>
+  </div>
+  <div class="card"><table id="demands">
+    <colgroup><col style="width:95px"><col style="width:70px"><col style="width:110px"><col style="width:170px"><col style="width:330px"><col style="width:190px"></colgroup>
+    <tr><th>Demand</th><th>Company</th><th>Week</th><th>Status</th><th>Progress</th><th>Waiting on</th></tr>
+    <tr data-w="po sales">
+      <td><a onclick="go('demand')">D-000451</a></td><td>1000</td><td>2026-W39 … W40</td><td><span class="tag t-blue">Fully in execution</span></td>
+      <td><div class="tip"><div class="bar"><span class="s-sim" style="width:50%"></span><span class="s-ho" style="width:50%"></span></div>
+        <div class="bartext">50% on PO (simulated) · 50% handed off</div>
+        <div class="tt">5,880 CT on PO 4510000004 — <b>simulated, not in SAP</b><br>5,880 CT handed off (HO-000027) — <b>PO team</b> to accept<br>Procurement: nothing left to do</div></div></td>
+      <td><span class="who w-po">PO team</span> <span class="small muted">· accept HO-000027</span><br><span class="who w-sales">Sales</span> <span class="small muted">· acknowledge (optional)</span></td>
+    </tr>
+    <tr data-w="po sales">
+      <td><a>D-000452</a></td><td>1000</td><td>2026-W40</td><td><span class="tag t-blue">Fully in execution</span></td>
+      <td><div class="tip"><div class="bar"><span class="s-prep" style="width:55.6%"></span><span class="s-ho" style="width:44.4%"></span></div>
+        <div class="bartext">56% PO preparation · 44% handed off</div>
+        <div class="tt">5,880 CT in PO preparation (POD-000006 validated) — <b>PO team</b> to submit<br>4,704 CT handed off (HO-000029) — <b>PO team</b> to accept<br>Procurement: nothing left to do</div></div></td>
+      <td><span class="who w-po">PO team</span> <span class="small muted">· submit POD-000006, accept HO-000029</span></td>
+    </tr>
+    <tr data-w="proc">
+      <td><a>D-000448</a> <span class="small muted">example</span></td><td>1000</td><td>2026-W41</td><td><span class="tag t-orange">Partly in execution</span></td>
+      <td><div class="tip"><div class="bar"><span class="s-awd" style="width:60%"></span><span class="s-rfq" style="width:25%"></span><span class="s-open" style="width:15%"></span></div>
+        <div class="bartext">60% awarded · 25% in RFQ · 15% open</div>
+        <div class="tt">Awarded, not handed off — <b>Procurement</b> to hand off<br>In RFQ — <b>Procurement</b> to collect quotes and award<br>Open — <b>Procurement</b> to put in an RFQ</div></div></td>
+      <td><span class="who w-proc">Procurement</span> <span class="small muted">· hand off, award, RFQ</span></td>
+    </tr>
+    <tr data-w="none">
+      <td><a>D-000430</a> <span class="small muted">example</span></td><td>1000</td><td>2026-W38</td><td><span class="tag t-green">On PO</span></td>
+      <td><div class="tip"><div class="bar"><span class="s-po" style="width:100%"></span></div>
+        <div class="bartext">100% on PO</div>
+        <div class="tt">Everything is on SAP purchase orders</div></div></td>
+      <td><span class="who w-none">Nobody</span> <span class="small muted">· done</span></td>
+    </tr>
+  </table></div>
+  <div class="legend">
+    <span><i class="s-open"></i>Open · Procurement</span><span><i class="s-rfq"></i>In RFQ · Procurement</span><span><i class="s-awd"></i>Awarded, not handed off · Procurement</span>
+    <span><i class="s-ho"></i>Handed off · PO team to accept</span><span><i class="s-prep"></i>PO preparation · PO team</span><span><i class="s-po"></i>On PO (SAP)</span><span><i class="s-sim"></i>On PO (simulated, not in SAP)</span>
+  </div>
+</section>
+
+<!-- ============ 2 · DEMAND PAGE ============ -->
+<section class="page" id="p-demand">
+  <div class="review"><b>What changes here:</b> the header's "Now" line uses the same stages as the bar, and a new <b>What's left</b> box lists each supplier with where it is, who acts next and a link. Procurement sees at a glance that its part is done.</div>
+  <div style="display:flex; gap:10px; align-items:baseline"><h5>D-000451</h5><span class="tag t-blue">Fully in execution</span><span class="muted">Company 1000 · 2 weeks · 4 containers</span></div>
+  <div class="steps"><div class="step done">Sales prepares</div><div class="step done">Procurement review</div><div class="step done">Accepted</div><div class="step done">Sourcing (RFQ)</div><div class="step done">Awarded</div><div class="step cur">Ordered (PO)</div><div class="step">Closed</div></div>
+  <div class="card pad">
+    <div class="kv">
+      <div>Now</div><div><div class="bar" style="max-width:380px"><span class="s-sim" style="width:50%"></span><span class="s-ho" style="width:50%"></span></div>
+        5,880 CT on PO (simulated) · 5,880 CT handed off · awards: AB-000051 (not acknowledged)</div>
+      <div>Who has it</div><div><span class="who w-po">PO team</span> — Procurement has nothing left to do</div>
+      <div>Next</div><div>PO team accepts HO-000027 and prepares its PO</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h"><b>What's left</b><span class="small muted">one line per award × supplier · updates live</span>
+      <span style="margin-left:auto" class="tag t-green">Procurement: nothing left to do</span></div>
+    <table>
+      <colgroup><col style="width:190px"><col style="width:120px"><col style="width:110px"><col style="width:260px"><col style="width:140px"><col style="width:120px"></colgroup>
+      <tr><th>Supplier</th><th>Award · week</th><th class="num">Quantity</th><th>Where it is</th><th>Who acts next</th><th></th></tr>
+      <tr><td>Agrisouth (Chile) S.A. <span class="small muted">80000461</span></td><td>AB-000051 · W39</td><td class="num">5,880 CT</td>
+        <td><span class="tag t-green">On PO</span> <span class="tag t-orange">simulated — not in SAP</span><div class="small muted">HO-000026 → POD-000005 → 4510000004</div></td>
+        <td><span class="who w-none">Nobody</span><div class="small muted">redo with the real SAP API later</div></td><td><a>Open POD-000005</a></td></tr>
+      <tr><td>Supplier 80000228</td><td>AB-000051 · W40</td><td class="num">5,880 CT</td>
+        <td><span class="tag t-blue">Handed off</span><div class="small muted">HO-000027, sent 27 Sept, not accepted yet</div></td>
+        <td><span class="who w-po">PO team</span><div class="small muted">accept, then build and submit the PO</div></td><td><a>Open HO-000027</a></td></tr>
+      <tr><td colspan="3" class="muted">Sales acknowledgement of AB-000051</td>
+        <td><span class="tag t-gold">Not acknowledged</span><div class="small muted">a heads-up, never blocks</div></td>
+        <td><span class="who w-sales">Sales</span><div class="small muted">optional</div></td><td><a>Open AB-000051</a></td></tr>
+    </table>
+  </div>
+  <p class="note">The "Who acts next" wording comes from the server (hard rule 2), from the same stages as the bar.</p>
+</section>
+
+<!-- ============ 3 · BEFORE / AFTER ============ -->
+<section class="page" id="p-compare">
+  <div class="review">The same two demands, today and with the change.</div>
+  <div class="card"><table>
+    <colgroup><col style="width:100px"><col style="width:330px"><col style="width:330px"></colgroup>
+    <tr><th>Demand</th><th>Today</th><th>With the change</th></tr>
+    <tr><td>D-000451</td>
+      <td><div class="bar"><span class="s-old-po" style="width:50%"></span><span class="s-old-awd" style="width:50%"></span></div><div class="bartext">50% on PO · 50% awarded</div>
+        <div class="small muted">"Awarded" sounds like Procurement still has work; the PO is simulated but looks real.</div></td>
+      <td><div class="bar"><span class="s-sim" style="width:50%"></span><span class="s-ho" style="width:50%"></span></div><div class="bartext">50% on PO (simulated) · 50% handed off</div>
+        <div class="small"><span class="who w-po">Waiting on PO team</span> · Procurement done</div></td></tr>
+    <tr><td>D-000452</td>
+      <td><div class="bar"><span class="s-old-awd" style="width:100%"></span></div><div class="bartext">100% awarded</div>
+        <div class="small muted">Nothing shows that it was handed off and a PO is ready to submit.</div></td>
+      <td><div class="bar"><span class="s-prep" style="width:55.6%"></span><span class="s-ho" style="width:44.4%"></span></div><div class="bartext">56% PO preparation · 44% handed off</div>
+        <div class="small"><span class="who w-po">Waiting on PO team</span> · Procurement done</div></td></tr>
+  </table></div>
+  <div class="banner b-info small"><b>Stages and who owns them</b> (one list, used by the bar, the "Now" line, What's left and the Waiting on filter):<br>
+    Open → In RFQ → Awarded (not handed off) = <b>Procurement</b> · Handed off → PO preparation = <b>PO team</b> · On PO = done · Sales acknowledgement = <b>Sales</b>, optional.</div>
+</section>
+
+</main>
+</div>
+<script>
+  function go(p) {
+    document.querySelectorAll('.page').forEach((s) => s.classList.toggle('active', s.id === 'p-' + p));
+    document.querySelectorAll('nav a').forEach((a) => a.classList.toggle('active', a.dataset.p === p));
+  }
+  document.querySelectorAll('nav a').forEach((a) => a.addEventListener('click', () => go(a.dataset.p)));
+  function filterWait() {
+    const v = document.getElementById('waitOn').value;
+    document.querySelectorAll('#demands tr[data-w]').forEach((r) => { r.style.display = !v || r.dataset.w.split(' ').includes(v) ? '' : 'none'; });
+  }
+</script>
+</body>
+</html>

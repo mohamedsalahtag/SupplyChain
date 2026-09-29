@@ -60,3 +60,10 @@ The RFQ list's **Suppliers** column shows *n of m quoted* (or *m invited* before
 ## Out of scope
 - New statuses or changed rules (only wording and display).
 - My work tabs keep their verbs (they already say the action).
+
+## Progress, Waiting on and What's left (2026-09-29, mockup `docs/mockups/demand-progress.html`)
+Built at the user's request because "50% on PO · 50% awarded" did not say whether Procurement still had work.
+- **Stages** (one server definition, `modules/demand/progress.ts`): open · in RFQ (incl. quoted) · awarded (**Procurement** to hand off) · handed off (**PO team** to accept) · PO preparation (**PO team** to submit) · on PO · on PO (simulated — the draft's reference is in `scm.StubSapPo`) · cancelled. Each has its own colour; the bar's hover says whose turn each part is.
+- **Waiting on** (Demands list column and `MultiFilter`): Procurement / PO team / Sales / Nobody, with the action ("accept HO-000027", "submit POD-000006", "acknowledge AB-000051 (optional)"). The filter and the column use the same SQL (`waitingSql`), so a demand found by the filter always shows that team. Procurement: submitted demand to review, open / in RFQ / awarded quantity, a Sales query on an award, a Sales change request to decide. PO team: handed-off or PO-preparation quantity, a PO draft with an unknown SAP outcome. Sales: draft or returned demand, an award not acknowledged (optional), a Procurement change request to decide. Nobody: accepted and none of these.
+- **Demand page:** "Now" shows the bar and the stage shares; "Who has it" names the teams (and "Procurement has nothing left to do" when so); "Next" lists their actions; the step bar reaches *Ordered (PO)* once nothing waits on Procurement to hand off. **What's left** (`demand.progress`): one row per unfinished part — not in an RFQ yet, per RFQ, per award × supplier (handoff, PO draft, SAP PO), Sales acknowledgements, open change requests — with where it is, who acts next and a link; the card says *Procurement: nothing left to do* when no row is Procurement's.
+

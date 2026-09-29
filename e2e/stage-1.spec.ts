@@ -87,7 +87,7 @@ test('12 · compose containers (sizes × classes), copy a group, submit, accept'
   await expect(page.getByText('Accepted · nothing sourced yet').first()).toBeVisible();
   await expect(page.getByText(/Mixed Gala: 2 × 1,540 CT/).first()).toBeVisible();
   // One table per week: material, share, per container, requested and the ledger together
-  const head = page.locator('.ant-table-thead').first();
+  const head = page.locator('.ant-table-thead', { hasText: 'Per container' }).first(); // the materials table (What's left comes first on an accepted demand)
   for (const col of ['Material', 'Share', 'Per container', 'Requested', 'Open', 'Status']) await expect(head).toContainText(col);
   await expect(page.locator('.ant-table-thead', { hasText: 'Specification / SKU' })).toHaveCount(0);
   await page.screenshot({ path: 'test-results/12-demand-containers.png', fullPage: true });

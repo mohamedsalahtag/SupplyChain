@@ -12,10 +12,13 @@ import { useTablePrefs } from '../../lib/useTablePrefs';
 import { DEMAND_STATUS, errorText, newCommandId } from '../../lib/workflow';
 import { StatusTag } from './DemandView';
 import { StatusLegend } from '../../components/StatusTag';
-import { LastStep, Progress } from '../../components/StepText';
+import { LastStep } from '../../components/StepText';
+import { Progress, TEAM_LOOK, WaitingOn } from '../../components/DemandProgress';
 
 type Row = RouterOutputs['demand']['list']['rows'][number];
-type Filters = { q?: string; company?: string[]; status?: string[]; weekFrom?: string; weekTo?: string };
+type Team = keyof typeof TEAM_LOOK;
+type Filters = { q?: string; company?: string[]; status?: string[]; weekFrom?: string; weekTo?: string; waitingOn?: Team[] };
+const TEAM_BY_LABEL = Object.fromEntries(Object.entries(TEAM_LOOK).map(([k, v]) => [v.label, k as Team]));
 const WEEK = /^\d{4}-W\d{2}$/;
 const STATUS_BY_LABEL = Object.fromEntries(Object.entries(DEMAND_STATUS).map(([k, v]) => [v.label, k]));
 
@@ -56,11 +59,12 @@ export function DemandsListPage() {
   };
 
   const columns: AppColumn<Row>[] = [
-    { title: 'Number', key: 'demandNo', dataIndex: 'demandNo', width: 95 },
+    { title: 'Number', key: 'demandNo', dataIndex: 'demandNo', width: 115 },
     { title: 'Company', key: 'companyCode', dataIndex: 'companyCode', width: 70 },
-    { title: 'Status', key: 'status', width: 200, render: (_: unknown, r) => <StatusTag status={r.status} mergedInto={r.mergedInto} /> },
-    { title: 'Progress', key: 'progress', width: 170, render: (_: unknown, r) => <Progress p={r.progress} /> },
-    { title: 'Last step', key: 'lastStep', width: 260, render: (_: unknown, r) => <LastStep step={r.lastStep} /> },
+    { title: 'Status', key: 'status', width: 180, render: (_: unknown, r) => <StatusTag status={r.status} mergedInto={r.mergedInto} /> },
+    { title: 'Progress', key: 'progress', width: 200, render: (_: unknown, r) => <Progress p={r.progress} /> },
+    { title: 'Waiting on', key: 'waitingOn', width: 190, render: (_: unknown, r) => <WaitingOn w={r.waitingOn} /> },
+    { title: 'Last step', key: 'lastStep', width: 210, render: (_: unknown, r) => <LastStep step={r.lastStep} /> },
     { title: 'Created by', key: 'createdBy', dataIndex: 'createdBy', width: 130 },
     { title: 'Created at', key: 'createdAt', width: 130, render: (_: unknown, r) => formatDateTime(r.createdAt) },
     { title: 'Submitted', key: 'submittedAt', width: 130, render: (_: unknown, r) => formatDateTime(r.submittedAt) },
@@ -109,6 +113,8 @@ export function DemandsListPage() {
             <MultiFilter id="f-company" placeholder="Company" options={(companies.data ?? []).map((c) => c.CompanyCode)} value={filters.company} onChange={(v) => setFilter({ company: v })} width={130} />
             <MultiFilter id="f-status" placeholder="Status" options={Object.values(DEMAND_STATUS).map((s) => s.label)}
               value={filters.status?.map((s) => DEMAND_STATUS[s]?.label ?? s)} onChange={(v) => setFilter({ status: v?.map((l) => STATUS_BY_LABEL[l]) })} width={180} />
+            <MultiFilter id="f-waiting" placeholder="Waiting on" options={Object.values(TEAM_LOOK).map((t) => t.label)}
+              value={filters.waitingOn?.map((t) => TEAM_LOOK[t].label)} onChange={(v) => setFilter({ waitingOn: v?.map((l) => TEAM_BY_LABEL[l]) })} width={160} />
             <Input placeholder="Week from" allowClear style={{ width: 105 }} onChange={(e) => { const v = e.target.value.trim().toUpperCase(); if (!v || WEEK.test(v)) setFilter({ weekFrom: v || undefined }); }} />
             <Input placeholder="Week to" allowClear style={{ width: 105 }} onChange={(e) => { const v = e.target.value.trim().toUpperCase(); if (!v || WEEK.test(v)) setFilter({ weekTo: v || undefined }); }} />
             <Button icon={<ReloadOutlined />} onClick={() => { setFilters({}); setSearch(''); setPage(1); }}>Reset</Button>

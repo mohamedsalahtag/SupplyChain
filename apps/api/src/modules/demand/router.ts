@@ -10,6 +10,7 @@ import { listThread } from '../workflow/threads.js';
 import './access.js';
 import { draftInput } from './content.js';
 import { demandHistory, getDemand, listDemands } from './demandRead.js';
+import { progressFor, TEAMS, waitingFor, whatsLeft } from './progress.js';
 import { acceptDemand, addComment, createDemand, recallDemand, returnDemand, saveDraft, submitDemand } from './demandService.js';
 import { composeOptions, searchMaterials, specOptions } from './lookups.js';
 import { diffSnapshots, listVersions } from './versions.js';
@@ -29,12 +30,20 @@ export const demandRouter = router({
       status: z.array(z.string().max(30)).max(20).optional(),
       weekFrom: WEEK.optional(),
       weekTo: WEEK.optional(),
+      waitingOn: z.array(z.enum(TEAMS)).max(4).optional(),
       page: z.number().int().min(1).default(1),
       pageSize: z.number().int().refine((n) => (TABLE_PAGE_SIZES as readonly number[]).includes(n)).default(DEFAULT_TABLE_PAGE_SIZE),
     }))
     .query(async ({ ctx, input }) => listDemands(ctx.db, await loadActor(ctx.db, ctx.user), input)),
 
   get: open.input(id).query(async ({ ctx, input }) => getDemand(ctx.db, await loadActor(ctx.db, ctx.user), input.demandId)),
+
+  /** The demand page's "What's left" box, progress bar and who it waits on (demand progress). */
+  progress: open.input(id).query(async ({ ctx, input }) => {
+    await assertEntityAccess(ctx.db, await loadActor(ctx.db, ctx.user), 'DEMAND', input.demandId, false);
+    const [left, progress, waiting] = await Promise.all([whatsLeft(ctx.db, input.demandId), progressFor(ctx.db, [input.demandId]), waitingFor(ctx.db, [input.demandId])]);
+    return { ...left, progress: progress.get(input.demandId) ?? null, waitingOn: waiting.get(input.demandId) ?? [] };
+  }),
 
   /** Versions with, for each, what changed compared with the baseline (version 1). */
   versions: open.input(id).query(async ({ ctx, input }) => {

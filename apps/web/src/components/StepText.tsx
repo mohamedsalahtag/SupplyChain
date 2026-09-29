@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Tooltip, Typography } from 'antd';
+import { Button, Typography } from 'antd';
 import { formatDateTime } from '../lib/format';
 
 type Step = { text: string; note: string | null; at: string };
@@ -23,24 +23,5 @@ export function History({ steps, show = 4 }: { steps: Step[]; show?: number }) {
         <div key={i}><Typography.Text type="secondary" style={{ fontSize: 12, display: 'inline-block', minWidth: 150 }}>{formatDateTime(s.at)}</Typography.Text>{s.text}{s.note ? ` — "${s.note}"` : ''}</div>
       ))}
     </div>
-  );
-}
-
-const PARTS: [key: 'open' | 'inRfq' | 'awarded' | 'onPo' | 'cancelled', label: string, color: string][] = [
-  ['onPo', 'on PO', '#237804'], ['awarded', 'awarded', '#52c41a'], ['inRfq', 'in RFQ', '#722ed1'], ['open', 'open', '#bfbfbf'], ['cancelled', 'cancelled', '#ff7875'],
-];
-
-/** How much of a demand's quantity is open, in RFQ, awarded, on PO, cancelled (spec 21). */
-export function Progress({ p }: { p: Record<'open' | 'inRfq' | 'awarded' | 'onPo' | 'cancelled', number> | null | undefined }) {
-  if (!p) return <Typography.Text type="secondary">—</Typography.Text>;
-  const shown = PARTS.filter(([k]) => p[k] > 0);
-  const text = shown.map(([k, label]) => `${p[k]}% ${label}`).join(' · ');
-  return (
-    <Tooltip title={text}>
-      <div style={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', background: '#f0f0f0', marginTop: 4 }}>
-        {shown.map(([k, , color]) => <span key={k} style={{ width: `${p[k]}%`, background: color }} />)}
-      </div>
-      <div style={{ fontSize: 11, color: '#595959', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{text}</div>
-    </Tooltip>
   );
 }

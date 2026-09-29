@@ -4,6 +4,7 @@ import { sql, type SqlBool } from 'kysely';
 import type { DemandWorkflowStatus, SliceState } from '../../db/schema.js';
 import { hasPermission, type Actor } from '../workflow/access.js';
 import { NotFoundError } from '../workflow/errors.js';
+import { progressFor, waitingFor, waitingSql, type Team } from './progress.js';
 import { addLedgers, buildLedger, deriveStatus, emptyLedger, inProgress, type QtyLedger } from '../workflow/ledger.js';
 import { formatQty, fromDb } from '../workflow/qty.js';
 import { rowVerHex, type Db } from '../workflow/tx.js';
@@ -143,7 +144,7 @@ export async function getDemand(db: Db, actor: Actor, demandId: string) {
 }
 
 export type ListFilter = {
-  mine: boolean; q?: string; company?: string[]; status?: string[]; weekFrom?: string; weekTo?: string; page: number; pageSize: number;
+  mine: boolean; q?: string; company?: string[]; status?: string[]; weekFrom?: string; weekTo?: string; waitingOn?: Team[]; page: number; pageSize: number;
 };
 
 export async function listDemands(db: Db, actor: Actor, f: ListFilter) {
@@ -166,6 +167,7 @@ export async function listDemands(db: Db, actor: Actor, f: ListFilter) {
         .where((e) => e.or([e('l.MaterialCode', 'like', p), e('l.SubMajorCategory', 'like', p), e('l.MajorCategory', 'like', p)]))),
     ]));
   }
+  if (f.waitingOn?.length) q = q.where(sql<SqlBool>`(${sql.join(f.waitingOn.map(waitingSql), sql` OR `)})`);
   if (f.weekFrom || f.weekTo) {
     q = q.where((eb) => eb.exists(eb.selectFrom('scm.DemandWeek as w').select('w.DemandWeekId').whereRef('w.DemandId', '=', 'd.DemandId')
       .where(sql<SqlBool>`w.EtdWeek >= ${f.weekFrom ?? '0000-W00'} AND w.EtdWeek <= ${f.weekTo ?? '9999-W99'}`)));
@@ -188,12 +190,9 @@ export async function listDemands(db: Db, actor: Actor, f: ListFilter) {
       ])
     : [[], []];
   // Spec 21: the last business step, the progress (share of the quantity per stage) and, for a merged demand, where it went.
-  const [steps, progressRows, mergedRows] = ids.length ? await Promise.all([
-    demandSteps(db, ids),
-    sql<{ DemandId: string; ExecState: string; Q: string }>`SELECT l.DemandId, s.ExecState, SUM(s.Qty) AS Q FROM scm.QtySlice s JOIN scm.DemandLine l ON l.LineId = s.LineId
-      WHERE l.DemandId IN (${sql.join(ids)}) AND l.IsActive = 1 AND s.ExecState <> 'MERGED_OUT' GROUP BY l.DemandId, s.ExecState`.execute(db).then((r) => r.rows),
-    mergedIntoOf(db, ids),
-  ]) : [new Map(), [], new Map()] as const;
+  const [steps, progress, waiting, mergedRows] = ids.length ? await Promise.all([
+    demandSteps(db, ids), progressFor(db, ids), waitingFor(db, ids), mergedIntoOf(db, ids),
+  ]) : [new Map(), new Map(), new Map(), new Map()] as const;
   const perUnit = (id: string, col: 'req' | 'open') =>
     qty.filter((x) => String(x.DemandId) === id && fromDb(x[col]) > 0)
       .map((x) => `${Number(formatQty(fromDb(x[col]))).toLocaleString('en-GB', { maximumFractionDigits: 3 })} ${x.Unit}`).join(' · ');
@@ -210,7 +209,9 @@ export async function listDemands(db: Db, actor: Actor, f: ListFilter) {
         lines: qty.filter((x) => String(x.DemandId) === id).reduce((s, x) => s + Number(x.lines), 0),
         requested: perUnit(id, 'req'), open: status === 'DRAFT' || status === 'SUBMITTED' || status === 'RETURNED' ? '' : perUnit(id, 'open'),
         lastStep: steps.get(id)?.at(-1) ?? null,
-        progress: progressOf(progressRows.filter((x) => String(x.DemandId) === id)),
+        progress: progress.get(id) ?? null,
+        /** Who must act next, and on what (demand progress). */
+        waitingOn: waiting.get(id) ?? [],
         mergedInto: mergedRows.get(id) ?? null,
       };
     }),
@@ -241,19 +242,6 @@ export async function demandHistory(db: Db, demandId: string) {
     })),
   ];
   return rows.sort((a, b) => b.at.localeCompare(a.at));
-}
-
-/** Spec 21: the share of a demand's quantity per stage (for the progress bar), in percent. */
-export function progressOf(rows: { ExecState: string; Q: string }[]) {
-  const bucket: Record<string, string> = {
-    OPEN: 'open', IN_RFQ: 'inRfq', QUOTED: 'inRfq', AWARDED: 'awarded', HANDED_OFF: 'awarded', PO_PREPARATION: 'awarded',
-    PO_SUBMITTED: 'onPo', PO_CREATED: 'onPo', CANCELLED: 'cancelled',
-  };
-  const sum: Record<string, number> = { open: 0, inRfq: 0, awarded: 0, onPo: 0, cancelled: 0 };
-  for (const r of rows) if (bucket[r.ExecState]) sum[bucket[r.ExecState]] += Number(r.Q);
-  const total = Object.values(sum).reduce((a, b) => a + b, 0);
-  if (!total) return null;
-  return Object.fromEntries(Object.entries(sum).map(([k, v]) => [k, Math.round((v / total) * 1000) / 10])) as Record<'open' | 'inRfq' | 'awarded' | 'onPo' | 'cancelled', number>;
 }
 
 /** The demand a whole demand was merged into (spec 17), per source demand. */
