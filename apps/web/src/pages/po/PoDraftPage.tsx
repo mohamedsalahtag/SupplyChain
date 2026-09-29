@@ -34,7 +34,7 @@ export function PoDraftPage() {
   const { message, modal } = App.useApp();
   const can = useCan();
   const utils = trpc.useUtils();
-  const q = trpc.po.get.useQuery({ poDraftId }, { retry: false, refetchInterval: (x) => (['SUBMITTED', 'UNKNOWN'].includes(x.state.data?.status ?? '') ? 10_000 : false) });
+  const q = trpc.po.get.useQuery({ poDraftId }, { retry: false, refetchInterval: (x) => (x.state.data?.status === 'SUBMITTED' ? 3_000 : x.state.data?.status === 'UNKNOWN' ? 10_000 : false) }); // waiting for SAP: follow it
   const thread = trpc.po.thread.useQuery({ poDraftId });
   const [showOld, setShowOld] = useState(false);
   const files = trpc.po.attachments.useQuery({ poDraftId, includeOld: showOld });

@@ -60,7 +60,14 @@ export const poRouter = router({
   validate: manage.input(command.extend({ poDraftId: idOf, rowVer: z.string() }))
     .mutation(async ({ ctx, input }) => validateDraft(ctx.db, await loadActor(ctx.db, ctx.user), input.commandId, input.poDraftId, input.rowVer)),
   submit: manage.input(command.extend({ poDraftId: idOf, rowVer: z.string() }))
-    .mutation(async ({ ctx, input }) => { await assertSapTargetAllowed(ctx.db, ctx.encKey); return submitDraft(ctx.db, await loadActor(ctx.db, ctx.user), input.commandId, input.poDraftId, input.rowVer); }),
+    .mutation(async ({ ctx, input }) => {
+      await assertSapTargetAllowed(ctx.db, ctx.encKey);
+      const r = await submitDraft(ctx.db, await loadActor(ctx.db, ctx.user), input.commandId, input.poDraftId, input.rowVer);
+      // Send it now instead of waiting for the next 30-second outbox pass (the same pass as "Process now"; after the
+      // commit, never inside it — external calls never run inside a transaction). The page follows the outcome.
+      void runOutbox(ctx.db, poAdapter(ctx.db, ctx.encKey), workerId()).catch((err: unknown) => ctx.log.error({ err }, 'SAP outbox run after submit failed'));
+      return r;
+    }),
   resolve: manage.input(command.extend({
     poDraftId: idOf, rowVer: z.string(), outcome: z.enum(['CREATED', 'NOT_CREATED']), sapPoNumber: z.string().trim().max(20).default(''), comment: z.string().trim().min(1).max(2000),
   })).mutation(async ({ ctx, input }) => resolveUnknown(ctx.db, await loadActor(ctx.db, ctx.user), poAdapter(ctx.db, ctx.encKey), input.commandId, input.poDraftId, input.rowVer,

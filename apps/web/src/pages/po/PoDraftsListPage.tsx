@@ -64,7 +64,8 @@ function Drafts() {
   const list = trpc.po.list.useQuery({
     page, pageSize: prefs.pageSize, q, status: many(f, 'status') as Status[] | undefined, supplier: many(f, 'supplier'), sap: many(f, 'sap') as ('SAP' | 'SIMULATED')[] | undefined,
     submittedFrom: one(f, 'submittedFrom'), submittedTo: one(f, 'submittedTo'), company: many(f, 'company'),
-  }, { enabled: prefs.ready, placeholderData: (p) => p });
+  }, { enabled: prefs.ready, placeholderData: (p) => p,
+    refetchInterval: (x) => (x.state.data?.rows.some((r) => r.status === 'SUBMITTED') ? 5_000 : false) }); // follow drafts waiting for SAP
   const columns: AppColumn<Row>[] = [
     { title: 'PO draft', key: 'no', dataIndex: 'poDraftNo', width: 115 },
     { title: 'SAP PO', key: 'sap', dataIndex: 'sapPoNumber', width: 110, render: (v: string | null, r: { simulated: boolean }) => (v ? (r.simulated ? <Tag color="orange" title="From the SAP simulator: nothing was created in SAP">{v}</Tag> : v) : '—') },

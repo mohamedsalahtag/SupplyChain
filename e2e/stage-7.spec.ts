@@ -67,6 +67,7 @@ test('23 · accept the handoff, pick SKUs, build, validate, submit; reply lost �
   await page.getByRole('button', { name: 'Build PO draft' }).click();
   await expect(page).toHaveURL(/\/po-drafts\/\d+$/);
   const draftUrl = page.url();
+  await expect(page.getByRole('heading', { level: 5 }).first()).toHaveText(/POD-\d{6}/); // the draft page has loaded
   const podNo = (await page.getByRole('heading', { level: 5 }).first().textContent())!.match(/POD-\d{6}/)![0];
   await page.getByRole('button', { name: 'Validate' }).click();
   await expect(page.getByText('Validated — ready to submit').first()).toBeVisible(); // the status tag (the success message says the same)
