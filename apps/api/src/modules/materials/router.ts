@@ -21,6 +21,8 @@ const listInput = z.object({
   subMajor: z.array(z.string()).max(500).optional(),
   group: z.array(z.string()).max(500).optional(),
   origin: z.array(z.string()).max(500).optional(),
+  materialType: z.array(z.string().max(10)).max(100).optional(),
+  inSap: z.array(z.enum(['yes', 'no'])).max(2).optional(), // "In SAP" / "Not in SAP"
   sortField: z.enum(MATERIAL_SORT_FIELDS).default('MaterialCode'),
   sortOrder: z.enum(['asc', 'desc']).default('asc'),
 });

@@ -1,16 +1,14 @@
 import { useMemo, useState } from 'react';
-import { Alert, Button, Input, Space, Typography, type TableProps } from 'antd';
-import { ReloadOutlined } from '@ant-design/icons';
+import { Alert, Input, Space, Typography, type TableProps } from 'antd';
 import { Link } from 'react-router-dom';
 import type { MaterialSortField } from '@supplychain/shared';
 import { AppTable, type AppColumn } from '../../components/AppTable';
-import { MultiFilter } from '../../components/MultiFilter';
+import { many, useListFilters, type FilterField } from '../../components/ListFilters';
 import { trpc } from '../../lib/trpc';
 import { formatDateTime } from '../../lib/format';
 import { useTablePrefs } from '../../lib/useTablePrefs';
 import { MaterialDrawer, StatusTag, type MaterialRow } from './MaterialDrawer';
 
-type Filters = { q?: string; major?: string[]; subMajor?: string[]; group?: string[]; origin?: string[] };
 type Sort = { sortField: MaterialSortField; sortOrder: 'asc' | 'desc' };
 
 /** Hidden until the user picks their own columns. */
@@ -21,44 +19,39 @@ const mono = (v: string) => <span style={{ fontVariantNumeric: 'tabular-nums' }}
 /** Screen 01 — read-only list of materials copied from SAP. */
 export function MaterialsPage() {
   const prefs = useTablePrefs('materials', DEFAULT_HIDDEN);
-  const [filters, setFilters] = useState<Filters>({});
+  const [q, setQ] = useState<string>();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<Sort>(DEFAULT_SORT);
   const [selected, setSelected] = useState<MaterialRow | null>(null);
 
-  const list = trpc.materials.list.useQuery(
-    { page, pageSize: prefs.pageSize, ...filters, ...sort },
-    { placeholderData: (prev) => prev, enabled: prefs.ready },
-  );
   const options = trpc.materials.filterOptions.useQuery();
   const status = trpc.sync.status.useQuery({ source: 'sap.materials' });
 
-  // Sub-majors narrow to the chosen majors (all of them when none is chosen).
-  const subMajorOptions = useMemo(() => {
-    const majors = new Set(filters.major ?? []);
-    const subs = (options.data?.subMajors ?? []).filter((s) => majors.size === 0 || majors.has(s.MajorCategory));
-    return [...new Set(subs.map((s) => s.SubMajorCategory))].sort();
-  }, [options.data, filters.major]);
-
-  const setFilter = (patch: Filters) => {
-    setFilters((f) => ({ ...f, ...patch }));
-    setPage(1);
-  };
-
-  const onMajorChange = (major: string[] | undefined) => {
-    const allowed = new Set(
-      (options.data?.subMajors ?? []).filter((s) => !major || major.includes(s.MajorCategory)).map((s) => s.SubMajorCategory),
-    );
-    const subMajor = filters.subMajor?.filter((s) => allowed.has(s));
-    setFilter({ major, subMajor: subMajor?.length ? subMajor : undefined });
-  };
-
-  const reset = () => {
-    setFilters({});
-    setSearch('');
-    setPage(1);
-  };
+  // The filter section (mockup list-filters): Sub-major follows the chosen Major (a sub-major can sit under several).
+  const fields = useMemo<FilterField[]>(() => {
+    const o = options.data;
+    const subs = o?.subMajors ?? [];
+    const plain = (xs: string[] | undefined) => (xs ?? []).map((x) => ({ value: x, label: x }));
+    return [
+      { key: 'major', label: 'Major category', type: 'multi', options: plain(o?.majors) },
+      { key: 'subMajor', label: 'Sub-major category', type: 'multi', parentKey: 'major',
+        options: [...new Set(subs.map((x) => x.SubMajorCategory))].sort().map((sm) => ({ value: sm, label: sm, parents: subs.filter((x) => x.SubMajorCategory === sm).map((x) => x.MajorCategory) })) },
+      { key: 'group', label: 'Group', type: 'multi', options: plain(o?.groups) },
+      { key: 'origin', label: 'Origin', type: 'multi', options: plain(o?.origins) },
+      { key: 'materialType', label: 'Material type', type: 'multi', options: plain(o?.materialTypes) },
+      { key: 'inSap', label: 'In SAP', type: 'multi', options: [{ value: 'yes', label: 'In SAP' }, { value: 'no', label: 'Not in SAP' }] },
+    ];
+  }, [options.data]);
+  const filters = useListFilters(fields, () => setPage(1));
+  const f = filters.applied;
+  const list = trpc.materials.list.useQuery(
+    {
+      page, pageSize: prefs.pageSize, q, major: many(f, 'major'), subMajor: many(f, 'subMajor'), group: many(f, 'group'), origin: many(f, 'origin'),
+      materialType: many(f, 'materialType'), inSap: many(f, 'inSap')?.filter((x): x is 'yes' | 'no' => x === 'yes' || x === 'no'), ...sort,
+    },
+    { placeholderData: (prev) => prev, enabled: prefs.ready },
+  );
 
   const sortable = (field: MaterialSortField) => ({
     sorter: true,
@@ -93,7 +86,6 @@ export function MaterialsPage() {
   };
 
   const last = status.data?.last;
-  const majors = options.data?.majors ?? [];
 
   return (
     <Space direction="vertical" size={10} style={{ width: '100%' }}>
@@ -137,23 +129,15 @@ export function MaterialsPage() {
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
-                if (!e.target.value) setFilter({ q: undefined });
+                if (!e.target.value) { setQ(undefined); setPage(1); }
               }}
-              onSearch={(v) => setFilter({ q: v.trim() || undefined })}
+              onSearch={(v) => { setQ(v.trim() || undefined); setPage(1); }}
               style={{ width: 220, maxWidth: '100%' }}
             />
-            <MultiFilter id="f-major" placeholder="Major category" options={majors} value={filters.major} onChange={onMajorChange} width={170} />
-            <MultiFilter id="f-submajor" placeholder="Sub-major category" options={subMajorOptions} value={filters.subMajor}
-              onChange={(v) => setFilter({ subMajor: v })} width={190} />
-            <MultiFilter id="f-group" placeholder="Group" options={options.data?.groups ?? []} value={filters.group}
-              onChange={(v) => setFilter({ group: v })} />
-            <MultiFilter id="f-origin" placeholder="Origin" options={options.data?.origins ?? []} value={filters.origin}
-              onChange={(v) => setFilter({ origin: v })} />
-            <Button icon={<ReloadOutlined />} onClick={reset}>
-              Reset
-            </Button>
+            {filters.bar}
           </>
         }
+        beforeTable={filters.panel}
       />
 
       <MaterialDrawer material={selected} onClose={() => setSelected(null)} />

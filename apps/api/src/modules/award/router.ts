@@ -12,7 +12,7 @@ import { DomainError, NotFoundError } from '../workflow/errors.js';
 import { rowVerHex } from '../workflow/tx.js';
 import { addThreadEntry, listThread } from '../workflow/threads.js';
 import { acknowledge, answerQuery, P_ACK, raiseQuery } from './ack.js';
-import { getBatch, listBatches } from './awardRead.js';
+import { awardFilterOptions, getBatch, listBatches } from './awardRead.js';
 import { awardContainers, unawardContainers } from './containerAward.js';
 import { containerGrid } from './containerGrid.js';
 import { correctSku, P_AWARD, unaward, updateShipment } from './awardService.js';
@@ -38,8 +38,13 @@ const batch = z.object({ awardBatchId: idOf });
 export const awardRouter = router({
   list: open.input(z.object({
     q: z.string().trim().max(60).optional(), rfqId: idOf.optional(), demandId: idOf.optional(), ack: z.array(z.string().max(20)).max(5).optional(), waitingOn: z.array(z.enum(TEAMS)).max(4).optional(),
+    supplier: z.array(z.string().max(20)).max(50).optional(), origin: z.array(z.string().max(3)).max(50).optional(),
+    major: z.array(z.string().max(60)).max(50).optional(), subMajor: z.array(z.string().max(80)).max(100).optional(), weekFrom: week.optional(), weekTo: week.optional(),
+    currency: z.array(z.string().max(5)).max(20).optional(), awardedFrom: date.optional(), awardedTo: date.optional(), company: z.array(z.string().max(10)).max(20).optional(),
     page: z.number().int().min(1).default(1), pageSize: z.number().int().refine((n) => (TABLE_PAGE_SIZES as readonly number[]).includes(n)).default(DEFAULT_TABLE_PAGE_SIZE),
   })).query(async ({ ctx, input }) => listBatches(ctx.db, await loadActor(ctx.db, ctx.user), input)),
+  /** The Awards filter section's choices: categories (sub-major under its major), origins, suppliers and currencies of the user's companies' awards. */
+  filterOptions: open.query(async ({ ctx }) => awardFilterOptions(ctx.db, await loadActor(ctx.db, ctx.user))),
   get: open.input(batch).query(async ({ ctx, input }) => getBatch(ctx.db, await loadActor(ctx.db, ctx.user), input.awardBatchId)),
   /** The award page's "Where it is": per supplier, the same rows as the demand's What's left (demand progress). */
   progress: open.input(batch).query(async ({ ctx, input }) => {

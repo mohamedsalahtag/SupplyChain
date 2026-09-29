@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>List filters</title>
+<style>
+  :root { --green:#1f6f43; --line:#f0f0f0; --border:#d9d9d9; --bg:#f5f5f5; --text:#1f1f1f; --muted:#8c8c8c; --blue:#1677ff; --red:#cf1322; --amber:#d48806; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:13px/1.5 -apple-system,"Segoe UI",Roboto,Arial,sans-serif; color:var(--text); background:var(--bg); }
+  header { height:40px; background:#001529; color:#fff; display:flex; align-items:center; padding:0 16px; gap:8px; }
+  header .logo { width:22px; height:22px; border-radius:4px; background:var(--green); }
+  .shell { display:flex; min-height:calc(100vh - 40px); }
+  nav { width:210px; background:#fff; border-right:1px solid var(--line); padding:6px 0; flex-shrink:0; }
+  nav .grp { color:var(--muted); padding:8px 16px 2px; font-size:12px; }
+  nav a { display:block; padding:5px 16px 5px 28px; color:var(--text); cursor:pointer; }
+  nav a.active { background:#e6f4ea; color:var(--green); border-right:3px solid var(--green); }
+  main { flex:1; padding:12px 16px 40px; min-width:0; }
+  h5 { font-size:16px; margin:0; }
+  .muted { color:var(--muted); } .small { font-size:12px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:8px; margin-bottom:12px; }
+  table { width:100%; border-collapse:collapse; table-layout:fixed; }
+  th, td { padding:6px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; overflow:hidden; text-overflow:ellipsis; }
+  th { background:#fafafa; font-size:12px; color:#595959; }
+  .tag { display:inline-block; border-radius:4px; padding:0 7px; font-size:12px; border:1px solid; white-space:nowrap; }
+  .t-blue { color:#0958d9; border-color:#91caff; background:#e6f4ff; } .t-grey { color:#595959; border-color:#d9d9d9; background:#fafafa; }
+  button { font:inherit; border:1px solid var(--border); background:#fff; border-radius:4px; padding:3px 12px; cursor:pointer; }
+  button.primary { background:var(--green); color:#fff; border-color:var(--green); }
+  button.link { border:none; background:none; color:var(--blue); padding:3px 4px; }
+  input, select { font:inherit; border:1px solid var(--border); border-radius:4px; padding:3px 8px; background:#fff; }
+  .page { display:none; } .page.active { display:block; }
+  .review { border-left:3px solid var(--amber); background:#fffbe6; padding:6px 10px; margin:0 0 12px; font-size:12px; }
+  .bar { display:flex; height:8px; border-radius:4px; overflow:hidden; background:#f0f0f0; margin-top:3px; } .bar span { display:block; }
+
+  /* filter section */
+  .fbar { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:6px; }
+  .fbtn { display:inline-flex; align-items:center; gap:6px; }
+  .count { background:var(--green); color:#fff; border-radius:9px; padding:0 6px; font-size:11px; }
+  .chips { display:flex; gap:4px; flex-wrap:wrap; }
+  .chip { background:#f0f5ff; border:1px solid #adc6ff; color:#1d39c4; border-radius:4px; padding:0 4px 0 7px; font-size:12px; display:inline-flex; gap:4px; align-items:center; }
+  .chip b { font-weight:600; } .chip .x { cursor:pointer; color:#597ef7; padding:0 2px; }
+  .panel { display:none; background:#fff; border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin-bottom:10px; }
+  .panel.open { display:block; }
+  .fgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:8px 14px; }
+  .field label { display:block; font-size:12px; color:#595959; margin-bottom:2px; }
+  .field .row2 { display:flex; gap:6px; align-items:center; } .field .row2 > * { flex:1; min-width:0; }
+  .pactions { display:flex; gap:6px; margin-top:10px; border-top:1px solid var(--line); padding-top:8px; align-items:center; }
+  /* multi-select */
+  .ms { position:relative; }
+  .ms .box { border:1px solid var(--border); border-radius:4px; min-height:26px; padding:1px 24px 1px 4px; display:flex; flex-wrap:wrap; gap:3px; cursor:pointer; background:#fff; position:relative; }
+  .ms .box::after { content:'▾'; position:absolute; right:7px; top:3px; color:var(--muted); }
+  .ms .box .ph { color:#bfbfbf; padding:1px 4px; }
+  .ms .sel { background:#f5f5f5; border:1px solid #f0f0f0; border-radius:3px; padding:0 4px; font-size:12px; }
+  .ms .dd { display:none; position:absolute; z-index:30; left:0; right:0; top:100%; margin-top:2px; background:#fff; border-radius:6px; box-shadow:0 6px 16px rgba(0,0,0,.15); padding:6px; }
+  .ms.open .dd { display:block; }
+  .ms .dd input.q { width:100%; margin-bottom:4px; }
+  .ms .opt input[type=checkbox] { width:auto; margin:2px 0 0; padding:0; flex:none; }
+  .ms .opt { align-items:flex-start; text-align:left; }
+  .ms .opts { max-height:190px; overflow:auto; }
+  .ms .opt { display:flex; gap:6px; padding:3px 6px; border-radius:4px; cursor:pointer; } .ms .opt:hover { background:#f5f5f5; }
+  .ms .opt.on { background:#e6f4ea; }
+  .ms .foot { display:flex; justify-content:space-between; font-size:12px; color:var(--muted); padding:4px 4px 0; border-top:1px solid var(--line); margin-top:4px; }
+  .ms .foot a { cursor:pointer; }
+</style>
+</head>
+<body>
+<header><div class="logo"></div><b>Supply Chain</b><span style="margin-left:auto" class="small">Mockup — one filter section for every list · switch screens in the menu</span></header>
+<div class="shell">
+<nav>
+  <div class="grp">Mockup screens</div>
+  <a data-p="demands" class="active">1 · Demands</a>
+  <a data-p="rfqs">2 · RFQs (supplier filter)</a>
+  <a data-p="all">3 · Every list and its filters</a>
+</nav>
+<main>
+
+<!-- ============ 1 · DEMANDS ============ -->
+<section class="page active" id="p-demands">
+  <div class="review"><b>What changes:</b> the search box stays on top; every other filter sits in a <b>Filters</b> section that starts <b>collapsed</b>. Nothing is applied until you press <b>Apply</b> (or Enter). While collapsed, the applied filters show as chips you can remove one by one. Every dropdown is <b>multi-select with search</b>. Weeks are chosen with a <b>week picker</b> (no typing "2026-W39"). Try it: open Filters, pick values, Apply.</div>
+  <div style="display:flex; gap:10px; align-items:baseline; margin-bottom:8px"><h5>Demands</h5><span class="muted">Demands of your companies</span></div>
+  <div class="fbar">
+    <span><button class="tag t-grey" style="padding:3px 10px">Mine</button> <button style="border-color:var(--green); color:var(--green)">All in my companies</button></span>
+    <input style="width:240px" placeholder="Search number or material">
+    <button class="fbtn" onclick="togglePanel('d')">⚲ Filters <span class="count" id="d-count" style="display:none"></span> <span id="d-caret">▸</span></button>
+    <span class="chips" id="d-chips"></span>
+    <span style="margin-left:auto"><button>⚙ Columns (10/16)</button></span>
+  </div>
+  <div class="panel" id="d-panel">
+    <div class="fgrid">
+      <div class="field"><label>Status</label><div class="ms" data-f="d" data-name="Status" data-opts="Draft|Waiting for Procurement|Returned to Sales|Accepted · nothing sourced yet|Partly in sourcing|In execution · nothing open|Closed · all ordered|Closed · partly ordered, rest cancelled|Cancelled|Merged"></div></div>
+      <div class="field"><label>Waiting on</label><div class="ms" data-f="d" data-name="Waiting on" data-opts="Procurement|PO team|Sales|Nobody"></div></div>
+      <div class="field"><label>Major category</label><div class="ms" data-f="d" data-name="Major" data-opts="Apples|Pears|Citrus|Grapes|Bananas|Kiwi|Stone fruit|Vegetables"></div></div>
+      <div class="field"><label>Sub-major category</label><div class="ms" data-f="d" data-name="Sub-major" data-opts="Apples Royal Gala|Apples Granny Smith|Apples Red Delicious|Apples Fuji|Apples Pink Lady|Pears Packham|Pears Forelle|Oranges Navel|Oranges Valencia|Mandarins|Lemons|Grapes Red Globe|Grapes Crimson|Kiwi Hayward"></div></div>
+      <div class="field"><label>Origin</label><div class="ms" data-f="d" data-name="Origin" data-opts="CL · Chile|ZA · South Africa|NZ · New Zealand|EG · Egypt|ES · Spain|IT · Italy|US · United States|AR · Argentina|PE · Peru|TR · Turkey"></div></div>
+      <div class="field"><label>ETD week, from – to</label><div class="row2"><input type="week" id="d-w1" value=""><span class="muted">–</span><input type="week" id="d-w2" value=""></div></div>
+      <div class="field"><label>Created by</label><div class="ms" data-f="d" data-name="Created by" data-opts="Mohamed Tag|Demo Sales|Demo Procurement|Demo Both"></div></div>
+      <div class="field"><label>Submitted, from – to</label><div class="row2"><input type="date"><span class="muted">–</span><input type="date"></div></div>
+      <div class="field"><label>Company</label><div class="ms" data-f="d" data-name="Company" data-opts="1000 · KSA|2000 · UAE|3000 · Egypt"></div></div>
+    </div>
+    <div class="pactions">
+      <button class="primary" onclick="apply('d')">Apply</button>
+      <button onclick="clearAll('d')">Clear all</button>
+      <button class="link" onclick="togglePanel('d')">Close</button>
+      <span class="small muted" style="margin-left:auto">Filters stay while you move around the app; "Clear all" or Reset removes them.</span>
+    </div>
+  </div>
+  <div class="card"><table>
+    <colgroup><col style="width:110px"><col style="width:200px"><col style="width:230px"><col style="width:220px"><col style="width:110px"><col style="width:120px"></colgroup>
+    <tr><th>Number</th><th>Status</th><th>Progress</th><th>Waiting on</th><th>ETD weeks</th><th>Requested</th></tr>
+    <tr><td>D-000452</td><td><span class="tag t-blue">In execution · nothing open</span></td><td><div class="bar"><span style="width:56%;background:#13c2c2"></span><span style="width:44%;background:#1677ff"></span></div><span class="small">56% PO preparation · 44% handed off</span></td><td class="small"><b style="color:#0958d9">PO team</b> · submit POD-000006</td><td>W39, W40</td><td>10,584 CT</td></tr>
+    <tr><td>D-000451</td><td><span class="tag t-blue">In execution · nothing open</span></td><td><div class="bar"><span style="width:50%;background:repeating-linear-gradient(45deg,#95de64 0 4px,#237804 4px 8px)"></span><span style="width:50%;background:#1677ff"></span></div><span class="small">50% on PO (simulated) · 50% handed off</span></td><td class="small"><b style="color:#0958d9">PO team</b> · accept HO-000027</td><td>W39, W40</td><td>11,760 CT</td></tr>
+    <tr><td>D-000448</td><td><span class="tag t-blue">Partly in sourcing</span></td><td><div class="bar"><span style="width:60%;background:#faad14"></span><span style="width:40%;background:#bfbfbf"></span></div><span class="small">60% awarded · 40% open</span></td><td class="small"><b style="color:#d48806">Procurement</b> · hand off, RFQ</td><td>W41</td><td>6,160 CT</td></tr>
+  </table></div>
+</section>
+
+<!-- ============ 2 · RFQs ============ -->
+<section class="page" id="p-rfqs">
+  <div class="review">The same section, with the fields that make sense for RFQs. <b>Supplier</b> has hundreds of entries: the dropdown has a search box and shows the matches as you type (try "dole" or "80000").</div>
+  <div style="display:flex; gap:10px; align-items:baseline; margin-bottom:8px"><h5>RFQs</h5><span class="muted">Requests for quotation of your companies</span></div>
+  <div class="fbar">
+    <input style="width:240px" placeholder="RFQ or demand number">
+    <button class="fbtn" onclick="togglePanel('r')">⚲ Filters <span class="count" id="r-count" style="display:none"></span> <span id="r-caret">▸</span></button>
+    <span class="chips" id="r-chips"></span>
+    <span style="margin-left:auto"><button>⚙ Columns (9/10)</button> <button class="primary">+ New RFQ</button></span>
+  </div>
+  <div class="panel" id="r-panel">
+    <div class="fgrid">
+      <div class="field"><label>Status</label><div class="ms" data-f="r" data-name="Status" data-opts="Draft|Sent|Quoting|Partly awarded|Fully awarded|Closed|Cancelled"></div></div>
+      <div class="field"><label>Waiting on</label><div class="ms" data-f="r" data-name="Waiting on" data-opts="Procurement|PO team|Sales|Nobody"></div></div>
+      <div class="field"><label>Supplier (invited, quoted or awarded)</label><div class="ms" data-f="r" data-name="Supplier" data-big="1"></div></div>
+      <div class="field"><label>Origin</label><div class="ms" data-f="r" data-name="Origin" data-opts="CL · Chile|ZA · South Africa|NZ · New Zealand|EG · Egypt|ES · Spain|IT · Italy|US · United States|AR · Argentina"></div></div>
+      <div class="field"><label>Major category</label><div class="ms" data-f="r" data-name="Major" data-opts="Apples|Pears|Citrus|Grapes|Bananas|Kiwi"></div></div>
+      <div class="field"><label>Sub-major category</label><div class="ms" data-f="r" data-name="Sub-major" data-opts="Apples Royal Gala|Apples Granny Smith|Apples Fuji|Pears Packham|Oranges Navel|Grapes Red Globe"></div></div>
+      <div class="field"><label>ETD week, from – to</label><div class="row2"><input type="week"><span class="muted">–</span><input type="week"></div></div>
+      <div class="field"><label>Created by</label><div class="ms" data-f="r" data-name="Created by" data-opts="Mohamed Tag|Demo Procurement|Demo Both"></div></div>
+      <div class="field"><label>Company</label><div class="ms" data-f="r" data-name="Company" data-opts="1000 · KSA|2000 · UAE|3000 · Egypt"></div></div>
+    </div>
+    <div class="pactions"><button class="primary" onclick="apply('r')">Apply</button><button onclick="clearAll('r')">Clear all</button><button class="link" onclick="togglePanel('r')">Close</button></div>
+  </div>
+  <div class="card"><table>
+    <colgroup><col style="width:110px"><col style="width:95px"><col style="width:140px"><col style="width:230px"><col style="width:220px"><col style="width:130px"></colgroup>
+    <tr><th>RFQ</th><th>Demand</th><th>Status</th><th>Progress</th><th>Waiting on</th><th>Suppliers</th></tr>
+    <tr><td>RFQ-000100</td><td>D-000451</td><td><span class="tag t-blue">Fully awarded</span></td><td><div class="bar"><span style="width:50%;background:repeating-linear-gradient(45deg,#95de64 0 4px,#237804 4px 8px)"></span><span style="width:50%;background:#1677ff"></span></div><span class="small">50% on PO (simulated) · 50% handed off</span></td><td class="small"><b style="color:#0958d9">PO team</b> · accept HO-000027</td><td>3 of 3 quoted</td></tr>
+    <tr><td>RFQ-000108</td><td>D-000459</td><td><span class="tag t-blue">Quoting</span></td><td><div class="bar"><span style="width:100%;background:#b37feb"></span></div><span class="small">100% quoted</span></td><td class="small"><b style="color:#d48806">Procurement</b> · compare and award</td><td>2 of 3 quoted</td></tr>
+  </table></div>
+</section>
+
+<!-- ============ 3 · ALL LISTS ============ -->
+<section class="page" id="p-all">
+  <div class="review">Every list gets the same section (search on top, <b>Filters</b> collapsed, <b>Apply</b> / <b>Clear all</b>, chips). The fields differ per list. <i>New</i> = not available today. All dropdowns: multi-select with search; weeks with a week picker; dates with a date picker.</div>
+  <div class="card"><table>
+    <colgroup><col style="width:160px"><col style="width:220px"><col></colgroup>
+    <tr><th>List</th><th>Search box (on top)</th><th>Filters in the section</th></tr>
+    <tr><td><b>Demands</b></td><td>Number or material</td><td>Status · Waiting on · <i>Major</i> · <i>Sub-major</i> · <i>Origin</i> · ETD week from–to (<i>week picker</i>) · <i>Created by</i> · <i>Submitted date</i> · Company · (Mine / All stays a switch)</td></tr>
+    <tr><td><b>RFQs</b></td><td>RFQ or demand number</td><td>Status · Waiting on · <i>Supplier</i> · <i>Origin</i> · <i>Major</i> · <i>Sub-major</i> · <i>ETD week from–to</i> · <i>Created by</i> · Company</td></tr>
+    <tr><td><b>Awards</b></td><td>Award, RFQ or demand number</td><td>Waiting on · Sales acknowledgement · <i>Supplier</i> · <i>Origin</i> · <i>Major</i> · <i>Sub-major</i> · <i>ETD week from–to</i> · <i>Currency</i> · <i>Awarded date</i> · Company</td></tr>
+    <tr><td><b>Handoffs</b></td><td>Handoff, award, demand or supplier</td><td>Status · <i>Supplier</i> · <i>Without Sales acknowledgement</i> · <i>ETD week from–to</i> · <i>Sent date</i> · <i>Company</i></td></tr>
+    <tr><td><b>PO drafts &amp; SAP</b></td><td>PO draft, SAP PO, handoff, demand or supplier</td><td>Status · <i>Supplier</i> · <i>Simulated or SAP</i> · <i>Submitted date</i> · <i>Company</i></td></tr>
+    <tr><td><b>Change requests</b></td><td>CR or demand number</td><td>Type · Status · <i>Raised by (Sales / Procurement)</i> · <i>Reason</i> · <i>Submitted date</i> · Company</td></tr>
+    <tr><td><b>Purchase orders (SAP)</b></td><td>PO number, supplier code or name</td><td>Order type · <i>Supplier</i> · <i>Material group / major</i> · <i>Order date</i> · <i>Delivery date</i> · <i>Company</i></td></tr>
+    <tr><td><b>Materials</b></td><td>Code or description</td><td>Major · Sub-major · Group · Origin · <i>Material type</i> · <i>In SAP / not in SAP</i></td></tr>
+    <tr><td><b>Suppliers</b></td><td>Code, name or e-mail</td><td>Group · Country · Currency · <i>Origin</i> · <i>Blocked</i> · <i>Purchasing org</i></td></tr>
+    <tr><td><b>My work</b></td><td>Number or text</td><td>Company · Due (<i>now multi-select</i>) · <i>Item type</i> · <i>Raised by</i></td></tr>
+    <tr><td><b>Users</b></td><td>Name, username or e-mail</td><td>Role · Status · <i>Company</i></td></tr>
+  </table></div>
+  <div class="card" style="padding:10px 12px">
+    <b>How it behaves (all lists)</b>
+    <ul class="small" style="margin:6px 0 0; padding-left:18px">
+      <li>Starts <b>collapsed</b>. The button shows how many filters are applied; the chips beside it name them — × removes one at once.</li>
+      <li>Changing a field changes nothing until <b>Apply</b> (or Enter). <b>Clear all</b> removes every filter; Close keeps what is applied.</li>
+      <li>Large lists (suppliers ~630, materials ~15,000) search as you type; materials and suppliers are looked up on the server, not loaded whole.</li>
+      <li>Applied filters are kept while you move to a record and back, and are in the page address, so a filtered list can be bookmarked or shared (closes backlog 37).</li>
+      <li>One shared component (<code>ListFilters</code>) so every list works the same; each page only lists its fields.</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+</div>
+<script>
+  function go(p) {
+    document.querySelectorAll('.page').forEach((s) => s.classList.toggle('active', s.id === 'p-' + p));
+    document.querySelectorAll('nav a').forEach((a) => a.classList.toggle('active', a.dataset.p === p));
+  }
+  document.querySelectorAll('nav a').forEach((a) => a.addEventListener('click', () => go(a.dataset.p)));
+  function togglePanel(f) {
+    const p = document.getElementById(f + '-panel'); p.classList.toggle('open');
+    document.getElementById(f + '-caret').textContent = p.classList.contains('open') ? '▾' : '▸';
+  }
+  // Suppliers: a long list, to show the search.
+  const SUPPLIERS = ['80000228 · Dole Chile S.A', '80000461 · Agrisouth (Chile) S.A.', '80000467 · Frutera San Fernando S.A', '80000102 · Capespan (Pty) Ltd', '80000115 · Zespri International', '80000130 · Unifrutti Chile', '80000151 · Del Monte Fresh Produce', '80000177 · Mahmoud Fruits Egypt', '80000190 · Citrusdal Farms', '80000204 · Rio Blanco Exports'];
+  for (let i = 0; i < 40; i++) SUPPLIERS.push(`80001${String(100 + i)} · Supplier ${i + 1}`);
+  const state = { d: {}, r: {} };
+  document.querySelectorAll('.ms').forEach((ms) => {
+    const opts = ms.dataset.big ? SUPPLIERS : ms.dataset.opts.split('|');
+    ms.innerHTML = `<div class="box"><span class="ph">Any</span></div><div class="dd"><input class="q" placeholder="Search…"><div class="opts"></div><div class="foot"><span class="n"></span><span><a class="all">Select shown</a> · <a class="none">Clear</a></span></div></div>`;
+    ms._sel = new Set();
+    const box = ms.querySelector('.box'), inp = ms.querySelector('input'), list = ms.querySelector('.opts');
+    const draw = () => {
+      const q = inp.value.trim().toLowerCase();
+      const shown = opts.filter((o) => o.toLowerCase().includes(q));
+      list.innerHTML = shown.map((o) => `<div class="opt ${ms._sel.has(o) ? 'on' : ''}" data-o="${o}"><input type="checkbox" ${ms._sel.has(o) ? 'checked' : ''}> ${o}</div>`).join('') || '<div class="muted small" style="padding:4px 6px">No match</div>';
+      ms.querySelector('.n').textContent = `${shown.length} of ${opts.length}`;
+      box.innerHTML = ms._sel.size ? [...ms._sel].slice(0, 3).map((o) => `<span class="sel">${o.split(' · ')[0]}</span>`).join('') + (ms._sel.size > 3 ? `<span class="sel">+${ms._sel.size - 3}</span>` : '') : '<span class="ph">Any</span>';
+      ms._shown = shown;
+    };
+    box.addEventListener('click', (e) => { document.querySelectorAll('.ms.open').forEach((o) => o !== ms && o.classList.remove('open')); ms.classList.toggle('open'); inp.focus(); draw(); e.stopPropagation(); });
+    ms.querySelector('.dd').addEventListener('click', (e) => e.stopPropagation());
+    inp.addEventListener('input', draw);
+    list.addEventListener('click', (e) => { const o = e.target.closest('.opt'); if (!o) return; const v = o.dataset.o; ms._sel.has(v) ? ms._sel.delete(v) : ms._sel.add(v); draw(); });
+    ms.querySelector('.all').addEventListener('click', () => { ms._shown.forEach((o) => ms._sel.add(o)); draw(); });
+    ms.querySelector('.none').addEventListener('click', () => { ms._sel.clear(); draw(); });
+    draw();
+  });
+  document.addEventListener('click', () => document.querySelectorAll('.ms.open').forEach((o) => o.classList.remove('open')));
+  function apply(f) {
+    const chips = [];
+    document.querySelectorAll(`.ms[data-f="${f}"]`).forEach((ms) => { if (ms._sel.size) chips.push({ ms, name: ms.dataset.name, text: [...ms._sel].map((o) => o.split(' · ')[0]).join(', ') }); });
+    const w1 = document.getElementById(f + '-w1'), w2 = document.getElementById(f + '-w2');
+    if (w1 && (w1.value || w2.value)) chips.push({ name: 'ETD week', text: `${w1.value || '…'} – ${w2.value || '…'}`, weeks: true });
+    state[f] = chips;
+    const c = document.getElementById(f + '-count'); c.style.display = chips.length ? '' : 'none'; c.textContent = chips.length;
+    document.getElementById(f + '-chips').innerHTML = chips.map((ch, i) => `<span class="chip"><b>${ch.name}:</b> ${ch.text}<span class="x" onclick="removeChip('${f}', ${i})">×</span></span>`).join('');
+    const p = document.getElementById(f + '-panel'); p.classList.remove('open'); document.getElementById(f + '-caret').textContent = '▸';
+  }
+  function removeChip(f, i) {
+    const ch = state[f][i];
+    if (ch.ms) ch.ms._sel.clear(), ch.ms.querySelector('input').dispatchEvent(new Event('input'));
+    if (ch.weeks) { document.getElementById(f + '-w1').value = ''; document.getElementById(f + '-w2').value = ''; }
+    apply(f);
+  }
+  function clearAll(f) {
+    document.querySelectorAll(`.ms[data-f="${f}"]`).forEach((ms) => { ms._sel.clear(); ms.querySelector('input').value = ''; });
+    document.querySelectorAll(`#${f}-panel input[type=week], #${f}-panel input[type=date]`).forEach((i) => (i.value = ''));
+    document.querySelectorAll(`.ms[data-f="${f}"]`).forEach((ms) => ms.querySelector('input').dispatchEvent(new Event('input')));
+    apply(f);
+    document.getElementById(f + '-panel').classList.add('open'); document.getElementById(f + '-caret').textContent = '▾';
+  }
+</script>
+</body>
+</html>

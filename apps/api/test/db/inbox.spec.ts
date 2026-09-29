@@ -75,7 +75,7 @@ describe('overdue and escalation', () => {
 
     const list = await listWork(db, admin, { q: tag, page: 1, pageSize: 25 });
     expect(list.rows.map((r) => [r.number, r.overdue])).toEqual([[`${tag}-late`, true], [`${tag}-later`, false]]);
-    expect((await listWork(db, admin, { q: tag, due: 'overdue', page: 1, pageSize: 25 })).rows.map((r) => r.number)).toEqual([`${tag}-late`]);
+    expect((await listWork(db, admin, { q: tag, due: ['overdue'], page: 1, pageSize: 25 })).rows.map((r) => r.number)).toEqual([`${tag}-late`]);
 
     expect(await escalateOverdue(db)).toBeGreaterThanOrEqual(1);
     expect(await escalateOverdue(db)).toBe(0);

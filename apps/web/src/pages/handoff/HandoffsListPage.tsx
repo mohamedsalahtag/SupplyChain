@@ -1,9 +1,8 @@
-import { useState } from 'react';
-import { Alert, Button, Input, Space, Tag, Typography } from 'antd';
-import { ReloadOutlined } from '@ant-design/icons';
+import { useMemo, useState } from 'react';
+import { Alert, Input, Space, Tag, Typography } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { AppTable, type AppColumn } from '../../components/AppTable';
-import { MultiFilter } from '../../components/MultiFilter';
+import { many, one, useListFilters, type FilterField } from '../../components/ListFilters';
 import { StatusLegend, StatusTag } from '../../components/StatusTag';
 import { LastStep } from '../../components/StepText';
 import type { RouterOutputs } from '../../lib/format';
@@ -13,17 +12,31 @@ import { useTablePrefs } from '../../lib/useTablePrefs';
 
 type Row = RouterOutputs['handoff']['list']['rows'][number];
 type Status = 'HANDED_OFF' | 'ACCEPTED' | 'RETURNED';
-const byLabel = Object.fromEntries(Object.entries(HANDOFF_STATUS).map(([k, v]) => [v.label, k])) as Record<string, Status>;
 
 /** Purchasing → Handoffs (spec 22): one row per supplier award handed to the PO team. */
 export function HandoffsListPage() {
   const navigate = useNavigate();
   const prefs = useTablePrefs('handoffs', []);
-  const [status, setStatus] = useState<Status[] | undefined>();
   const [q, setQ] = useState<string>();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const list = trpc.handoff.list.useQuery({ page, pageSize: prefs.pageSize, q, status }, { enabled: prefs.ready, placeholderData: (p) => p });
+  const companies = trpc.workflowSetup.companyOptions.useQuery();
+  const opts = trpc.handoff.filterOptions.useQuery();
+  // The filter section (mockup list-filters).
+  const fields = useMemo<FilterField[]>(() => [
+    { key: 'status', label: 'Status', type: 'multi', options: Object.entries(HANDOFF_STATUS).map(([value, d]) => ({ value, label: d.label })) },
+    { key: 'supplier', label: 'Supplier', type: 'multi', options: (opts.data?.suppliers ?? []).map((s) => ({ value: s.code, label: `${s.code} · ${s.name}` })) },
+    { key: 'withoutAck', label: 'Without Sales acknowledgement', type: 'multi', options: [{ value: 'YES', label: 'Yes' }, { value: 'NO', label: 'No' }] },
+    { key: 'weeks', label: 'ETD week, from – to', type: 'weeks', fromKey: 'weekFrom', toKey: 'weekTo' },
+    { key: 'sent', label: 'Sent, from – to', type: 'dates', fromKey: 'sentFrom', toKey: 'sentTo' },
+    { key: 'company', label: 'Company', type: 'multi', options: (companies.data ?? []).map((c) => ({ value: c.CompanyCode, label: `${c.CompanyCode} · ${c.Name}` })) },
+  ], [opts.data, companies.data]);
+  const filters = useListFilters(fields, () => setPage(1));
+  const f = filters.applied;
+  const list = trpc.handoff.list.useQuery({
+    page, pageSize: prefs.pageSize, q, status: many(f, 'status') as Status[] | undefined, supplier: many(f, 'supplier'), withoutAck: many(f, 'withoutAck') as ('YES' | 'NO')[] | undefined,
+    weekFrom: one(f, 'weekFrom'), weekTo: one(f, 'weekTo'), sentFrom: one(f, 'sentFrom'), sentTo: one(f, 'sentTo'), company: many(f, 'company'),
+  }, { enabled: prefs.ready, placeholderData: (p) => p });
 
   const columns: AppColumn<Row>[] = [
     { title: 'Handoff', key: 'hoNo', dataIndex: 'hoNo', width: 110 },
@@ -53,11 +66,10 @@ export function HandoffsListPage() {
           <>
             <Input.Search id="handoffSearch" placeholder="Handoff, award, demand or supplier" allowClear value={search} style={{ width: 260 }}
               onChange={(e) => { setSearch(e.target.value); if (!e.target.value) { setQ(undefined); setPage(1); } }} onSearch={(v) => { setQ(v.trim() || undefined); setPage(1); }} />
-            <MultiFilter id="f-hostatus" placeholder="Status" options={Object.values(HANDOFF_STATUS).map((s) => s.label)} value={status?.map((s) => HANDOFF_STATUS[s].label)}
-              onChange={(v) => { setStatus(v?.map((l) => byLabel[l])); setPage(1); }} width={230} />
-            <Button icon={<ReloadOutlined />} onClick={() => { setStatus(undefined); setQ(undefined); setSearch(''); setPage(1); }}>Reset</Button>
+            {filters.bar}
           </>
         }
+        beforeTable={filters.panel}
       />
     </Space>
   );

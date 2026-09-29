@@ -3,7 +3,7 @@ import { DEFAULT_TABLE_PAGE_SIZE, P, TABLE_PAGE_SIZES } from '@supplychain/share
 import { z } from 'zod';
 import { procedure, router } from '../../trpc/trpc.js';
 import { loadActor } from '../workflow/access.js';
-import { listWork, WORK_SORT_FIELDS, workTabs } from '../workflow/inbox.js';
+import { listWork, SYSTEM_RAISER, WORK_DUE, WORK_SORT_FIELDS, workFilterOptions, workTabs } from '../workflow/inbox.js';
 
 const open = procedure.meta({ permission: P.workOpen });
 
@@ -11,7 +11,9 @@ const listInput = z.object({
   tab: z.string().max(60).optional(),
   q: z.string().trim().max(100).optional(),
   company: z.array(z.string().max(10)).max(20).optional(),
-  due: z.enum(['overdue', 'today', 'later', 'none']).optional(),
+  due: z.array(z.enum(WORK_DUE)).max(4).optional(),
+  itemType: z.array(z.string().max(40)).max(50).optional(),
+  raisedBy: z.array(z.union([z.literal(SYSTEM_RAISER), z.string().regex(/^\d{1,10}$/)])).max(100).optional(),
   sort: z.object({ field: z.enum(WORK_SORT_FIELDS), dir: z.enum(['asc', 'desc']) }).optional(),
   page: z.number().int().min(1).default(1),
   pageSize: z.number().int().refine((n) => (TABLE_PAGE_SIZES as readonly number[]).includes(n)).default(DEFAULT_TABLE_PAGE_SIZE),
@@ -23,6 +25,9 @@ export const workRouter = router({
     const actor = await loadActor(ctx.db, ctx.user);
     return { ...(await workTabs(ctx.db, actor)), hasCompany: actor.companies.size > 0 };
   }),
+
+  /** The filter section's choices: item types and raisers of the items this user can see. */
+  filterOptions: open.query(async ({ ctx }) => workFilterOptions(ctx.db, await loadActor(ctx.db, ctx.user))),
 
   list: open.input(listInput).query(async ({ ctx, input }) => listWork(ctx.db, await loadActor(ctx.db, ctx.user), input)),
 });

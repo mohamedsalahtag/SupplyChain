@@ -1,9 +1,8 @@
-import { useState } from 'react';
-import { Alert, Badge, Button, Input, Result, Select, Space, Tabs, Tag, Typography } from 'antd';
-import { FilterOutlined, ReloadOutlined } from '@ant-design/icons';
+import { useMemo, useState } from 'react';
+import { Alert, Badge, Button, Input, Result, Space, Tabs, Tag, Typography } from 'antd';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AppTable, type AppColumn } from '../../components/AppTable';
-import { MultiFilter } from '../../components/MultiFilter';
+import { many, useListFilters, type FilterField } from '../../components/ListFilters';
 import { formatDateTime, type RouterOutputs } from '../../lib/format';
 import { trpc } from '../../lib/trpc';
 import { useTablePrefs } from '../../lib/useTablePrefs';
@@ -11,7 +10,9 @@ import { withFrom } from '../../components/BackToWork';
 
 type Row = RouterOutputs['work']['list']['rows'][number];
 type Due = 'overdue' | 'today' | 'later' | 'none';
-type Filters = { q?: string; company?: string[]; due?: Due };
+const DUE: { value: Due; label: string }[] = [
+  { value: 'overdue', label: 'Overdue' }, { value: 'today', label: 'Due today' }, { value: 'later', label: 'Later' }, { value: 'none', label: 'No due date' },
+];
 type SortField = 'due' | 'number' | 'title' | 'company' | 'raisedBy' | 'createdAt' | 'note';
 type Sort = { field: SortField; dir: 'asc' | 'desc' } | undefined;
 
@@ -28,26 +29,33 @@ export function MyWorkPage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const prefs = useTablePrefs('my-work', ['note']);
-  const [filters, setFilters] = useState<Filters>({});
+  const [q, setQ] = useState<string>();
   const [search, setSearch] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<Sort>(); // none: overdue first, then by due date (server order)
 
   const tabs = trpc.work.tabs.useQuery(undefined, { refetchInterval: 60_000 });
   const companies = trpc.workflowSetup.companyOptions.useQuery();
+  const opts = trpc.work.filterOptions.useQuery();
+  // The filter section (mockup list-filters). Item type matters on the Exceptions tab but is allowed on any.
+  const fields = useMemo<FilterField[]>(() => [
+    { key: 'company', label: 'Company', type: 'multi', options: (companies.data ?? []).map((c) => ({ value: c.CompanyCode, label: `${c.CompanyCode} · ${c.Name}` })) },
+    { key: 'due', label: 'Due', type: 'multi', options: DUE },
+    { key: 'itemType', label: 'Item type', type: 'multi', options: opts.data?.itemTypes ?? [] },
+    { key: 'raisedBy', label: 'Raised by', type: 'multi', options: opts.data?.raisers ?? [] },
+  ], [companies.data, opts.data]);
+  const filters = useListFilters(fields, () => setPage(1));
+  const f = filters.applied;
   const tabList = tabs.data?.tabs ?? [];
   const tab = tabList.some((t) => t.key === params.get('tab')) ? params.get('tab')! : tabList[0]?.key;
   const list = trpc.work.list.useQuery(
-    { tab, page, pageSize: prefs.pageSize, sort, ...filters },
+    { tab, page, pageSize: prefs.pageSize, sort, q, company: many(f, 'company'), due: many(f, 'due') as Due[] | undefined, itemType: many(f, 'itemType'), raisedBy: many(f, 'raisedBy') },
     { enabled: prefs.ready && !!tab, placeholderData: (p) => p, refetchInterval: 60_000 },
   );
 
-  const setFilter = (patch: Filters) => {
-    setFilters((f) => ({ ...f, ...patch }));
-    setPage(1);
-  };
-  const open = (r: Row) => navigate(withFrom(r.action.link, `/work?tab=${tab}`));
+  // Back from the record: the same tab and the same applied filters.
+  const here = () => { const p = new URLSearchParams(params); if (tab) p.set('tab', tab); return `/work?${p.toString()}`; };
+  const open = (r: Row) => navigate(withFrom(r.action.link, here()));
 
   // Every column but Action sorts on the server (the list is paged there), empty values last.
   const sortable = (key: SortField) => ({ sorter: true, sortOrder: sort?.field === key ? (sort.dir === 'asc' ? 'ascend' as const : 'descend' as const) : null });
@@ -93,8 +101,8 @@ export function MyWorkPage() {
         <>
           <Tabs
             activeKey={tab}
-            onChange={(key) => { setParams({ tab: key }, { replace: true }); setPage(1); }}
-            tabBarExtraContent={<Button icon={<FilterOutlined />} onClick={() => setShowFilters((v) => !v)}>Filters</Button>}
+            // Keep the applied filters (read from the address itself, in case the page has not re-rendered since Apply).
+            onChange={(key) => { const p = new URLSearchParams(window.location.search); p.set('tab', key); setParams(p, { replace: true }); setPage(1); }}
             items={tabList.map((t) => ({
               key: t.key,
               label: (
@@ -123,19 +131,14 @@ export function MyWorkPage() {
             }}
             onRow={(r) => ({ onClick: () => open(r), style: { cursor: 'pointer' } })}
             toolbar={
-              showFilters && (
-                <>
-                  <Input.Search id="workSearch" placeholder="Search number or text" allowClear value={search}
-                    onChange={(e) => { setSearch(e.target.value); if (!e.target.value) setFilter({ q: undefined }); }}
-                    onSearch={(v) => setFilter({ q: v.trim() || undefined })} style={{ width: 230, maxWidth: '100%' }} />
-                  <MultiFilter id="f-company" placeholder="Company" options={(companies.data ?? []).map((c) => c.CompanyCode)} value={filters.company}
-                    onChange={(v) => setFilter({ company: v })} width={150} />
-                  <Select id="f-due" allowClear placeholder="Due" value={filters.due} onChange={(v: Due | undefined) => setFilter({ due: v })} style={{ width: 150 }}
-                    options={[{ value: 'overdue', label: 'Overdue' }, { value: 'today', label: 'Due today' }, { value: 'later', label: 'Later' }, { value: 'none', label: 'No due date' }]} />
-                  <Button icon={<ReloadOutlined />} onClick={() => { setFilters({}); setSearch(''); setPage(1); }}>Reset</Button>
-                </>
-              )
+              <>
+                <Input.Search id="workSearch" placeholder="Search number or text" allowClear value={search}
+                  onChange={(e) => { setSearch(e.target.value); if (!e.target.value) { setQ(undefined); setPage(1); } }}
+                  onSearch={(v) => { setQ(v.trim() || undefined); setPage(1); }} style={{ width: 230, maxWidth: '100%' }} />
+                {filters.bar}
+              </>
             }
+            beforeTable={filters.panel}
           />
         </>
       )}

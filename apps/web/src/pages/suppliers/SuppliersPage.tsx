@@ -1,15 +1,13 @@
-import { useState } from 'react';
-import { Alert, Button, Descriptions, Drawer, Input, Space, Tag, Typography, type TableProps } from 'antd';
-import { ReloadOutlined } from '@ant-design/icons';
+import { useMemo, useState } from 'react';
+import { Alert, Descriptions, Drawer, Input, Space, Tag, Typography, type TableProps } from 'antd';
 import { Link } from 'react-router-dom';
 import { AppTable, type AppColumn } from '../../components/AppTable';
-import { MultiFilter } from '../../components/MultiFilter';
+import { many, useListFilters, type FilterField } from '../../components/ListFilters';
 import { formatDateTime, type RouterOutputs } from '../../lib/format';
 import { trpc } from '../../lib/trpc';
 import { useTablePrefs } from '../../lib/useTablePrefs';
 
 type Row = RouterOutputs['suppliers']['list']['rows'][number];
-type Filters = { q?: string; group?: string[]; country?: string[]; currency?: string[] };
 type SortField = 'SupplierCode' | 'Name' | 'SupplierGroup' | 'Country' | 'City';
 type Sort = { sortField: SortField; sortOrder: 'asc' | 'desc' };
 
@@ -28,20 +26,34 @@ const StatusTag = ({ inSap }: { inSap: boolean }) => (
 /** Master data → Suppliers: read-only list copied from SAP. Spec 08. */
 export function SuppliersPage() {
   const prefs = useTablePrefs('suppliers', ['Address']);
-  const [filters, setFilters] = useState<Filters>({});
+  const [q, setQ] = useState<string>();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<Sort>(DEFAULT_SORT);
   const [selected, setSelected] = useState<Row | null>(null);
 
-  const list = trpc.suppliers.list.useQuery({ page, pageSize: prefs.pageSize, ...filters, ...sort }, { placeholderData: (p) => p, enabled: prefs.ready });
   const options = trpc.suppliers.filterOptions.useQuery();
   const status = trpc.sync.status.useQuery({ source: 'sap.suppliers' });
 
-  const setFilter = (patch: Filters) => {
-    setFilters((f) => ({ ...f, ...patch }));
-    setPage(1);
-  };
+  // The filter section (mockup list-filters).
+  const fields = useMemo<FilterField[]>(() => {
+    const o = options.data;
+    const plain = (xs: string[] | undefined) => (xs ?? []).map((x) => ({ value: x, label: x }));
+    return [
+      { key: 'group', label: 'Group', type: 'multi', options: plain(o?.groups) },
+      { key: 'country', label: 'Country', type: 'multi', options: plain(o?.countries) },
+      { key: 'currency', label: 'Currency', type: 'multi', options: plain(o?.currencies) },
+      { key: 'origin', label: 'Origin', type: 'multi', options: (o?.origins ?? []).map((x) => ({ value: x.code, label: x.name ? `${x.code} · ${x.name}` : x.code })) },
+      { key: 'blocked', label: 'Blocked', type: 'multi', options: [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }] },
+      { key: 'purchasingOrg', label: 'Purchasing org', type: 'multi', options: plain(o?.purchasingOrgs) },
+    ];
+  }, [options.data]);
+  const filters = useListFilters(fields, () => setPage(1));
+  const f = filters.applied;
+  const list = trpc.suppliers.list.useQuery({
+    page, pageSize: prefs.pageSize, q, group: many(f, 'group'), country: many(f, 'country'), currency: many(f, 'currency'), origin: many(f, 'origin'),
+    blocked: many(f, 'blocked')?.filter((x): x is 'yes' | 'no' => x === 'yes' || x === 'no'), purchasingOrg: many(f, 'purchasingOrg'), ...sort,
+  }, { placeholderData: (p) => p, enabled: prefs.ready });
   const sortable = (field: SortField) => ({
     sorter: true,
     sortOrder: sort.sortField === field ? (sort.sortOrder === 'asc' ? ('ascend' as const) : ('descend' as const)) : null,
@@ -103,14 +115,12 @@ export function SuppliersPage() {
         toolbar={
           <>
             <Input.Search id="supplierSearch" placeholder="Search code, name or email" allowClear value={search}
-              onChange={(e) => { setSearch(e.target.value); if (!e.target.value) setFilter({ q: undefined }); }}
-              onSearch={(v) => setFilter({ q: v.trim() || undefined })} style={{ width: 230, maxWidth: '100%' }} />
-            <MultiFilter id="f-group" placeholder="Group" options={options.data?.groups ?? []} value={filters.group} onChange={(v) => setFilter({ group: v })} width={140} />
-            <MultiFilter id="f-country" placeholder="Country" options={options.data?.countries ?? []} value={filters.country} onChange={(v) => setFilter({ country: v })} width={140} />
-            <MultiFilter id="f-currency" placeholder="Currency" options={options.data?.currencies ?? []} value={filters.currency} onChange={(v) => setFilter({ currency: v })} width={140} />
-            <Button icon={<ReloadOutlined />} onClick={() => { setFilters({}); setSearch(''); setPage(1); }}>Reset</Button>
+              onChange={(e) => { setSearch(e.target.value); if (!e.target.value) { setQ(undefined); setPage(1); } }}
+              onSearch={(v) => { setQ(v.trim() || undefined); setPage(1); }} style={{ width: 230, maxWidth: '100%' }} />
+            {filters.bar}
           </>
         }
+        beforeTable={filters.panel}
       />
 
       <Drawer open={!!s} onClose={() => setSelected(null)} width={440} title={s ? `${s.SupplierCode} · ${s.Name}` : ''}>

@@ -59,7 +59,7 @@ test('20 · Procurement awards a quote, Sales acknowledges, Procurement un-award
   await page.screenshot({ path: 'test-results/21-rfq-status.png' });
   await expect(page.getByText(/awarded by .*\(Procurement\)/).first()).toBeVisible();
   await page.getByRole('tab', { name: 'Awards' }).click();
-  await expect(page.locator('.ant-table-tbody tr.ant-table-row', { hasText: abNo })).toBeVisible();
+  await expect(page.locator('.ant-table-tbody tr.ant-table-row', { hasText: abNo }).last()).toBeVisible(); // Where it is names it too
 
   // Sales: My work asks to acknowledge; a comment and Acknowledge
   await viewAs(page, 'Demo Sales');

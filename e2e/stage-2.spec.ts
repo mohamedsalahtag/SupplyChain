@@ -39,7 +39,7 @@ test('14 · raise a container change: pre-check, holds, no self-decision, withdr
   await expect(page.getByText(/On hold:/)).toBeVisible();
   await expect(page.getByText(`⏸ On hold · ${crNo}`)).toBeVisible();
   await page.getByRole('tab', { name: 'Change requests' }).click();
-  await expect(page.locator('.ant-table-tbody tr.ant-table-row', { hasText: crNo })).toContainText('Submitted');
+  await expect(page.locator('.ant-table-tbody tr.ant-table-row', { hasText: crNo }).last()).toContainText('Submitted'); // What's left names it too
 
   // A second request on the held week is blocked by the pre-check
   await page.getByRole('button', { name: 'Cancel whole demand' }).click();

@@ -144,7 +144,8 @@ export async function getDemand(db: Db, actor: Actor, demandId: string) {
 }
 
 export type ListFilter = {
-  mine: boolean; q?: string; company?: string[]; status?: string[]; weekFrom?: string; weekTo?: string; waitingOn?: Team[]; page: number; pageSize: number;
+  mine: boolean; q?: string; company?: string[]; status?: string[]; weekFrom?: string; weekTo?: string; waitingOn?: Team[];
+  major?: string[]; subMajor?: string[]; origin?: string[]; createdBy?: string[]; submittedFrom?: string; submittedTo?: string; page: number; pageSize: number;
 };
 
 export async function listDemands(db: Db, actor: Actor, f: ListFilter) {
@@ -167,6 +168,15 @@ export async function listDemands(db: Db, actor: Actor, f: ListFilter) {
         .where((e) => e.or([e('l.MaterialCode', 'like', p), e('l.SubMajorCategory', 'like', p), e('l.MajorCategory', 'like', p)]))),
     ]));
   }
+  // Materials of the demand (any active line), who created it, when it was submitted (filter section).
+  const lineHas = (col: 'MajorCategory' | 'SubMajorCategory' | 'OriginCode', vals: string[]) => // col: a fixed name, never input
+    sql<SqlBool>`EXISTS (SELECT 1 FROM scm.DemandLine fl WHERE fl.DemandId = d.DemandId AND fl.IsActive = 1 AND fl.${sql.raw(col)} IN (${sql.join(vals)}))`;
+  if (f.major?.length) q = q.where(lineHas('MajorCategory', f.major));
+  if (f.subMajor?.length) q = q.where(lineHas('SubMajorCategory', f.subMajor));
+  if (f.origin?.length) q = q.where(lineHas('OriginCode', f.origin));
+  if (f.createdBy?.length) q = q.where('d.CreatedBy', 'in', f.createdBy.map(Number));
+  if (f.submittedFrom) q = q.where(sql<SqlBool>`d.SubmittedAt >= ${f.submittedFrom}`);
+  if (f.submittedTo) q = q.where(sql<SqlBool>`d.SubmittedAt < DATEADD(day, 1, CAST(${f.submittedTo} AS date))`);
   if (f.waitingOn?.length) q = q.where(sql<SqlBool>`(${sql.join(f.waitingOn.map(waitingSql), sql` OR `)})`);
   if (f.weekFrom || f.weekTo) {
     q = q.where((eb) => eb.exists(eb.selectFrom('scm.DemandWeek as w').select('w.DemandWeekId').whereRef('w.DemandId', '=', 'd.DemandId')
@@ -250,3 +260,23 @@ async function mergedIntoOf(db: Db, ids: string[]): Promise<Map<string, { demand
     .select(['m.SourceDemandId', 'm.TargetDemandId', 't.DemandNo']).where('m.SourceDemandId', 'in', ids).where('m.Status', '=', 'EXECUTED').where('m.Scope', '=', 'DEMAND').execute();
   return new Map(rows.map((r) => [String(r.SourceDemandId), { demandId: String(r.TargetDemandId), demandNo: r.DemandNo }]));
 }
+
+/** Choices for the Demands filter section (only values that occur in the user's companies' demands). */
+export async function demandFilterOptions(db: Db, actor: Actor) {
+  const companies = [...actor.companies];
+  if (!companies.length) return { categories: [], origins: [], creators: [] };
+  const [cats, origins, creators] = await Promise.all([
+    sql<{ MajorCategory: string; SubMajorCategory: string }>`SELECT DISTINCT l.MajorCategory, l.SubMajorCategory FROM scm.DemandLine l JOIN scm.Demand d ON d.DemandId = l.DemandId
+      WHERE d.CompanyCode IN (${sql.join(companies)}) AND l.IsActive = 1 ORDER BY l.MajorCategory, l.SubMajorCategory`.execute(db).then((r) => r.rows),
+    sql<{ OriginCode: string; Name: string | null }>`SELECT l.OriginCode, MIN(o.OriginName) AS Name FROM scm.DemandLine l JOIN scm.Demand d ON d.DemandId = l.DemandId
+      LEFT JOIN scm.RefOrigin o ON o.CountryCode = l.OriginCode WHERE d.CompanyCode IN (${sql.join(companies)}) AND l.IsActive = 1 GROUP BY l.OriginCode ORDER BY l.OriginCode`.execute(db).then((r) => r.rows),
+    sql<{ UserId: number; DisplayName: string }>`SELECT DISTINCT u.UserId, u.DisplayName FROM scm.Demand d JOIN app.[User] u ON u.UserId = d.CreatedBy
+      WHERE d.CompanyCode IN (${sql.join(companies)}) ORDER BY u.DisplayName`.execute(db).then((r) => r.rows),
+  ]);
+  return {
+    categories: cats.map((c) => ({ major: c.MajorCategory, subMajor: c.SubMajorCategory })),
+    origins: origins.map((o) => ({ code: o.OriginCode, name: o.Name ?? o.OriginCode })),
+    creators: creators.map((u) => ({ id: String(u.UserId), name: u.DisplayName })),
+  };
+}
+

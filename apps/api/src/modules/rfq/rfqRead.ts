@@ -167,7 +167,27 @@ export async function getRfq(db: Db, actor: Actor, rfqId: string) {
   };
 }
 
-export type RfqFilters = { q?: string; company?: string[]; status?: string[]; demandId?: string; waitingOn?: Team[]; page: number; pageSize: number };
+export type RfqFilters = {
+  q?: string; company?: string[]; status?: string[]; demandId?: string; waitingOn?: Team[]; supplier?: string[]; origin?: string[]; major?: string[]; subMajor?: string[];
+  weekFrom?: string; weekTo?: string; createdBy?: string[]; page: number; pageSize: number;
+};
+
+/** The filter section's conditions on alias r (supplier: invited, or awarded on one of the RFQ's awards; materials: a live RFQ line). */
+function rfqFilterSql(f: RfqFilters) {
+  const parts: RawBuilder<unknown>[] = [];
+  const lineHas = (cond: RawBuilder<unknown>) => sql`EXISTS (SELECT 1 FROM scm.RfqLine fl WHERE fl.RfqId = r.RfqId AND fl.IsCancelled = 0 AND ${cond})`;
+  if (f.supplier?.length) {
+    const s = sql.join(f.supplier);
+    parts.push(sql`(EXISTS (SELECT 1 FROM scm.RfqSupplier fs WHERE fs.RfqId = r.RfqId AND fs.SupplierCode IN (${s}))
+      OR EXISTS (SELECT 1 FROM scm.AwardItem fi JOIN scm.AwardBatch fb ON fb.AwardBatchId = fi.AwardBatchId WHERE fb.RfqId = r.RfqId AND fi.IsActive = 1 AND fi.SupplierCode IN (${s})))`);
+  }
+  if (f.origin?.length) parts.push(lineHas(sql`fl.OriginCode IN (${sql.join(f.origin)})`));
+  if (f.major?.length) parts.push(lineHas(sql`fl.MajorCategory IN (${sql.join(f.major)})`));
+  if (f.subMajor?.length) parts.push(lineHas(sql`fl.SubMajorCategory IN (${sql.join(f.subMajor)})`));
+  if (f.weekFrom || f.weekTo) parts.push(lineHas(sql`fl.ProposedEtdWeek >= ${f.weekFrom ?? '0000-W00'} AND fl.ProposedEtdWeek <= ${f.weekTo ?? '9999-W99'}`));
+  if (f.createdBy?.length) parts.push(sql`r.CreatedBy IN (${sql.join(f.createdBy.map(Number))})`);
+  return parts.length ? sql`AND ${sql.join(parts, sql` AND `)}` : sql``;
+}
 
 /**
  * Purchasing → RFQs. Status, filter and paging run in SQL (database review 2026-09): the list used to load every RFQ of
@@ -187,7 +207,7 @@ export async function listRfqs(db: Db, actor: Actor, f: RfqFilters) {
     FROM scm.RfqLine l LEFT JOIN scm.QtySlice s ON s.RfqLineId = l.RfqLineId WHERE l.RfqId IN (${ids}) GROUP BY l.RfqId)`;
   const scope = sql`SELECT r.RfqId FROM scm.Rfq r JOIN scm.Demand d ON d.DemandId = r.DemandId WHERE r.CompanyCode IN (${sql.join(companies)})
     ${like ? sql`AND (r.RfqNo LIKE ${like} OR d.DemandNo LIKE ${like})` : sql``} ${f.demandId ? sql`AND r.DemandId = ${f.demandId}` : sql``}
-    ${f.waitingOn?.length ? sql`AND (${sql.join(f.waitingOn.map(rfqWaitingSql), sql` OR `)})` : sql``}`;
+    ${f.waitingOn?.length ? sql`AND (${sql.join(f.waitingOn.map(rfqWaitingSql), sql` OR `)})` : sql``} ${rfqFilterSql(f)}`;
   const offset = (f.page - 1) * f.pageSize;
   type Row = { RfqId: string; RfqNo: string; DemandId: string; DemandNo: string; CompanyCode: string; ManualStatus: 'DRAFT' | 'SENT' | 'CANCELLED'; CreatedAt: Date; CreatedByName: string | null;
     W1: string | null; W2: string | null; InRfq: string; Quoted: string; Awarded: string; Total: number };
@@ -232,4 +252,29 @@ export async function rfqHistory(db: Db, rfqId: string) {
   const rows = await db.selectFrom('scm.DomainEvent as e').leftJoin('app.User as u', 'u.UserId', 'e.ActorUserId')
     .select(['e.EventType', 'e.PayloadJson', 'e.OccurredAt', 'u.DisplayName']).where('e.EntityType', '=', 'RFQ').where('e.EntityId', '=', rfqId).orderBy('e.EventId', 'desc').execute();
   return rows.map((r) => ({ at: r.OccurredAt.toISOString(), by: r.DisplayName ?? 'System', event: r.EventType, payload: r.PayloadJson ? JSON.parse(r.PayloadJson) : null }));
+}
+
+/** Choices for the RFQs filter section (only values that occur on the user's companies' RFQs). */
+export async function rfqFilterOptions(db: Db, actor: Actor) {
+  const companies = [...actor.companies];
+  if (!companies.length) return { categories: [], origins: [], creators: [], suppliers: [] };
+  const mine = sql`SELECT r.RfqId FROM scm.Rfq r WHERE r.CompanyCode IN (${sql.join(companies)})`;
+  const [cats, origins, creators, suppliers] = await Promise.all([
+    sql<{ MajorCategory: string; SubMajorCategory: string }>`SELECT DISTINCT l.MajorCategory, l.SubMajorCategory FROM scm.RfqLine l
+      WHERE l.RfqId IN (${mine}) AND l.IsCancelled = 0 ORDER BY l.MajorCategory, l.SubMajorCategory`.execute(db).then((r) => r.rows),
+    sql<{ OriginCode: string; Name: string | null }>`SELECT l.OriginCode, MIN(o.OriginName) AS Name FROM scm.RfqLine l LEFT JOIN scm.RefOrigin o ON o.CountryCode = l.OriginCode
+      WHERE l.RfqId IN (${mine}) AND l.IsCancelled = 0 GROUP BY l.OriginCode ORDER BY l.OriginCode`.execute(db).then((r) => r.rows),
+    sql<{ UserId: number; DisplayName: string }>`SELECT DISTINCT u.UserId, u.DisplayName FROM scm.Rfq r JOIN app.[User] u ON u.UserId = r.CreatedBy
+      WHERE r.CompanyCode IN (${sql.join(companies)}) ORDER BY u.DisplayName`.execute(db).then((r) => r.rows),
+    sql<{ SupplierCode: string; Name: string | null }>`SELECT x.SupplierCode, MIN(sp.Name) AS Name FROM (
+        SELECT s.SupplierCode FROM scm.RfqSupplier s WHERE s.RfqId IN (${mine})
+        UNION SELECT i.SupplierCode FROM scm.AwardItem i JOIN scm.AwardBatch b ON b.AwardBatchId = i.AwardBatchId WHERE b.CompanyCode IN (${sql.join(companies)}) AND i.IsActive = 1
+      ) x LEFT JOIN md.Supplier sp ON sp.SupplierCode = x.SupplierCode GROUP BY x.SupplierCode ORDER BY MIN(sp.Name), x.SupplierCode`.execute(db).then((r) => r.rows),
+  ]);
+  return {
+    categories: cats.map((c) => ({ major: c.MajorCategory, subMajor: c.SubMajorCategory })),
+    origins: origins.map((o) => ({ code: o.OriginCode, name: o.Name ?? o.OriginCode })),
+    creators: creators.map((u) => ({ id: String(u.UserId), name: u.DisplayName })),
+    suppliers: suppliers.map((x) => ({ code: x.SupplierCode, name: x.Name ?? x.SupplierCode })),
+  };
 }

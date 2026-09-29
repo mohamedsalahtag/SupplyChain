@@ -16,7 +16,7 @@ test('16 · view as Demo Sales to raise, as Demo Procurement to decide', async (
   await page.goto('/demands');
   await page.locator('#demandSearch').fill(demandNo);
   await page.locator('#demandSearch').press('Enter');
-  await expect(page.locator('.ant-table-tbody tr.ant-table-row', { hasText: demandNo })).toContainText('Accepted · nothing sourced yet');
+  await expect(page.locator('.ant-table-tbody tr.ant-table-row', { hasText: demandNo })).toContainText('100% open'); // the Progress cell carries the stage (spec 31)
   await page.goto(url);
   await expect(page.getByRole('button', { name: 'Not sourced…' })).toHaveCount(0); // Procurement's, not Sales'
   await page.getByRole('button', { name: 'Change containers' }).click();

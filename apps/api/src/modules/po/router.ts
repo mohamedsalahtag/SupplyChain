@@ -8,7 +8,7 @@ import { listAttachments } from '../workflow/attachments.js';
 import { assertEntityAccess, registerEntityAccess } from '../workflow/entityAccess.js';
 import { listThread } from '../workflow/threads.js';
 import { runOutbox } from './outbox.js';
-import { getDraft, listDrafts, listMdr, preparation, skuCandidates } from './poRead.js';
+import { getDraft, listDrafts, listMdr, poFilterOptions, preparation, skuCandidates } from './poRead.js';
 import { buildDraft, closeMasterDataRequest, markMasterDataMissing, P_PO, resolveUnknown, selectSkus, submitDraft, validateDraft } from './poService.js';
 import { assertSapTargetAllowed, poAdapter } from './sapAdapter.js';
 
@@ -25,6 +25,7 @@ const manage = procedure.meta({ permission: P.poManage });
 const stubAdmin = procedure.meta({ permission: P.configSapEdit });
 const idOf = z.string().regex(/^\d+$/);
 const command = z.object({ commandId: z.string().uuid() });
+const DAY = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const qty = z.string().trim().regex(/^\d{1,12}(\.\d{1,3})?$/, 'A quantity');
 export const workerId = () => `api-${hostname()}-${process.pid}`;
 
@@ -41,8 +42,12 @@ export const poRouter = router({
   build: manage.input(command.extend({ handoffId: idOf })).mutation(async ({ ctx, input }) => buildDraft(ctx.db, await loadActor(ctx.db, ctx.user), input.commandId, input.handoffId)),
   list: open.input(z.object({
     q: z.string().trim().max(60).optional(), status: z.array(z.enum(['DRAFT', 'VALIDATED', 'SUBMITTED', 'UNKNOWN', 'CREATED', 'REJECTED', 'VOID'])).max(7).optional(),
+    supplier: z.array(z.string().max(20)).max(100).optional(), sap: z.array(z.enum(['SAP', 'SIMULATED'])).max(2).optional(),
+    submittedFrom: DAY.optional(), submittedTo: DAY.optional(), company: z.array(z.string().max(10)).max(20).optional(),
     page: z.number().int().min(1).default(1), pageSize: z.number().int().refine((n) => (TABLE_PAGE_SIZES as readonly number[]).includes(n)).default(DEFAULT_TABLE_PAGE_SIZE),
   })).query(async ({ ctx, input }) => listDrafts(ctx.db, await loadActor(ctx.db, ctx.user), input)),
+  /** The PO drafts filter section's choices (suppliers on the user's companies' drafts). */
+  filterOptions: open.query(async ({ ctx }) => poFilterOptions(ctx.db, await loadActor(ctx.db, ctx.user))),
   get: open.input(z.object({ poDraftId: idOf })).query(async ({ ctx, input }) => getDraft(ctx.db, await loadActor(ctx.db, ctx.user), input.poDraftId)),
   thread: open.input(z.object({ poDraftId: idOf })).query(async ({ ctx, input }) => {
     await assertEntityAccess(ctx.db, await loadActor(ctx.db, ctx.user), 'PO_DRAFT', input.poDraftId, false);

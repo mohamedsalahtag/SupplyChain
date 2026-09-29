@@ -1,4 +1,5 @@
 /** Reading change requests (specs 14, 15): one CR with its items and allowed actions, the list, a demand's CRs. */
+import { sql, type SqlBool } from 'kysely';
 import { hasPermission, type Actor } from '../workflow/access.js';
 import { NotFoundError } from '../workflow/errors.js';
 import { formatQty, fromDb } from '../workflow/qty.js';
@@ -90,7 +91,10 @@ export async function getCr(db: Db, actor: Actor, crId: string) {
   };
 }
 
-export type CrListFilter = { mine: boolean; q?: string; type?: string[]; status?: string[]; company?: string[]; demandId?: string; page: number; pageSize: number };
+export type CrListFilter = {
+  mine: boolean; q?: string; type?: string[]; status?: string[]; company?: string[]; demandId?: string;
+  raisedBy?: ('SALES' | 'PROCUREMENT')[]; reason?: string[]; submittedFrom?: string; submittedTo?: string; page: number; pageSize: number;
+};
 
 export async function listCrs(db: Db, actor: Actor, f: CrListFilter) {
   const companies = [...actor.companies];
@@ -101,6 +105,10 @@ export async function listCrs(db: Db, actor: Actor, f: CrListFilter) {
   if (f.type?.length) q = q.where('c.CrType', 'in', f.type as never[]);
   if (f.status?.length) q = q.where('c.Status', 'in', f.status as never[]);
   if (f.company?.length) q = q.where('c.CompanyCode', 'in', f.company);
+  if (f.raisedBy?.length) q = q.where('c.RaisedByDept', 'in', f.raisedBy);
+  if (f.reason?.length) q = q.where('c.ReasonCode', 'in', f.reason);
+  if (f.submittedFrom) q = q.where(sql<SqlBool>`c.SubmittedAt >= ${f.submittedFrom}`);
+  if (f.submittedTo) q = q.where(sql<SqlBool>`c.SubmittedAt < DATEADD(day, 1, CAST(${f.submittedTo} AS date))`);
   if (f.q) {
     const p = `%${f.q.replace(/[[%_]/g, '[$&]')}%`;
     q = q.where((eb) => eb.or([eb('c.CrNo', 'like', p), eb('d.DemandNo', 'like', p)]));
@@ -121,6 +129,15 @@ export async function listCrs(db: Db, actor: Actor, f: CrListFilter) {
       responseHours: r.DecidedAt ? Math.round((r.DecidedAt.getTime() - r.SubmittedAt.getTime()) / 3_600_000) : null,
     })),
   };
+}
+
+/** Choices for the Change requests filter section: the reasons used on the user's companies' CRs, with their descriptions. */
+export async function crFilterOptions(db: Db, actor: Actor) {
+  const companies = [...actor.companies];
+  if (!companies.length) return { reasons: [] };
+  const rows = (await sql<{ ReasonCode: string; Description: string | null }>`SELECT c.ReasonCode, MIN(rc.Description) AS Description FROM scm.ChangeRequest c
+    LEFT JOIN scm.ReasonCode rc ON rc.ReasonCode = c.ReasonCode WHERE c.CompanyCode IN (${sql.join(companies)}) GROUP BY c.ReasonCode ORDER BY c.ReasonCode`.execute(db)).rows;
+  return { reasons: rows.map((r) => ({ code: r.ReasonCode, description: r.Description ?? r.ReasonCode })) };
 }
 
 export async function reasonOptions(db: Db, context: 'CR_SALES' | 'CR_PROC') {

@@ -160,11 +160,27 @@ const SORT_SQL: Record<WorkSortField, string> = {
   due: 'i.DueAt', number: 'i.Number', title: 'i.Title', company: 'i.CompanyCode', raisedBy: "ISNULL(u.DisplayName, 'System')", createdAt: 'i.CreatedAt', note: 'i.Note',
 };
 
+export const WORK_DUE = ['overdue', 'today', 'later', 'none'] as const;
+export type WorkDue = (typeof WORK_DUE)[number];
+export const SYSTEM_RAISER = 'SYSTEM';
+const TOMORROW = 'DATEADD(day, 1, CAST(CAST(SYSUTCDATETIME() AS date) AS datetime2))';
+/** The SQL of each Due choice (a fixed list: the input never reaches SQL as text). */
+const DUE_SQL: Record<WorkDue, string> = {
+  overdue: 'i.DueAt < SYSUTCDATETIME()',
+  today: `i.DueAt >= SYSUTCDATETIME() AND i.DueAt < ${TOMORROW}`,
+  later: `i.DueAt >= ${TOMORROW}`,
+  none: 'i.DueAt IS NULL',
+};
+
 export type WorkFilter = {
   tab?: string;
   q?: string;
   company?: string[];
-  due?: 'overdue' | 'today' | 'later' | 'none';
+  /** Any of these (ORed). */
+  due?: WorkDue[];
+  itemType?: string[];
+  /** User ids, or 'SYSTEM' for items nobody raised (RaisedBy null). */
+  raisedBy?: string[];
   /** A column header the user clicked; without it: overdue first, then by due date. */
   sort?: { field: WorkSortField; dir: 'asc' | 'desc' };
   page: number;
@@ -184,10 +200,14 @@ export async function listWork(db: Db, actor: Actor, f: WorkFilter) {
     q = q.where((eb) => eb.or([eb('i.Number', 'like', p), eb('i.Title', 'like', p), eb('i.Note', 'like', p)]));
   }
   if (f.company?.length) q = q.where('i.CompanyCode', 'in', f.company);
-  if (f.due === 'overdue') q = q.where(sql<SqlBool>`i.DueAt < SYSUTCDATETIME()`);
-  if (f.due === 'today') q = q.where(sql<SqlBool>`i.DueAt >= SYSUTCDATETIME() AND i.DueAt < DATEADD(day, 1, CAST(CAST(SYSUTCDATETIME() AS date) AS datetime2))`);
-  if (f.due === 'later') q = q.where(sql<SqlBool>`i.DueAt >= DATEADD(day, 1, CAST(CAST(SYSUTCDATETIME() AS date) AS datetime2))`);
-  if (f.due === 'none') q = q.where('i.DueAt', 'is', null);
+  const due = [...new Set(f.due ?? [])];
+  if (due.length) q = q.where((eb) => eb.or(due.map((d) => sql<SqlBool>`(${sql.raw(DUE_SQL[d])})`)));
+  if (f.itemType?.length) q = q.where('i.ItemType', 'in', f.itemType);
+  if (f.raisedBy?.length) {
+    const ids = f.raisedBy.filter((x) => x !== SYSTEM_RAISER).map(Number);
+    const system = f.raisedBy.includes(SYSTEM_RAISER);
+    q = q.where((eb) => eb.or([...(ids.length ? [eb('i.RaisedBy', 'in', ids)] : []), ...(system ? [eb('i.RaisedBy', 'is', null)] : [])]));
+  }
 
   let sorted = q
       .select([
@@ -235,6 +255,25 @@ export async function listWork(db: Db, actor: Actor, f: WorkFilter) {
       escalated: !!r.EscalatedAt,
     })),
   };
+}
+
+/** The My work filter section's choices, from the items this actor can see: their item types and who raised them. */
+export async function workFilterOptions(db: Db, actor: Actor) {
+  const rows = await db
+    .selectFrom('scm.InboxItem as i')
+    .leftJoin('app.User as u', 'u.UserId', 'i.RaisedBy')
+    .where(visibleTo(actor))
+    .select(['i.ItemType', 'i.RaisedBy', 'u.DisplayName'])
+    .distinct()
+    .execute();
+  const types = [...new Set(rows.map((r) => r.ItemType))]
+    .sort((a, b) => (ITEM_TYPES[a]?.order ?? 5_000) - (ITEM_TYPES[b]?.order ?? 5_000))
+    .map((t) => ({ value: t, label: ITEM_TYPES[t]?.label ?? t }));
+  const people = new Map<string, string>();
+  for (const r of rows) if (r.RaisedBy != null) people.set(String(r.RaisedBy), r.DisplayName ?? String(r.RaisedBy));
+  const raisers = [...people].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
+  if (rows.some((r) => r.RaisedBy == null)) raisers.push({ value: SYSTEM_RAISER, label: 'System' });
+  return { itemTypes: types, raisers };
 }
 
 /** Hourly job: marks overdue items escalated (once) and logs each one. Returns how many. */

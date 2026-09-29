@@ -9,7 +9,7 @@ import { assertEntityAccess } from '../workflow/entityAccess.js';
 import { listThread } from '../workflow/threads.js';
 import './access.js';
 import { draftInput } from './content.js';
-import { demandHistory, getDemand, listDemands } from './demandRead.js';
+import { demandFilterOptions, demandHistory, getDemand, listDemands } from './demandRead.js';
 import { progressFor, TEAMS, waitingFor, whatsLeft } from './progress.js';
 import { acceptDemand, addComment, createDemand, recallDemand, returnDemand, saveDraft, submitDemand } from './demandService.js';
 import { composeOptions, searchMaterials, specOptions } from './lookups.js';
@@ -20,6 +20,7 @@ const id = z.object({ demandId: z.string().regex(/^\d+$/) });
 const command = z.object({ commandId: z.string().uuid() });
 const withVersion = id.merge(command).extend({ rowVer: z.string() });
 const WEEK = z.string().regex(/^\d{4}-W\d{2}$/);
+const DAY = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 export const demandRouter = router({
   list: open
@@ -31,12 +32,16 @@ export const demandRouter = router({
       weekFrom: WEEK.optional(),
       weekTo: WEEK.optional(),
       waitingOn: z.array(z.enum(TEAMS)).max(4).optional(),
+      major: z.array(z.string().max(60)).max(50).optional(), subMajor: z.array(z.string().max(80)).max(100).optional(), origin: z.array(z.string().max(3)).max(50).optional(),
+      createdBy: z.array(z.string().regex(/^\d+$/)).max(50).optional(), submittedFrom: DAY.optional(), submittedTo: DAY.optional(),
       page: z.number().int().min(1).default(1),
       pageSize: z.number().int().refine((n) => (TABLE_PAGE_SIZES as readonly number[]).includes(n)).default(DEFAULT_TABLE_PAGE_SIZE),
     }))
     .query(async ({ ctx, input }) => listDemands(ctx.db, await loadActor(ctx.db, ctx.user), input)),
 
   get: open.input(id).query(async ({ ctx, input }) => getDemand(ctx.db, await loadActor(ctx.db, ctx.user), input.demandId)),
+  /** The Demands filter section's choices: categories (sub-major under its major), origins and creators of the user's companies' demands. */
+  filterOptions: open.query(async ({ ctx }) => demandFilterOptions(ctx.db, await loadActor(ctx.db, ctx.user))),
 
   /** The demand page's "What's left" box, progress bar and who it waits on (demand progress). */
   progress: open.input(id).query(async ({ ctx, input }) => {

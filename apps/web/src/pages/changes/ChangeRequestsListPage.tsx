@@ -1,31 +1,40 @@
-import { useState } from 'react';
-import { Alert, Button, Input, Segmented, Space, Tag, Typography } from 'antd';
-import { ReloadOutlined } from '@ant-design/icons';
+import { useMemo, useState } from 'react';
+import { Alert, Input, Segmented, Space, Tag, Typography } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { AppTable, type AppColumn } from '../../components/AppTable';
-import { MultiFilter } from '../../components/MultiFilter';
+import { many, one, useListFilters, type FilterField } from '../../components/ListFilters';
 import { formatDateTime, type RouterOutputs } from '../../lib/format';
 import { trpc } from '../../lib/trpc';
 import { useTablePrefs } from '../../lib/useTablePrefs';
 import { APPLY_STATUS, CR_STATUS, CR_TYPE } from './ChangeRequestPage';
 
 type Row = RouterOutputs['cr']['list']['rows'][number];
-type Filters = { q?: string; type?: string[]; status?: string[]; company?: string[] };
-const byLabel = (m: Record<string, { label: string } | string>) => Object.fromEntries(Object.entries(m).map(([k, v]) => [typeof v === 'string' ? v : v.label, k]));
 
 /** Purchasing → Change requests (spec 15). Requests waiting for your decision are on My work. */
 export function ChangeRequestsListPage() {
   const navigate = useNavigate();
   const prefs = useTablePrefs('change-requests', ['comment', 'responseHours']);
   const [mine, setMine] = useState(false);
-  const [filters, setFilters] = useState<Filters>({});
+  const [q, setQ] = useState<string>();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const list = trpc.cr.list.useQuery({ mine, page, pageSize: prefs.pageSize, ...filters }, { enabled: prefs.ready, placeholderData: (p) => p });
   const companies = trpc.workflowSetup.companyOptions.useQuery();
-  const setFilter = (patch: Filters) => { setFilters((f) => ({ ...f, ...patch })); setPage(1); };
-  const typeByLabel = byLabel(CR_TYPE);
-  const statusByLabel = byLabel(CR_STATUS);
+  const opts = trpc.cr.filterOptions.useQuery();
+  // The filter section (mockup list-filters).
+  const fields = useMemo<FilterField[]>(() => [
+    { key: 'type', label: 'Type', type: 'multi', options: Object.entries(CR_TYPE).map(([value, label]) => ({ value, label })) },
+    { key: 'status', label: 'Status', type: 'multi', options: Object.entries(CR_STATUS).map(([value, d]) => ({ value, label: d.label })) },
+    { key: 'raisedBy', label: 'Raised by', type: 'multi', options: [{ value: 'SALES', label: 'Sales' }, { value: 'PROCUREMENT', label: 'Procurement' }] },
+    { key: 'reason', label: 'Reason', type: 'multi', options: (opts.data?.reasons ?? []).map((r) => ({ value: r.code, label: r.description === r.code ? r.code : `${r.code} · ${r.description}` })) },
+    { key: 'submitted', label: 'Submitted, from – to', type: 'dates', fromKey: 'submittedFrom', toKey: 'submittedTo' },
+    { key: 'company', label: 'Company', type: 'multi', options: (companies.data ?? []).map((c) => ({ value: c.CompanyCode, label: `${c.CompanyCode} · ${c.Name}` })) },
+  ], [opts.data, companies.data]);
+  const filters = useListFilters(fields, () => setPage(1));
+  const f = filters.applied;
+  const list = trpc.cr.list.useQuery({
+    mine, page, pageSize: prefs.pageSize, q, type: many(f, 'type'), status: many(f, 'status'), raisedBy: many(f, 'raisedBy') as ('SALES' | 'PROCUREMENT')[] | undefined,
+    reason: many(f, 'reason'), submittedFrom: one(f, 'submittedFrom'), submittedTo: one(f, 'submittedTo'), company: many(f, 'company'),
+  }, { enabled: prefs.ready, placeholderData: (p) => p });
 
   const columns: AppColumn<Row>[] = [
     { title: 'Number', key: 'crNo', dataIndex: 'crNo', width: 95 },
@@ -58,14 +67,11 @@ export function ChangeRequestsListPage() {
           <>
             <Segmented value={mine ? 'mine' : 'all'} onChange={(v) => { setMine(v === 'mine'); setPage(1); }} options={[{ value: 'mine', label: 'Raised by me' }, { value: 'all', label: 'All in my companies' }]} />
             <Input.Search id="crSearch" placeholder="CR or demand number" allowClear value={search} style={{ width: 200 }}
-              onChange={(e) => { setSearch(e.target.value); if (!e.target.value) setFilter({ q: undefined }); }} onSearch={(v) => setFilter({ q: v.trim() || undefined })} />
-            <MultiFilter id="f-type" placeholder="Type" options={Object.values(CR_TYPE)} value={filters.type?.map((t) => CR_TYPE[t])} onChange={(v) => setFilter({ type: v?.map((l) => typeByLabel[l]) })} width={170} />
-            <MultiFilter id="f-status" placeholder="Status" options={Object.values(CR_STATUS).map((s) => s.label)} value={filters.status?.map((s) => CR_STATUS[s].label)}
-              onChange={(v) => setFilter({ status: v?.map((l) => statusByLabel[l]) })} width={170} />
-            <MultiFilter id="f-company" placeholder="Company" options={(companies.data ?? []).map((c) => c.CompanyCode)} value={filters.company} onChange={(v) => setFilter({ company: v })} width={120} />
-            <Button icon={<ReloadOutlined />} onClick={() => { setFilters({}); setSearch(''); setPage(1); }}>Reset</Button>
+              onChange={(e) => { setSearch(e.target.value); if (!e.target.value) { setQ(undefined); setPage(1); } }} onSearch={(v) => { setQ(v.trim() || undefined); setPage(1); }} />
+            {filters.bar}
           </>
         }
+        beforeTable={filters.panel}
       />
     </Space>
   );

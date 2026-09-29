@@ -12,7 +12,7 @@ import { raiseAddQuantity, raiseMixChange, raiseWeekShift } from '../cr/procCr.j
 import { recordQuotes } from './quotes.js';
 import { TEAMS, whatsLeft } from '../demand/progress.js';
 import { rfqProgressFor, rfqWaitingFor } from './rfqProgress.js';
-import { builderData, getRfq, listRfqs, rfqHistory, shortlistFor } from './rfqRead.js';
+import { builderData, getRfq, listRfqs, rfqFilterOptions, rfqHistory, shortlistFor } from './rfqRead.js';
 import { searchOutsideSuppliers, searchOutsideSuppliersForRfq } from './outsideSuppliers.js';
 import { inviteOptions, inviteSuppliers } from './invite.js';
 import { cancelRfq, createRfq, P_RFQ, releaseQty, sendRfq } from './rfqService.js';
@@ -45,8 +45,13 @@ export const rfqRouter = router({
   list: open.input(z.object({
     q: z.string().trim().max(60).optional(), company: z.array(z.string().max(10)).max(20).optional(), status: z.array(z.string().max(30)).max(10).optional(),
     demandId: idOf.optional(), waitingOn: z.array(z.enum(TEAMS)).max(4).optional(), page: z.number().int().min(1).default(1),
+    supplier: z.array(z.string().max(20)).max(50).optional(), origin: z.array(z.string().max(3)).max(50).optional(),
+    major: z.array(z.string().max(60)).max(50).optional(), subMajor: z.array(z.string().max(80)).max(100).optional(),
+    weekFrom: week.optional(), weekTo: week.optional(), createdBy: z.array(idOf).max(50).optional(),
     pageSize: z.number().int().refine((n) => (TABLE_PAGE_SIZES as readonly number[]).includes(n)).default(DEFAULT_TABLE_PAGE_SIZE),
   })).query(async ({ ctx, input }) => listRfqs(ctx.db, await loadActor(ctx.db, ctx.user), input)),
+  /** The RFQs filter section's choices: categories (sub-major under its major), origins, creators and suppliers of the user's companies' RFQs. */
+  filterOptions: open.query(async ({ ctx }) => rfqFilterOptions(ctx.db, await loadActor(ctx.db, ctx.user))),
   get: open.input(id).query(async ({ ctx, input }) => getRfq(ctx.db, await loadActor(ctx.db, ctx.user), input.rfqId)),
   /** The RFQ page's bar and "Where it is": the part still in the RFQ, and per awarded supplier (demand progress). */
   progress: open.input(id).query(async ({ ctx, input }) => {

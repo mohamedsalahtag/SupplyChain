@@ -26,6 +26,8 @@ type Props<T> = Omit<TableProps<T>, 'columns' | 'pagination' | 'size' | 'bordere
   toolbar?: ReactNode;
   /** Word for the total under the table, e.g. "materials". */
   itemName?: string;
+  /** Between the toolbar and the table: the opened filter section (ListFilters). */
+  beforeTable?: ReactNode;
 };
 
 /**
@@ -34,7 +36,7 @@ type Props<T> = Omit<TableProps<T>, 'columns' | 'pagination' | 'size' | 'bordere
  * text on hover). 25/50/100 rows per page and a Columns chooser, both saved per
  * user (useTablePrefs).
  */
-export function AppTable<T extends object>({ prefs, columns, page, total, onPageChange, toolbar, itemName = 'rows', onChange, ...rest }: Props<T>) {
+export function AppTable<T extends object>({ prefs, columns, page, total, onPageChange, toolbar, itemName = 'rows', beforeTable, onChange, ...rest }: Props<T>) {
   const hidden = new Set(prefs.hiddenColumns);
   const visible = columns.filter((c) => !hidden.has(c.key));
 
@@ -80,6 +82,7 @@ export function AppTable<T extends object>({ prefs, columns, page, total, onPage
           </Button>
         </Popover>
       </div>
+      {beforeTable}
       <Table<T>
         {...rest}
         size="small"

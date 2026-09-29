@@ -11,7 +11,7 @@ import { listThread } from '../workflow/threads.js';
 import { formatQty } from '../workflow/qty.js';
 import { withTx } from '../workflow/tx.js';
 import { decideCr } from './crApply.js';
-import { crHistory, getCr, listCrs, reasonOptions } from './crRead.js';
+import { crFilterOptions, crHistory, getCr, listCrs, reasonOptions } from './crRead.js';
 import { planContainerChange, raiseContainerChange, raiseNotSourced, withdrawCr } from './crService.js';
 
 registerEntityAccess('CR', async (db, actor, entityId, write) => {
@@ -26,6 +26,7 @@ const open = procedure.meta({ permission: P.crsOpen });
 const id = z.object({ crId: z.string().regex(/^\d+$/) });
 const command = z.object({ commandId: z.string().uuid() });
 const demandId = z.string().regex(/^\d+$/);
+const DAY = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 /** The editor's weeks, each group carrying the id of the group it edits (none = new). */
 const proposed = z.object({
   weeks: z.array(draftInput.shape.weeks.element.extend({
@@ -37,10 +38,14 @@ export const crRouter = router({
   list: open.input(z.object({
     mine: z.boolean().default(false), q: z.string().trim().max(60).optional(), type: z.array(z.string().max(30)).max(10).optional(),
     status: z.array(z.string().max(30)).max(10).optional(), company: z.array(z.string().max(10)).max(20).optional(), demandId: demandId.optional(),
+    raisedBy: z.array(z.enum(['SALES', 'PROCUREMENT'])).max(2).optional(), reason: z.array(z.string().max(40)).max(50).optional(),
+    submittedFrom: DAY.optional(), submittedTo: DAY.optional(),
     page: z.number().int().min(1).default(1),
     pageSize: z.number().int().refine((n) => (TABLE_PAGE_SIZES as readonly number[]).includes(n)).default(DEFAULT_TABLE_PAGE_SIZE),
   })).query(async ({ ctx, input }) => listCrs(ctx.db, await loadActor(ctx.db, ctx.user), input)),
 
+  /** The Change requests filter section's choices (reasons used on the user's companies' CRs). */
+  filterOptions: open.query(async ({ ctx }) => crFilterOptions(ctx.db, await loadActor(ctx.db, ctx.user))),
   get: open.input(id).query(async ({ ctx, input }) => getCr(ctx.db, await loadActor(ctx.db, ctx.user), input.crId)),
   history: open.input(id).query(async ({ ctx, input }) => {
     await getCr(ctx.db, await loadActor(ctx.db, ctx.user), input.crId);

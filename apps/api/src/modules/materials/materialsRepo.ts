@@ -16,6 +16,9 @@ function applyFilters(q: Q, f: MaterialListInput): Q {
   if (f.subMajor?.length) q = q.where('SubMajorCategory', 'in', f.subMajor);
   if (f.group?.length) q = q.where('MaterialGroup', 'in', f.group);
   if (f.origin?.length) q = q.where('Origin', 'in', f.origin);
+  if (f.materialType?.length) q = q.where('MaterialType', 'in', f.materialType);
+  // Both chosen (or none) = no filter.
+  if (f.inSap?.length === 1) q = q.where('InSap', '=', f.inSap[0] === 'yes');
   return q;
 }
 
@@ -36,9 +39,9 @@ export async function listMaterials(db: Kysely<Database>, f: MaterialListInput) 
 
 /** Distinct values for the filter dropdowns. Sub-majors carry their major so the UI can narrow them. */
 export async function filterOptions(db: Kysely<Database>) {
-  const distinct = (col: 'MaterialGroup' | 'Origin') =>
+  const distinct = (col: 'MaterialGroup' | 'Origin' | 'MaterialType') =>
     db.selectFrom('md.Material').select(col).distinct().where(col, '<>', '').orderBy(col).execute();
-  const [cats, groups, origins] = await Promise.all([
+  const [cats, groups, origins, types] = await Promise.all([
     db
       .selectFrom('md.Material')
       .select(['MajorCategory', 'SubMajorCategory'])
@@ -48,11 +51,13 @@ export async function filterOptions(db: Kysely<Database>) {
       .execute(),
     distinct('MaterialGroup'),
     distinct('Origin'),
+    distinct('MaterialType'),
   ]);
   return {
-    majors: [...new Set(cats.map((c) => c.MajorCategory))],
+    majors: [...new Set(cats.map((c) => c.MajorCategory))].filter(Boolean),
     subMajors: cats.filter((c) => c.SubMajorCategory !== ''),
     groups: groups.map((g) => g.MaterialGroup),
     origins: origins.map((o) => o.Origin),
+    materialTypes: types.map((t) => t.MaterialType),
   };
 }

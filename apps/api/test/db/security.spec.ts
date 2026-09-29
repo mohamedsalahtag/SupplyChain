@@ -37,7 +37,7 @@ async function roleId(name: string) {
 }
 
 describe('SAP purchase orders are scoped to the reader’s companies (F05)', () => {
-  it('another company’s order is left out of the list and the type options, and its lines are not found', async () => {
+  it('another company’s order is left out of the list and the filter options, and its lines are not found', async () => {
     const [poNo, type] = [uid('45'), uid('ZT')];
     await db.insertInto('md.PurchaseOrder').values({ PurchaseOrder: poNo, OrderType: type, SupplierCode: 'S1', OrderDate: new Date(), Currency: 'USD', CompanyCode: '2000', SapLastChangedAt: null, SapChangedAt: new Date() }).execute();
     await db.insertInto('md.PurchaseOrderLine').values({ PurchaseOrder: poNo, ItemNo: 10, Material: 'M1', Quantity: 5, Unit: 'CT', NetPrice: 1, PriceQuantity: 1 }).execute();
@@ -48,7 +48,7 @@ describe('SAP purchase orders are scoped to the reader’s companies (F05)', () 
     const ins = callerFor(authUser(insider, [P.purchaseOrdersOpen]));
 
     expect((await out.purchaseOrders.list({ q: poNo })).total).toBe(0);
-    expect(await out.purchaseOrders.typeOptions()).not.toContain(type);
+    expect((await out.purchaseOrders.filterOptions()).types).not.toContain(type);
     await expect(out.purchaseOrders.lines({ purchaseOrder: poNo })).rejects.toMatchObject({ code: 'NOT_FOUND' });
 
     // a reader with no company at all sees nothing
@@ -58,7 +58,7 @@ describe('SAP purchase orders are scoped to the reader’s companies (F05)', () 
 
     // the own company's reader (and an administrator: every active company) sees it
     expect((await ins.purchaseOrders.list({ q: poNo })).total).toBe(1);
-    expect(await ins.purchaseOrders.typeOptions()).toContain(type);
+    expect((await ins.purchaseOrders.filterOptions()).types).toContain(type);
     expect(await ins.purchaseOrders.lines({ purchaseOrder: poNo })).toHaveLength(1);
     expect((await callerFor(authUser(await makeUser(), [], true)).purchaseOrders.list({ q: poNo })).total).toBe(1);
   });

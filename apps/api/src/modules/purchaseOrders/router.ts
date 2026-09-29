@@ -1,6 +1,5 @@
 import { DEFAULT_TABLE_PAGE_SIZE, P, TABLE_PAGE_SIZES } from '@supplychain/shared';
 import { TRPCError } from '@trpc/server';
-import { sql } from 'kysely';
 import { z } from 'zod';
 import { audit } from '../../auth/audit.js';
 import { loadSapConnection } from '../../settings/sapConnection.js';
@@ -10,6 +9,7 @@ import { loadActor } from '../workflow/access.js';
 import { loadCodeCounts } from '../sync/codeList.js';
 import { SYNC_JOBS } from '../sync/jobs.js';
 import { launchSync } from '../sync/launch.js';
+import { listPurchaseOrders, PO_SORT_FIELDS, poFilterOptions } from './poRead.js';
 import { loadPoInclude, loadWatermark, poIncludeSchema, refreshPoTypes, runPoSync, savePoInclude, TYPES_KEY } from './poSync.js';
 
 const view = procedure.meta({ permission: P.purchaseOrdersOpen });
@@ -18,15 +18,18 @@ const run = procedure.meta({ permission: P.configPoRun });
 const fresh = procedure.meta({ permission: P.configPoFresh });
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const SORT_FIELDS = ['PurchaseOrder', 'OrderDate', 'OrderType', 'SupplierCode'] as const;
 const listInput = z.object({
   page: z.number().int().min(1).default(1),
   pageSize: z.number().int().refine((n) => (TABLE_PAGE_SIZES as readonly number[]).includes(n)).default(DEFAULT_TABLE_PAGE_SIZE),
   q: z.string().trim().max(100).optional(), // PO number, supplier code or name
-  type: z.array(z.string()).max(50).optional(),
-  from: isoDate.optional(),
+  type: z.array(z.string().max(20)).max(50).optional(),
+  supplier: z.array(z.string().max(20)).max(200).optional(),
+  major: z.array(z.string().max(80)).max(100).optional(),
+  subMajor: z.array(z.string().max(80)).max(300).optional(),
+  company: z.array(z.string().max(10)).max(20).optional(),
+  from: isoDate.optional(), // order date, from – to
   to: isoDate.optional(),
-  sortField: z.enum(SORT_FIELDS).default('OrderDate'),
+  sortField: z.enum(PO_SORT_FIELDS).default('OrderDate'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
 });
 
@@ -36,36 +39,11 @@ const listInput = z.object({
  */
 const companiesOf = async (ctx: Pick<Context, 'db'> & { user: AuthUser }) => [...(await loadActor(ctx.db, ctx.user)).companies];
 
-const contains = (s: string) => `%${s.replace(/[[%_]/g, '[$&]')}%`;
-
 export const purchaseOrdersRouter = router({
-  list: view.input(listInput).query(async ({ ctx, input: f }) => {
-    const companies = await companiesOf(ctx);
-    if (!companies.length) return { total: 0, rows: [] };
-    let q = ctx.db.selectFrom('md.PurchaseOrder as po').leftJoin('md.Supplier as s', 's.SupplierCode', 'po.SupplierCode').where('po.CompanyCode', 'in', companies);
-    if (f.q) {
-      const p = contains(f.q);
-      q = q.where((eb) => eb.or([eb('po.PurchaseOrder', 'like', p), eb('po.SupplierCode', 'like', p), eb('s.Name', 'like', p)]));
-    }
-    if (f.type?.length) q = q.where('po.OrderType', 'in', f.type);
-    if (f.from) q = q.where('po.OrderDate', '>=', sql<Date>`${f.from}`);
-    if (f.to) q = q.where('po.OrderDate', '<=', sql<Date>`${f.to}`);
-    let ordered = q
-      .select(['po.PurchaseOrder', 'po.OrderType', 'po.SupplierCode', 'po.OrderDate', 'po.Currency', 'po.CompanyCode', 's.Name as SupplierName'])
-      .select((eb) =>
-        eb.selectFrom('md.PurchaseOrderLine as l').whereRef('l.PurchaseOrder', '=', 'po.PurchaseOrder').select((e) => e.fn.countAll<number>().as('n')).as('LineCount'),
-      )
-      .orderBy(`po.${f.sortField}`, f.sortOrder);
-    if (f.sortField !== 'PurchaseOrder') ordered = ordered.orderBy('po.PurchaseOrder', 'desc');
-    const [rows, count] = await Promise.all([
-      ordered.offset((f.page - 1) * f.pageSize).fetch(f.pageSize).execute(),
-      q.select((eb) => eb.fn.countAll<number>().as('n')).executeTakeFirstOrThrow(),
-    ]);
-    return {
-      total: Number(count.n),
-      rows: rows.map((r) => ({ ...r, OrderDate: r.OrderDate.toISOString().slice(0, 10), LineCount: Number(r.LineCount ?? 0), SupplierName: r.SupplierName ?? '' })),
-    };
-  }),
+  list: view.input(listInput).query(async ({ ctx, input }) => listPurchaseOrders(ctx.db, await companiesOf(ctx), input)),
+
+  /** The filter section's choices (order types, suppliers, categories, companies) from the user's companies' orders. */
+  filterOptions: view.query(async ({ ctx }) => poFilterOptions(ctx.db, await companiesOf(ctx))),
 
   /** One order's lines, with the material description when the material is in Materials. Another company's order: not found. */
   lines: view.input(z.object({ purchaseOrder: z.string().max(20) })).query(async ({ ctx, input }) => {
@@ -83,12 +61,6 @@ export const purchaseOrdersRouter = router({
         .orderBy('l.ItemNo')
         .execute()
     ).map((l) => ({ ...l, ItemNo: Number(l.ItemNo), Quantity: Number(l.Quantity), NetPrice: Number(l.NetPrice), PriceQuantity: Number(l.PriceQuantity), MaterialDescription: l.MaterialDescription ?? '' }));
-  }),
-
-  typeOptions: view.query(async ({ ctx }) => {
-    const companies = await companiesOf(ctx);
-    if (!companies.length) return [];
-    return (await ctx.db.selectFrom('md.PurchaseOrder').select('OrderType').distinct().where('CompanyCode', 'in', companies).orderBy('OrderType').execute()).map((r) => r.OrderType);
   }),
 
   /** Z types SAP offers (last check), the chosen types and start date, and the watermark. */

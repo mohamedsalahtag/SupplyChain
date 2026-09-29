@@ -1,4 +1,5 @@
 import { DEFAULT_TABLE_PAGE_SIZE, P, TABLE_PAGE_SIZES } from '@supplychain/shared';
+import { sql, type SqlBool } from 'kysely';
 import { z } from 'zod';
 import { audit } from '../../auth/audit.js';
 import { loadSapConnection } from '../../settings/sapConnection.js';
@@ -22,6 +23,9 @@ const listInput = z.object({
   group: z.array(z.string()).max(100).optional(),
   country: z.array(z.string()).max(300).optional(),
   currency: z.array(z.string()).max(100).optional(),
+  origin: z.array(z.string().max(3)).max(100).optional(), // scm.SupplierOrigin
+  blocked: z.array(z.enum(['yes', 'no'])).max(2).optional(),
+  purchasingOrg: z.array(z.string().max(10)).max(50).optional(),
   sortField: z.enum(SORT_FIELDS).default('Name'),
   sortOrder: z.enum(['asc', 'desc']).default('asc'),
 });
@@ -30,7 +34,7 @@ const contains = (s: string) => `%${s.replace(/[[%_]/g, '[$&]')}%`;
 
 export const suppliersRouter = router({
   list: view.input(listInput).query(async ({ ctx, input: f }) => {
-    let q = ctx.db.selectFrom('md.Supplier');
+    let q = ctx.db.selectFrom('md.Supplier as sup');
     if (f.q) {
       const p = contains(f.q);
       q = q.where((eb) => eb.or([eb('SupplierCode', 'like', p), eb('Name', 'like', p), eb('Email', 'like', p)]));
@@ -38,6 +42,14 @@ export const suppliersRouter = router({
     if (f.group?.length) q = q.where('SupplierGroup', 'in', f.group);
     if (f.country?.length) q = q.where('Country', 'in', f.country);
     if (f.currency?.length) q = q.where('Currency', 'in', f.currency);
+    if (f.origin?.length) q = q.where(sql<SqlBool>`EXISTS (SELECT 1 FROM scm.SupplierOrigin so WHERE so.SupplierCode = sup.SupplierCode AND so.OriginCode IN (${sql.join(f.origin)}))`);
+    if (f.purchasingOrg?.length) q = q.where(sql<SqlBool>`EXISTS (SELECT 1 FROM md.SupplierPurchasingOrg spo WHERE spo.SupplierCode = sup.SupplierCode AND spo.PurchasingOrg IN (${sql.join(f.purchasingOrg)}))`);
+    // Blocked = the central purchasing or posting block (the Blocked column) or a block in any purchasing org. Both chosen = no filter.
+    if (f.blocked?.length === 1) {
+      const isBlocked = sql`(sup.PurchasingIsBlocked = 1 OR sup.PostingIsBlocked = 1
+        OR EXISTS (SELECT 1 FROM md.SupplierPurchasingOrg bo WHERE bo.SupplierCode = sup.SupplierCode AND bo.IsBlocked = 1))`;
+      q = q.where(f.blocked[0] === 'yes' ? sql<SqlBool>`${isBlocked}` : sql<SqlBool>`NOT ${isBlocked}`);
+    }
     let ordered = q.selectAll().orderBy(f.sortField, f.sortOrder);
     if (f.sortField !== 'SupplierCode') ordered = ordered.orderBy('SupplierCode'); // stable paging
     const [rows, count] = await Promise.all([
@@ -63,8 +75,18 @@ export const suppliersRouter = router({
   filterOptions: view.query(async ({ ctx }) => {
     const distinct = async (col: 'SupplierGroup' | 'Country' | 'Currency') =>
       (await ctx.db.selectFrom('md.Supplier').select(col).distinct().where(col, '<>', '').orderBy(col).execute()).map((r) => r[col]);
-    const [groups, countries, currencies] = await Promise.all([distinct('SupplierGroup'), distinct('Country'), distinct('Currency')]);
-    return { groups, countries, currencies };
+    const [groups, countries, currencies, origins, orgs] = await Promise.all([
+      distinct('SupplierGroup'), distinct('Country'), distinct('Currency'),
+      sql<{ OriginCode: string; Name: string | null }>`SELECT so.OriginCode, MIN(o.OriginName) AS Name FROM scm.SupplierOrigin so
+        JOIN md.Supplier s ON s.SupplierCode = so.SupplierCode LEFT JOIN scm.RefOrigin o ON o.CountryCode = so.OriginCode
+        GROUP BY so.OriginCode ORDER BY so.OriginCode`.execute(ctx.db).then((r) => r.rows),
+      ctx.db.selectFrom('md.SupplierPurchasingOrg').select('PurchasingOrg').distinct().where('PurchasingOrg', '<>', '').orderBy('PurchasingOrg').execute(),
+    ]);
+    return {
+      groups, countries, currencies,
+      origins: origins.map((o) => ({ code: o.OriginCode, name: o.Name ?? '' })),
+      purchasingOrgs: orgs.map((o) => o.PurchasingOrg),
+    };
   }),
 
   /** The Z groups SAP offers (from the last check) and the chosen ones. */

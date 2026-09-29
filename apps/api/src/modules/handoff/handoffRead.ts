@@ -1,5 +1,5 @@
 /** Stage 6 screens (spec 22): the award's Handoff tab, the Handoffs list, one handoff as the PO team sees it. */
-import { sql } from 'kysely';
+import { sql, type SqlBool } from 'kysely';
 import { hasPermission, type Actor } from '../workflow/access.js';
 import { NotFoundError } from '../workflow/errors.js';
 import { formatQty, fromDb } from '../workflow/qty.js';
@@ -71,7 +71,10 @@ export async function handoffPanel(db: Db, actor: Actor, batchId: string) {
   return { abNo: b.AbNo, cards, options: await termOptions(db) };
 }
 
-export type HandoffFilter = { q?: string; status?: string[]; page: number; pageSize: number };
+export type HandoffFilter = {
+  q?: string; status?: string[]; supplier?: string[]; withoutAck?: ('YES' | 'NO')[]; weekFrom?: string; weekTo?: string; sentFrom?: string; sentTo?: string; company?: string[];
+  page: number; pageSize: number;
+};
 
 /** Purchasing → Handoffs. */
 export async function listHandoffs(db: Db, actor: Actor, f: HandoffFilter) {
@@ -80,6 +83,16 @@ export async function listHandoffs(db: Db, actor: Actor, f: HandoffFilter) {
   let q = db.selectFrom('scm.Handoff as h').innerJoin('scm.AwardBatch as b', 'b.AwardBatchId', 'h.AwardBatchId').innerJoin('scm.Demand as d', 'd.DemandId', 'b.DemandId')
     .innerJoin('md.Supplier as sp', 'sp.SupplierCode', 'h.SupplierCode').where('h.CompanyCode', 'in', companies);
   if (f.status?.length) q = q.where('h.Status', 'in', f.status as ('HANDED_OFF' | 'ACCEPTED' | 'RETURNED')[]);
+  // The filter section (mockup list-filters).
+  if (f.supplier?.length) q = q.where('h.SupplierCode', 'in', f.supplier);
+  if (f.company?.length) q = q.where('h.CompanyCode', 'in', f.company);
+  if (f.withoutAck?.length === 1) q = q.where('h.SentWithoutAck', '=', f.withoutAck[0] === 'YES');
+  if (f.weekFrom || f.weekTo) {
+    q = q.where(sql<SqlBool>`EXISTS (SELECT 1 FROM scm.AwardShipment fs WHERE fs.AwardBatchId = h.AwardBatchId AND fs.SupplierCode = h.SupplierCode AND fs.IsActive = 1
+      AND fs.EtdWeek >= ${f.weekFrom ?? '0000-W00'} AND fs.EtdWeek <= ${f.weekTo ?? '9999-W99'})`);
+  }
+  if (f.sentFrom) q = q.where(sql<SqlBool>`h.SentAt >= ${f.sentFrom}`);
+  if (f.sentTo) q = q.where(sql<SqlBool>`h.SentAt < DATEADD(day, 1, CAST(${f.sentTo} AS date))`);
   if (f.q) { const p = `%${f.q.replace(/[[%_]/g, '[$&]')}%`; q = q.where((eb) => eb.or([eb('h.HoNo', 'like', p), eb('b.AbNo', 'like', p), eb('d.DemandNo', 'like', p), eb('sp.Name', 'like', p), eb('h.SupplierCode', 'like', p)])); }
   const [rows, count] = await Promise.all([
     q.leftJoin('app.User as s', 's.UserId', 'h.SentBy').leftJoin('app.User as a', 'a.UserId', 'h.AcceptedBy').leftJoin('app.User as r', 'r.UserId', 'h.ReturnedBy')
@@ -103,6 +116,15 @@ export async function listHandoffs(db: Db, actor: Actor, f: HandoffFilter) {
       };
     }),
   };
+}
+
+/** Choices for the Handoffs filter section: the suppliers on the user's companies' handoffs. */
+export async function handoffFilterOptions(db: Db, actor: Actor) {
+  const companies = [...actor.companies];
+  if (!companies.length || !hasPermission(actor, P_HANDOFF.open)) return { suppliers: [] };
+  const rows = (await sql<{ SupplierCode: string; Name: string | null }>`SELECT h.SupplierCode, MIN(sp.Name) AS Name FROM scm.Handoff h
+    LEFT JOIN md.Supplier sp ON sp.SupplierCode = h.SupplierCode WHERE h.CompanyCode IN (${sql.join(companies)}) GROUP BY h.SupplierCode ORDER BY MIN(sp.Name), h.SupplierCode`.execute(db)).rows;
+  return { suppliers: rows.map((r) => ({ code: r.SupplierCode, name: r.Name ?? r.SupplierCode })) };
 }
 
 /** One handoff, exactly as sent, with what the viewer can do. */

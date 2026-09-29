@@ -7,7 +7,7 @@ import { hasPermission, loadActor } from '../workflow/access.js';
 import { assertEntityAccess, registerEntityAccess } from '../workflow/entityAccess.js';
 import { DomainError } from '../workflow/errors.js';
 import { listThread } from '../workflow/threads.js';
-import { getHandoff, handoffPanel, listHandoffs, previewReadiness, termLists } from './handoffRead.js';
+import { getHandoff, handoffFilterOptions, handoffPanel, listHandoffs, previewReadiness, termLists } from './handoffRead.js';
 import { acceptHandoff, P_HANDOFF, returnHandoff, saveTerms, sendHandoff } from './handoffService.js';
 
 registerEntityAccess('HANDOFF', async (db, actor, entityId, write) => {
@@ -26,6 +26,8 @@ const ret = procedure.meta({ permission: P.handoffReturn });
 const shipping = procedure.meta({ permission: P.configShippingEdit });
 const idOf = z.string().regex(/^\d+$/);
 const command = z.object({ commandId: z.string().uuid() });
+const WEEK = z.string().regex(/^\d{4}-W\d{2}$/);
+const DAY = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const supplier = z.string().trim().min(1).max(20);
 const termsInput = {
   incoterm: z.string().max(10).nullable(), portOfLoadingId: z.coerce.number().int().nullable(), portOfDischargeId: z.coerce.number().int().nullable(), paymentTerms: z.string().max(10).nullable(),
@@ -46,8 +48,12 @@ export const handoffRouter = router({
 
   list: open.input(z.object({
     q: z.string().trim().max(60).optional(), status: z.array(z.enum(['HANDED_OFF', 'ACCEPTED', 'RETURNED'])).max(3).optional(),
+    supplier: z.array(z.string().max(20)).max(100).optional(), withoutAck: z.array(z.enum(['YES', 'NO'])).max(2).optional(),
+    weekFrom: WEEK.optional(), weekTo: WEEK.optional(), sentFrom: DAY.optional(), sentTo: DAY.optional(), company: z.array(z.string().max(10)).max(20).optional(),
     page: z.number().int().min(1).default(1), pageSize: z.number().int().refine((n) => (TABLE_PAGE_SIZES as readonly number[]).includes(n)).default(DEFAULT_TABLE_PAGE_SIZE),
   })).query(async ({ ctx, input }) => listHandoffs(ctx.db, await loadActor(ctx.db, ctx.user), input)),
+  /** The Handoffs filter section's choices (suppliers on the user's companies' handoffs). */
+  filterOptions: open.query(async ({ ctx }) => handoffFilterOptions(ctx.db, await loadActor(ctx.db, ctx.user))),
   get: open.input(z.object({ handoffId: idOf })).query(async ({ ctx, input }) => getHandoff(ctx.db, await loadActor(ctx.db, ctx.user), input.handoffId)),
   thread: open.input(z.object({ handoffId: idOf })).query(async ({ ctx, input }) => {
     await assertEntityAccess(ctx.db, await loadActor(ctx.db, ctx.user), 'HANDOFF', input.handoffId, false);

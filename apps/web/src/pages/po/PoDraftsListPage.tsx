@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Alert, App, Button, Card, Input, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
-import { ReloadOutlined, SyncOutlined } from '@ant-design/icons';
+import { SyncOutlined } from '@ant-design/icons';
 import { P } from '@supplychain/shared';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AppTable, type AppColumn } from '../../components/AppTable';
-import { MultiFilter } from '../../components/MultiFilter';
+import { many, one, useListFilters, type FilterField } from '../../components/ListFilters';
 import { StatusLegend, StatusTag } from '../../components/StatusTag';
 import { useCan } from '../../lib/auth';
 import { formatDateTime, type RouterOutputs } from '../../lib/format';
@@ -16,7 +16,6 @@ import { countOf, TabLabel } from '../../components/TabLabel';
 
 type Row = RouterOutputs['po']['list']['rows'][number];
 type Status = 'DRAFT' | 'VALIDATED' | 'SUBMITTED' | 'UNKNOWN' | 'CREATED' | 'REJECTED' | 'VOID';
-const byLabel = Object.fromEntries(Object.entries(PO_STATUS).map(([k, v]) => [v.label, k])) as Record<string, Status>;
 
 /** Purchasing → PO drafts & SAP (spec 23): the drafts and their SAP outcome, master data requests, the SAP stub. */
 export function PoDraftsListPage() {
@@ -35,7 +34,7 @@ export function PoDraftsListPage() {
         </Space>
         <StatusLegend title="What do the PO statuses mean?" defs={PO_STATUS} />
       </div>
-      <Tabs activeKey={params.get('tab') ?? 'drafts'} onChange={(k) => setParams({ tab: k }, { replace: true })} items={[
+      <Tabs activeKey={params.get('tab') ?? 'drafts'} onChange={(k) => setParams((p) => { p.set('tab', k); return p; }, { replace: true })} items={[
         { key: 'drafts', label: <TabLabel text="PO drafts" count={drafts.data?.total} />, children: <Drafts /> },
         { key: 'mdr', label: <TabLabel text="Master data requests" count={requests.data?.filter((r) => r.status === 'OPEN').length} />, children: <Requests /> },
         ...(can(P.configSapEdit) ? [{ key: 'stub', label: <TabLabel text="SAP simulator" count={countOf(faults.data)} />, children: <Stub /> }] : []),
@@ -47,11 +46,25 @@ export function PoDraftsListPage() {
 function Drafts() {
   const navigate = useNavigate();
   const prefs = useTablePrefs('po-drafts', []);
-  const [status, setStatus] = useState<Status[] | undefined>();
   const [q, setQ] = useState<string>();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const list = trpc.po.list.useQuery({ page, pageSize: prefs.pageSize, q, status }, { enabled: prefs.ready, placeholderData: (p) => p });
+  const companies = trpc.workflowSetup.companyOptions.useQuery();
+  const opts = trpc.po.filterOptions.useQuery();
+  // The filter section (mockup list-filters).
+  const fields = useMemo<FilterField[]>(() => [
+    { key: 'status', label: 'Status', type: 'multi', options: Object.entries(PO_STATUS).map(([value, d]) => ({ value, label: d.label })) },
+    { key: 'supplier', label: 'Supplier', type: 'multi', options: (opts.data?.suppliers ?? []).map((s) => ({ value: s.code, label: `${s.code} · ${s.name}` })) },
+    { key: 'sap', label: 'SAP or simulator', type: 'multi', options: [{ value: 'SAP', label: 'SAP' }, { value: 'SIMULATED', label: 'Simulated' }] },
+    { key: 'submitted', label: 'Submitted, from – to', type: 'dates', fromKey: 'submittedFrom', toKey: 'submittedTo' },
+    { key: 'company', label: 'Company', type: 'multi', options: (companies.data ?? []).map((c) => ({ value: c.CompanyCode, label: `${c.CompanyCode} · ${c.Name}` })) },
+  ], [opts.data, companies.data]);
+  const filters = useListFilters(fields, () => setPage(1));
+  const f = filters.applied;
+  const list = trpc.po.list.useQuery({
+    page, pageSize: prefs.pageSize, q, status: many(f, 'status') as Status[] | undefined, supplier: many(f, 'supplier'), sap: many(f, 'sap') as ('SAP' | 'SIMULATED')[] | undefined,
+    submittedFrom: one(f, 'submittedFrom'), submittedTo: one(f, 'submittedTo'), company: many(f, 'company'),
+  }, { enabled: prefs.ready, placeholderData: (p) => p });
   const columns: AppColumn<Row>[] = [
     { title: 'PO draft', key: 'no', dataIndex: 'poDraftNo', width: 115 },
     { title: 'SAP PO', key: 'sap', dataIndex: 'sapPoNumber', width: 110, render: (v: string | null, r: { simulated: boolean }) => (v ? (r.simulated ? <Tag color="orange" title="From the SAP simulator: nothing was created in SAP">{v}</Tag> : v) : '—') },
@@ -70,10 +83,9 @@ function Drafts() {
         toolbar={<>
           <Input.Search id="poSearch" placeholder="PO draft, SAP PO, handoff, demand or supplier" allowClear value={search} style={{ width: 300 }}
             onChange={(e) => { setSearch(e.target.value); if (!e.target.value) { setQ(undefined); setPage(1); } }} onSearch={(v) => { setQ(v.trim() || undefined); setPage(1); }} />
-          <MultiFilter id="f-postatus" placeholder="Status" options={Object.values(PO_STATUS).map((s) => s.label)} value={status?.map((s) => PO_STATUS[s].label)}
-            onChange={(v) => { setStatus(v?.map((l) => byLabel[l])); setPage(1); }} width={220} />
-          <Button icon={<ReloadOutlined />} onClick={() => { setStatus(undefined); setQ(undefined); setSearch(''); setPage(1); }}>Reset</Button>
-        </>} />
+          {filters.bar}
+        </>}
+        beforeTable={filters.panel} />
     </>
   );
 }

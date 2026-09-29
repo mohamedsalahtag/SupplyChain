@@ -69,7 +69,7 @@ test('23 · accept the handoff, pick SKUs, build, validate, submit; reply lost �
   const draftUrl = page.url();
   const podNo = (await page.getByRole('heading', { level: 5 }).first().textContent())!.match(/POD-\d{6}/)![0];
   await page.getByRole('button', { name: 'Validate' }).click();
-  await expect(page.getByText('Validated — ready to submit')).toBeVisible();
+  await expect(page.getByText('Validated — ready to submit').first()).toBeVisible(); // the status tag (the success message says the same)
   // Fault injection is for administrators (SAP settings): back to the admin for a moment
   await viewAs(page, null);
   await page.goto('/po-drafts?tab=stub');
@@ -79,7 +79,7 @@ test('23 · accept the handoff, pick SKUs, build, validate, submit; reply lost �
   await viewAs(page, 'Demo PO team');
   await page.goto(draftUrl);
   await page.getByRole('button', { name: 'Submit to SAP' }).click();
-  await page.locator('.ant-modal-confirm').getByRole('button', { name: 'Submit to SAP' }).click();
+  await page.locator('.ant-modal-confirm').getByRole('button', { name: /^Submit to (SAP|the simulator)$/ }).click(); // the dev server submits to the simulator
   await expect(page.getByText(`${podNo} submitted to SAP`)).toBeVisible();
   await page.getByRole('button', { name: 'Process now' }).click();
   await expect(page.getByText('SAP outcome unknown').first()).toBeVisible();

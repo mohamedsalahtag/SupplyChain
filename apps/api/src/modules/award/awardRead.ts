@@ -1,5 +1,5 @@
 /** Reading awards (spec 20): one award batch, the Awards list. (The award grid is containerGrid.ts.) */
-import { sql, type SqlBool } from 'kysely';
+import { sql, type RawBuilder, type SqlBool } from 'kysely';
 import { awardProgressFor, awardWaitingFor, awardWaitingSql, type Team } from '../demand/progress.js';
 import { hasPermission, type Actor } from '../workflow/access.js';
 import { NotFoundError } from '../workflow/errors.js';
@@ -96,7 +96,29 @@ export async function getBatch(db: Db, actor: Actor, batchId: string) {
   };
 }
 
-export async function listBatches(db: Db, actor: Actor, f: { q?: string; rfqId?: string; demandId?: string; ack?: string[]; waitingOn?: Team[]; page: number; pageSize: number }) {
+export type AwardFilters = {
+  q?: string; rfqId?: string; demandId?: string; ack?: string[]; waitingOn?: Team[]; supplier?: string[]; origin?: string[]; major?: string[]; subMajor?: string[];
+  weekFrom?: string; weekTo?: string; currency?: string[]; awardedFrom?: string; awardedTo?: string; company?: string[]; page: number; pageSize: number;
+};
+
+/** The filter section's conditions on alias b: an active award item with that supplier / week / currency, or on an RFQ line with that material. */
+function awardFilterSql(f: AwardFilters): RawBuilder<SqlBool>[] {
+  const out: RawBuilder<SqlBool>[] = [];
+  const itemHas = (cond: RawBuilder<unknown>) => sql<SqlBool>`EXISTS (SELECT 1 FROM scm.AwardItem fi WHERE fi.AwardBatchId = b.AwardBatchId AND fi.IsActive = 1 AND ${cond})`;
+  const lineHas = (cond: RawBuilder<unknown>) => sql<SqlBool>`EXISTS (SELECT 1 FROM scm.AwardItem fi JOIN scm.RfqLine fl ON fl.RfqLineId = fi.RfqLineId
+    WHERE fi.AwardBatchId = b.AwardBatchId AND fi.IsActive = 1 AND ${cond})`;
+  if (f.supplier?.length) out.push(itemHas(sql`fi.SupplierCode IN (${sql.join(f.supplier)})`));
+  if (f.currency?.length) out.push(itemHas(sql`fi.Currency IN (${sql.join(f.currency)})`));
+  if (f.weekFrom || f.weekTo) out.push(itemHas(sql`fi.EtdWeek >= ${f.weekFrom ?? '0000-W00'} AND fi.EtdWeek <= ${f.weekTo ?? '9999-W99'}`));
+  if (f.origin?.length) out.push(lineHas(sql`fl.OriginCode IN (${sql.join(f.origin)})`));
+  if (f.major?.length) out.push(lineHas(sql`fl.MajorCategory IN (${sql.join(f.major)})`));
+  if (f.subMajor?.length) out.push(lineHas(sql`fl.SubMajorCategory IN (${sql.join(f.subMajor)})`));
+  if (f.awardedFrom) out.push(sql<SqlBool>`b.CreatedAt >= ${f.awardedFrom}`);
+  if (f.awardedTo) out.push(sql<SqlBool>`b.CreatedAt < DATEADD(day, 1, CAST(${f.awardedTo} AS date))`);
+  return out;
+}
+
+export async function listBatches(db: Db, actor: Actor, f: AwardFilters) {
   const companies = [...actor.companies];
   if (!companies.length) return { rows: [], total: 0 };
   let q = db.selectFrom('scm.AwardBatch as b').innerJoin('scm.Rfq as r', 'r.RfqId', 'b.RfqId').innerJoin('scm.Demand as d', 'd.DemandId', 'b.DemandId')
@@ -104,6 +126,8 @@ export async function listBatches(db: Db, actor: Actor, f: { q?: string; rfqId?:
   if (f.rfqId) q = q.where('b.RfqId', '=', f.rfqId);
   if (f.demandId) q = q.where('b.DemandId', '=', f.demandId);
   if (f.ack?.length) q = q.where('a.Status', 'in', f.ack as never[]);
+  if (f.company?.length) q = q.where('b.CompanyCode', 'in', f.company);
+  for (const c of awardFilterSql(f)) q = q.where(c);
   if (f.waitingOn?.length) q = q.where(sql<SqlBool>`(${sql.join(f.waitingOn.map(awardWaitingSql), sql` OR `)})`);
   if (f.q) { const p = `%${f.q.replace(/[[%_]/g, '[$&]')}%`; q = q.where((eb) => eb.or([eb('b.AbNo', 'like', p), eb('r.RfqNo', 'like', p), eb('d.DemandNo', 'like', p)])); }
   const [rows, count] = await Promise.all([
@@ -127,5 +151,28 @@ export async function listBatches(db: Db, actor: Actor, f: { q?: string; rfqId?:
       progress: progress.get(String(r.AwardBatchId)) ?? null, waitingOn: waiting.get(String(r.AwardBatchId)) ?? [],
       quantity: qty.filter((x) => String(x.AwardBatchId) === String(r.AwardBatchId)).map((x) => `${Number(formatQty(fromDb(x.Q))).toLocaleString('en-GB')} ${x.Unit}`).join(' · '),
     })),
+  };
+}
+
+/** Choices for the Awards filter section (only values that occur on the user's companies' active award items). */
+export async function awardFilterOptions(db: Db, actor: Actor) {
+  const companies = [...actor.companies];
+  if (!companies.length) return { categories: [], origins: [], suppliers: [], currencies: [] };
+  const items = sql`scm.AwardItem i JOIN scm.AwardBatch b ON b.AwardBatchId = i.AwardBatchId`;
+  const where = sql`b.CompanyCode IN (${sql.join(companies)}) AND i.IsActive = 1`;
+  const [cats, origins, suppliers, currencies] = await Promise.all([
+    sql<{ MajorCategory: string; SubMajorCategory: string }>`SELECT DISTINCT l.MajorCategory, l.SubMajorCategory FROM ${items} JOIN scm.RfqLine l ON l.RfqLineId = i.RfqLineId
+      WHERE ${where} ORDER BY l.MajorCategory, l.SubMajorCategory`.execute(db).then((r) => r.rows),
+    sql<{ OriginCode: string; Name: string | null }>`SELECT l.OriginCode, MIN(o.OriginName) AS Name FROM ${items} JOIN scm.RfqLine l ON l.RfqLineId = i.RfqLineId
+      LEFT JOIN scm.RefOrigin o ON o.CountryCode = l.OriginCode WHERE ${where} GROUP BY l.OriginCode ORDER BY l.OriginCode`.execute(db).then((r) => r.rows),
+    sql<{ SupplierCode: string; Name: string | null }>`SELECT i.SupplierCode, MIN(sp.Name) AS Name FROM ${items} LEFT JOIN md.Supplier sp ON sp.SupplierCode = i.SupplierCode
+      WHERE ${where} GROUP BY i.SupplierCode ORDER BY MIN(sp.Name), i.SupplierCode`.execute(db).then((r) => r.rows),
+    sql<{ Currency: string }>`SELECT DISTINCT i.Currency FROM ${items} WHERE ${where} ORDER BY i.Currency`.execute(db).then((r) => r.rows),
+  ]);
+  return {
+    categories: cats.map((c) => ({ major: c.MajorCategory, subMajor: c.SubMajorCategory })),
+    origins: origins.map((o) => ({ code: o.OriginCode, name: o.Name ?? o.OriginCode })),
+    suppliers: suppliers.map((x) => ({ code: x.SupplierCode, name: x.Name ?? x.SupplierCode })),
+    currencies: currencies.map((c) => c.Currency),
   };
 }

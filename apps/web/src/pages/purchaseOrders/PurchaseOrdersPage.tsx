@@ -1,17 +1,14 @@
-import { useState } from 'react';
-import { Alert, Button, DatePicker, Descriptions, Drawer, Input, Space, Table, Typography, type TableProps } from 'antd';
-import { ReloadOutlined } from '@ant-design/icons';
-import type { Dayjs } from 'dayjs';
+import { useMemo, useState } from 'react';
+import { Alert, Descriptions, Drawer, Input, Space, Table, Typography, type TableProps } from 'antd';
 import { Link } from 'react-router-dom';
 import { AppTable, type AppColumn } from '../../components/AppTable';
-import { MultiFilter } from '../../components/MultiFilter';
+import { many, one, useListFilters, type FilterField } from '../../components/ListFilters';
 import { formatDateTime, formatNumber, type RouterOutputs } from '../../lib/format';
 import { trpc } from '../../lib/trpc';
 import { useTablePrefs } from '../../lib/useTablePrefs';
 
 type Row = RouterOutputs['purchaseOrders']['list']['rows'][number];
 type Line = RouterOutputs['purchaseOrders']['lines'][number];
-type Filters = { q?: string; type?: string[]; from?: string; to?: string };
 type SortField = 'PurchaseOrder' | 'OrderDate' | 'OrderType' | 'SupplierCode';
 type Sort = { sortField: SortField; sortOrder: 'asc' | 'desc' };
 
@@ -22,22 +19,35 @@ const money = (n: number) => n.toLocaleString('en-GB', { minimumFractionDigits: 
 /** Purchasing → Purchase orders: read-only list copied from SAP. Spec 09. */
 export function PurchaseOrdersPage() {
   const prefs = useTablePrefs('purchase-orders');
-  const [filters, setFilters] = useState<Filters>({});
+  const [q, setQ] = useState<string>();
   const [search, setSearch] = useState('');
-  const [range, setRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<Sort>(DEFAULT_SORT);
   const [selected, setSelected] = useState<Row | null>(null);
 
-  const list = trpc.purchaseOrders.list.useQuery({ page, pageSize: prefs.pageSize, ...filters, ...sort }, { placeholderData: (p) => p, enabled: prefs.ready });
-  const types = trpc.purchaseOrders.typeOptions.useQuery();
+  const opts = trpc.purchaseOrders.filterOptions.useQuery();
+  // The filter section (mockup list-filters): Sub-major follows the chosen Major.
+  const fields = useMemo<FilterField[]>(() => {
+    const cats = opts.data?.categories ?? [];
+    return [
+      { key: 'type', label: 'Order type', type: 'multi', options: (opts.data?.types ?? []).map((t) => ({ value: t, label: t })) },
+      { key: 'supplier', label: 'Supplier', type: 'multi', options: (opts.data?.suppliers ?? []).map((s) => ({ value: s.code, label: s.name ? `${s.code} · ${s.name}` : s.code })) },
+      { key: 'major', label: 'Major category', type: 'multi', options: [...new Set(cats.map((c) => c.major))].map((m) => ({ value: m, label: m })) },
+      { key: 'subMajor', label: 'Sub-major category', type: 'multi', parentKey: 'major',
+        options: [...new Set(cats.map((c) => c.subMajor).filter(Boolean))].map((sm) => ({ value: sm, label: sm, parents: cats.filter((c) => c.subMajor === sm).map((c) => c.major) })) },
+      { key: 'orderDate', label: 'Order date, from – to', type: 'dates', fromKey: 'from', toKey: 'to' },
+      { key: 'company', label: 'Company', type: 'multi', options: (opts.data?.companies ?? []).map((c) => ({ value: c.code, label: c.name ? `${c.code} · ${c.name}` : c.code })) },
+    ];
+  }, [opts.data]);
+  const filters = useListFilters(fields, () => setPage(1));
+  const f = filters.applied;
+  const list = trpc.purchaseOrders.list.useQuery({
+    page, pageSize: prefs.pageSize, q, type: many(f, 'type'), supplier: many(f, 'supplier'), major: many(f, 'major'), subMajor: many(f, 'subMajor'),
+    company: many(f, 'company'), from: one(f, 'from'), to: one(f, 'to'), ...sort,
+  }, { placeholderData: (p) => p, enabled: prefs.ready });
   const lines = trpc.purchaseOrders.lines.useQuery({ purchaseOrder: selected?.PurchaseOrder ?? '' }, { enabled: !!selected });
   const status = trpc.sync.status.useQuery({ source: 'sap.purchaseOrders' });
 
-  const setFilter = (patch: Filters) => {
-    setFilters((f) => ({ ...f, ...patch }));
-    setPage(1);
-  };
   const sortable = (field: SortField) => ({
     sorter: true,
     sortOrder: sort.sortField === field ? (sort.sortOrder === 'asc' ? ('ascend' as const) : ('descend' as const)) : null,
@@ -104,17 +114,12 @@ export function PurchaseOrdersPage() {
         toolbar={
           <>
             <Input.Search id="poSearch" placeholder="PO number, supplier code or name" allowClear value={search}
-              onChange={(e) => { setSearch(e.target.value); if (!e.target.value) setFilter({ q: undefined }); }}
-              onSearch={(v) => setFilter({ q: v.trim() || undefined })} style={{ width: 250, maxWidth: '100%' }} />
-            <MultiFilter id="f-type" placeholder="Order type" options={types.data ?? []} value={filters.type} onChange={(v) => setFilter({ type: v })} width={150} />
-            <DatePicker.RangePicker id="f-dates" value={range} format="DD MMM YYYY" allowEmpty={[true, true]}
-              onChange={(v) => {
-                setRange(v);
-                setFilter({ from: v?.[0]?.format('YYYY-MM-DD'), to: v?.[1]?.format('YYYY-MM-DD') });
-              }} />
-            <Button icon={<ReloadOutlined />} onClick={() => { setFilters({}); setSearch(''); setRange(null); setPage(1); }}>Reset</Button>
+              onChange={(e) => { setSearch(e.target.value); if (!e.target.value) { setQ(undefined); setPage(1); } }}
+              onSearch={(v) => { setQ(v.trim() || undefined); setPage(1); }} style={{ width: 250, maxWidth: '100%' }} />
+            {filters.bar}
           </>
         }
+        beforeTable={filters.panel}
       />
 
       <Drawer open={!!selected} onClose={() => setSelected(null)} width={620} title={selected ? `PO ${selected.PurchaseOrder}` : ''}>

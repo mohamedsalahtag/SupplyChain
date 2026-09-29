@@ -1,5 +1,5 @@
 /** Stage 7 screens (spec 23): PO preparation of a handoff, one PO draft, the drafts list, master data requests. */
-import { sql } from 'kysely';
+import { sql, type SqlBool } from 'kysely';
 import { lineLabel } from '../award/awardCheck.js';
 import { hasPermission, type Actor } from '../workflow/access.js';
 import { NotFoundError } from '../workflow/errors.js';
@@ -96,13 +96,22 @@ export async function getDraft(db: Db, actor: Actor, draftId: string) {
   };
 }
 
-export type DraftFilter = { q?: string; status?: string[]; page: number; pageSize: number };
+export type DraftFilter = {
+  q?: string; status?: string[]; supplier?: string[]; sap?: ('SAP' | 'SIMULATED')[]; submittedFrom?: string; submittedTo?: string; company?: string[]; page: number; pageSize: number;
+};
+/** A draft whose PO number came from the SAP simulator (the filter section's "SAP or simulator"). */
+const SIMULATED = sql<SqlBool>`EXISTS (SELECT 1 FROM scm.StubSapPo x WHERE x.Reference = d.PoDraftNo)`;
 export async function listDrafts(db: Db, actor: Actor, f: DraftFilter) {
   const companies = [...actor.companies];
   if (!companies.length || !hasPermission(actor, P_PO.open)) return { rows: [], total: 0 };
   let q = db.selectFrom('scm.PoDraft as d').innerJoin('scm.Handoff as h', 'h.HandoffId', 'd.HandoffId').innerJoin('scm.AwardBatch as b', 'b.AwardBatchId', 'h.AwardBatchId')
     .innerJoin('scm.Demand as dm', 'dm.DemandId', 'b.DemandId').innerJoin('md.Supplier as sp', 'sp.SupplierCode', 'd.SupplierCode').where('d.CompanyCode', 'in', companies);
   if (f.status?.length) q = q.where('d.Status', 'in', f.status as never[]);
+  if (f.supplier?.length) q = q.where('d.SupplierCode', 'in', f.supplier);
+  if (f.company?.length) q = q.where('d.CompanyCode', 'in', f.company);
+  if (f.sap?.length === 1) q = q.where(f.sap[0] === 'SIMULATED' ? SIMULATED : sql<SqlBool>`d.SapPoNumber IS NOT NULL AND NOT ${SIMULATED}`);
+  if (f.submittedFrom) q = q.where(sql<SqlBool>`d.SubmittedAt >= ${f.submittedFrom}`);
+  if (f.submittedTo) q = q.where(sql<SqlBool>`d.SubmittedAt < DATEADD(day, 1, CAST(${f.submittedTo} AS date))`);
   if (f.q) { const p = `%${f.q.replace(/[[%_]/g, '[$&]')}%`; q = q.where((eb) => eb.or([eb('d.PoDraftNo', 'like', p), eb('h.HoNo', 'like', p), eb('dm.DemandNo', 'like', p), eb('sp.Name', 'like', p), eb('d.SapPoNumber', 'like', p)])); }
   const [rows, count] = await Promise.all([
     q.leftJoin('scm.SapSubmission as s', 's.PoDraftId', 'd.PoDraftId')
@@ -118,6 +127,15 @@ export async function listDrafts(db: Db, actor: Actor, f: DraftFilter) {
       attempts: r.Attempts ?? 0, lastError: r.LastError?.split('\n')[0] ?? null,
     })),
   };
+}
+
+/** Choices for the PO drafts filter section: the suppliers on the user's companies' drafts. */
+export async function poFilterOptions(db: Db, actor: Actor) {
+  const companies = [...actor.companies];
+  if (!companies.length || !hasPermission(actor, P_PO.open)) return { suppliers: [] };
+  const rows = (await sql<{ SupplierCode: string; Name: string | null }>`SELECT d.SupplierCode, MIN(sp.Name) AS Name FROM scm.PoDraft d
+    LEFT JOIN md.Supplier sp ON sp.SupplierCode = d.SupplierCode WHERE d.CompanyCode IN (${sql.join(companies)}) GROUP BY d.SupplierCode ORDER BY MIN(sp.Name), d.SupplierCode`.execute(db)).rows;
+  return { suppliers: rows.map((r) => ({ code: r.SupplierCode, name: r.Name ?? r.SupplierCode })) };
 }
 
 export async function listMdr(db: Db, actor: Actor) {

@@ -74,8 +74,7 @@ test('12 · compose containers (sizes × classes), copy a group, submit, accept'
   // Procurement accepts from My work
   await page.goto('/work?tab=DEMAND_TO_ACCEPT');
   // other runs may have left many demands waiting: search for this one
-  await page.getByRole('button', { name: 'Filters' }).click();
-  await page.locator('#workSearch').fill(demandNo);
+  await page.locator('#workSearch').fill(demandNo); // the search box stays on top; the filter section is not needed
   await page.locator('#workSearch').press('Enter');
   const row = page.locator('.ant-table-tbody tr.ant-table-row', { hasText: demandNo });
   await expect(row).toContainText('4 container(s)');
@@ -97,6 +96,6 @@ test('12 · compose containers (sizes × classes), copy a group, submit, accept'
   await page.locator('#demandSearch').fill(demandNo);
   await page.locator('#demandSearch').press('Enter');
   const listed = page.locator('.ant-table-tbody tr.ant-table-row', { hasText: demandNo });
-  await expect(listed).toContainText('Accepted · nothing sourced yet');
+  await expect(listed).toContainText('100% open'); // the Progress cell carries the stage (spec 31)
   await expect(listed).toContainText('6,160 CT');
 });

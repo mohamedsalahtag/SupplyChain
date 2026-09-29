@@ -33,11 +33,17 @@ test('01 · Materials: multi-select filters, drawer, no numeric codes', async ({
   const all = await totalOf(page);
   expect(all).toBeGreaterThan(1000);
 
-  await pickOption(page, 'f-major', 'Citrus');
+  // Filters sit in the filter section and apply on Apply.
+  await page.getByTestId('filters-button').click();
+  await pickOption(page, 'flt-major', 'Citrus');
+  await page.keyboard.press('Escape');
+  await page.getByTestId('filters-apply').click();
   await expect.poll(() => totalOf(page)).toBeLessThan(all);
   const citrus = await totalOf(page);
-  await pickOption(page, 'f-major', 'Apples'); // second value in the same filter
+  await page.getByTestId('filters-button').click();
+  await pickOption(page, 'flt-major', 'Apples'); // second value in the same filter
   await page.keyboard.press('Escape');
+  await page.getByTestId('filters-apply').click();
   await expect.poll(() => totalOf(page)).toBeGreaterThan(citrus);
 
   const rows = page.locator('.ant-table-tbody tr.ant-table-row');
