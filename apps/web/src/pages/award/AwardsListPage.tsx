@@ -22,7 +22,7 @@ const ackTag = (r: Row) => <StatusTag def={ACK_STATUS[r.ackStatus]} label={`${AC
 /** Purchasing → Awards (spec 20). */
 export function AwardsListPage() {
   const navigate = useNavigate();
-  const prefs = useTablePrefs('awards', []);
+  const prefs = useTablePrefs('awards', ['companyCode']);
   const [filters, setFilters] = useState<Filters>({});
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);

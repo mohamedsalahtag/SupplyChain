@@ -9,6 +9,8 @@ import { rowVerHex, type Db } from '../workflow/tx.js';
 import { P_RFQ } from './rfqService.js';
 import { supplierShortlist, type Hint } from './shortlist.js';
 import { rfqLineStatus, rfqStatus } from './status.js';
+import { rfqProgressFor, rfqWaitingFor, rfqWaitingSql } from './rfqProgress.js';
+import type { Team } from '../demand/progress.js';
 
 const label = (l: { SubMajorCategory: string; Size: string; MaterialClass: string; MaterialCode: string | null }) =>
   [l.SubMajorCategory, anySize(l.Size), anyClass(l.MaterialClass), l.MaterialCode].filter(Boolean).join(' ');
@@ -165,7 +167,7 @@ export async function getRfq(db: Db, actor: Actor, rfqId: string) {
   };
 }
 
-export type RfqFilters = { q?: string; company?: string[]; status?: string[]; demandId?: string; page: number; pageSize: number };
+export type RfqFilters = { q?: string; company?: string[]; status?: string[]; demandId?: string; waitingOn?: Team[]; page: number; pageSize: number };
 
 /**
  * Purchasing → RFQs. Status, filter and paging run in SQL (database review 2026-09): the list used to load every RFQ of
@@ -184,7 +186,8 @@ export async function listRfqs(db: Db, actor: Actor, f: RfqFilters) {
       ISNULL(SUM(CASE WHEN s.ExecState IN (${sql.join(AWARDED)}) THEN s.Qty END), 0) AS Awarded
     FROM scm.RfqLine l LEFT JOIN scm.QtySlice s ON s.RfqLineId = l.RfqLineId WHERE l.RfqId IN (${ids}) GROUP BY l.RfqId)`;
   const scope = sql`SELECT r.RfqId FROM scm.Rfq r JOIN scm.Demand d ON d.DemandId = r.DemandId WHERE r.CompanyCode IN (${sql.join(companies)})
-    ${like ? sql`AND (r.RfqNo LIKE ${like} OR d.DemandNo LIKE ${like})` : sql``} ${f.demandId ? sql`AND r.DemandId = ${f.demandId}` : sql``}`;
+    ${like ? sql`AND (r.RfqNo LIKE ${like} OR d.DemandNo LIKE ${like})` : sql``} ${f.demandId ? sql`AND r.DemandId = ${f.demandId}` : sql``}
+    ${f.waitingOn?.length ? sql`AND (${sql.join(f.waitingOn.map(rfqWaitingSql), sql` OR `)})` : sql``}`;
   const offset = (f.page - 1) * f.pageSize;
   type Row = { RfqId: string; RfqNo: string; DemandId: string; DemandNo: string; CompanyCode: string; ManualStatus: 'DRAFT' | 'SENT' | 'CANCELLED'; CreatedAt: Date; CreatedByName: string | null;
     W1: string | null; W2: string | null; InRfq: string; Quoted: string; Awarded: string; Total: number };
@@ -204,12 +207,13 @@ export async function listRfqs(db: Db, actor: Actor, f: RfqFilters) {
   const total = Number(pageRows[0]?.Total ?? (f.page > 1 ? (await sql<{ n: number }>`SELECT COUNT(*) AS n FROM scm.Rfq r WHERE r.RfqId IN (${scope})`.execute(db)).rows[0].n : 0));
   const ids = pageRows.map((r) => String(r.RfqId));
   // Supplier counts and the last step: for the page only.
-  const [counts, steps] = await Promise.all([
+  const [counts, steps, progress, waiting] = await Promise.all([
     ids.length ? sql<{ RfqId: string; Suppliers: number; Quoted: number }>`
       SELECT s.RfqId, COUNT(*) AS Suppliers, COUNT(q.One) AS Quoted
       FROM scm.RfqSupplier s OUTER APPLY (SELECT TOP 1 1 AS One FROM scm.SupplierQuote x WHERE x.RfqId = s.RfqId AND x.SupplierCode = s.SupplierCode AND x.IsCurrent = 1) q
       WHERE s.RfqId IN (${sql.join(ids)}) GROUP BY s.RfqId`.execute(db).then((r) => r.rows) : Promise.resolve([]),
     rfqSteps(db, ids), // spec 21: the last step per RFQ
+    rfqProgressFor(db, ids), rfqWaitingFor(db, ids), // where its quantity is and whose turn it is (demand progress)
   ]);
   const rows = pageRows.map((r) => {
     const c = counts.find((x) => String(x.RfqId) === String(r.RfqId));
@@ -218,6 +222,7 @@ export async function listRfqs(db: Db, actor: Actor, f: RfqFilters) {
       status: rfqStatus(r.ManualStatus, { inRfq: fromDb(r.InRfq), quoted: fromDb(r.Quoted), awarded: fromDb(r.Awarded) }),
       weeks: r.W1 ? (r.W1 !== r.W2 ? `${r.W1} – ${r.W2}` : r.W1) : '', suppliers: Number(c?.Suppliers ?? 0), quoted: Number(c?.Quoted ?? 0),
       createdBy: r.CreatedByName ?? '', createdAt: r.CreatedAt.toISOString(), lastStep: steps.get(String(r.RfqId))?.at(-1) ?? null,
+      progress: progress.get(String(r.RfqId)) ?? null, waitingOn: waiting.get(String(r.RfqId)) ?? [],
     };
   });
   return { total, rows };

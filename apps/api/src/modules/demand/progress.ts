@@ -7,21 +7,21 @@ import { sql, type RawBuilder, type SqlBool } from 'kysely';
 import { formatQty, fromDb } from '../workflow/qty.js';
 import type { Db } from '../workflow/tx.js';
 
-export const STAGES = ['onPo', 'onPoSimulated', 'poPrep', 'handedOff', 'awarded', 'inRfq', 'open', 'cancelled'] as const;
+export const STAGES = ['onPo', 'onPoSimulated', 'poPrep', 'handedOff', 'awarded', 'quoted', 'inRfq', 'open', 'cancelled'] as const;
 export type Stage = (typeof STAGES)[number];
 export type Progress = Record<Stage, number>;
 export const TEAMS = ['PROCUREMENT', 'PO_TEAM', 'SALES', 'NONE'] as const;
 export type Team = (typeof TEAMS)[number];
 
 const STATE_STAGE: Record<string, Stage> = {
-  OPEN: 'open', IN_RFQ: 'inRfq', QUOTED: 'inRfq', AWARDED: 'awarded', HANDED_OFF: 'handedOff', PO_PREPARATION: 'poPrep',
+  OPEN: 'open', IN_RFQ: 'inRfq', QUOTED: 'quoted', AWARDED: 'awarded', HANDED_OFF: 'handedOff', PO_PREPARATION: 'poPrep',
   PO_SUBMITTED: 'onPo', PO_CREATED: 'onPo', CANCELLED: 'cancelled',
 };
 /** Who moves each stage on (on PO and cancelled: nobody). */
-export const STAGE_TEAM: Partial<Record<Stage, Team>> = { open: 'PROCUREMENT', inRfq: 'PROCUREMENT', awarded: 'PROCUREMENT', handedOff: 'PO_TEAM', poPrep: 'PO_TEAM' };
+export const STAGE_TEAM: Partial<Record<Stage, Team>> = { open: 'PROCUREMENT', inRfq: 'PROCUREMENT', quoted: 'PROCUREMENT', awarded: 'PROCUREMENT', handedOff: 'PO_TEAM', poPrep: 'PO_TEAM' };
 
 // A slice on PO whose PO number came from the SAP simulator (the draft's reference is in scm.StubSapPo): not in SAP.
-const SIM_APPLY = sql`OUTER APPLY (SELECT CASE WHEN s.ExecState IN ('PO_SUBMITTED', 'PO_CREATED') AND EXISTS (
+export const SIM_APPLY = sql`OUTER APPLY (SELECT CASE WHEN s.ExecState IN ('PO_SUBMITTED', 'PO_CREATED') AND EXISTS (
     SELECT 1 FROM scm.PoDraft pd JOIN scm.StubSapPo x ON x.Reference = pd.PoDraftNo
     WHERE pd.HandoffId = s.HandoffId AND pd.Status IN ('SUBMITTED', 'UNKNOWN', 'CREATED')) THEN 1 ELSE 0 END AS Sim) f`;
 
@@ -73,7 +73,7 @@ export function waitingSql(team: Team): RawBuilder<SqlBool> {
 export type Waiting = { team: Team; text: string };
 
 const q3 = (m: number) => Number(formatQty(m)).toLocaleString('en-GB', { maximumFractionDigits: 3 });
-const perUnit = (rows: { Unit: string; Q: string }[]) => {
+export const perUnit = (rows: { Unit: string; Q: string }[]) => {
   const by = new Map<string, number>();
   for (const r of rows) by.set(r.Unit, (by.get(r.Unit) ?? 0) + fromDb(r.Q));
   return [...by].filter(([, v]) => v > 0).map(([u, v]) => `${q3(v)} ${u}`).join(' + ');
@@ -148,10 +148,12 @@ export type LeftRow = {
  * One row per part that is not finished: not awarded (per RFQ), per award × supplier, acknowledgements, change requests.
  * `scope` AWARD: only that award batch's suppliers and its acknowledgement (the award page).
  */
-export async function whatsLeft(db: Db, demandId: string, scope: { awardBatchId: string } | null = null): Promise<{ rows: LeftRow[]; procurementDone: boolean }> {
-  const inScope = scope ? sql`i.AwardBatchId = ${scope.awardBatchId}` : sql`l.DemandId = ${demandId}`;
-  const batchScope = scope ? sql`b.AwardBatchId = ${scope.awardBatchId}` : sql`b.DemandId = ${demandId}`;
-  const ackScope = scope ? sql`a.AwardBatchId = ${scope.awardBatchId}` : sql`a.DemandId = ${demandId}`;
+export async function whatsLeft(db: Db, demandId: string, scope: { awardBatchId: string } | { rfqId: string } | null = null): Promise<{ rows: LeftRow[]; procurementDone: boolean }> {
+  const award = scope && 'awardBatchId' in scope ? scope.awardBatchId : null;
+  const rfq = scope && 'rfqId' in scope ? scope.rfqId : null;
+  const inScope = award ? sql`i.AwardBatchId = ${award}` : rfq ? sql`r.RfqId = ${rfq}` : sql`l.DemandId = ${demandId}`;
+  const batchScope = award ? sql`b.AwardBatchId = ${award}` : rfq ? sql`b.RfqId = ${rfq}` : sql`b.DemandId = ${demandId}`;
+  const ackScope = award ? sql`a.AwardBatchId = ${award}` : rfq ? sql`a.AwardBatchId IN (SELECT x.AwardBatchId FROM scm.AwardBatch x WHERE x.RfqId = ${rfq})` : sql`a.DemandId = ${demandId}`;
   const slices = (await sql<{ ExecState: string; Sim: number; Unit: string; Q: string; RfqId: string | null; RfqNo: string | null; AwardBatchId: string | null; AbNo: string | null;
     SupplierCode: string | null; SupplierName: string | null; EtdWeek: string | null }>`
     SELECT s.ExecState, f.Sim, l.Unit, SUM(s.Qty) AS Q, r.RfqId, r.RfqNo, b.AwardBatchId, b.AbNo, i.SupplierCode, sp.Name AS SupplierName, MIN(i.EtdWeek) AS EtdWeek
@@ -186,8 +188,10 @@ export async function whatsLeft(db: Db, demandId: string, scope: { awardBatchId:
   for (const rfqId of [...new Set(inRfq.map((s) => String(s.RfqId)))]) {
     const part = inRfq.filter((s) => String(s.RfqId) === rfqId);
     rows.push({ key: `rfq-${rfqId}`, what: `In ${part[0].RfqNo ?? 'an RFQ'}`, supplier: null, award: null, quantity: perUnit(part), stages: stagesOf(part),
-      where: part.some((s) => s.ExecState === 'QUOTED') ? 'Quotes recorded, not awarded' : 'Waiting for quotes', team: 'PROCUREMENT', next: 'record quotes and award',
-      link: rfqId !== 'null' ? { label: `Open ${part[0].RfqNo}`, to: `/rfqs/${rfqId}` } : null });
+      where: part.some((s) => s.ExecState === 'QUOTED') ? 'Quotes recorded, not awarded' : 'Waiting for quotes', team: 'PROCUREMENT',
+      next: part.some((s) => s.ExecState === 'QUOTED') ? 'compare the quotes and award' : 'record quotes, then award',
+      action: part.some((s) => s.ExecState === 'QUOTED') ? `award ${part[0].RfqNo}` : `record quotes on ${part[0].RfqNo}`,
+      link: rfqId === 'null' ? null : rfq && part.some((s) => s.ExecState === 'QUOTED') ? { label: 'Compare & award', to: `/rfqs/${rfqId}/award` } : { label: `Open ${part[0].RfqNo}`, to: `/rfqs/${rfqId}` } });
   }
   // Per award × supplier.
   const awarded = slices.filter((s) => s.AwardBatchId && s.SupplierCode);

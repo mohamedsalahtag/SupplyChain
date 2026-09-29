@@ -13,7 +13,7 @@ describe('demand progress stages', () => {
 
   it('keeps real POs, quotes and merged-out quantity apart', () => {
     const p = progressOf([{ ExecState: 'PO_SUBMITTED', Sim: 0, Q: '1000' }, { ExecState: 'QUOTED', Q: '1000' }, { ExecState: 'MERGED_OUT', Q: '5000' }])!;
-    expect(p).toMatchObject({ onPo: 50, inRfq: 50, onPoSimulated: 0 });
+    expect(p).toMatchObject({ onPo: 50, quoted: 50, inRfq: 0, onPoSimulated: 0 });
     expect(progressOf([])).toBeNull();
   });
 });

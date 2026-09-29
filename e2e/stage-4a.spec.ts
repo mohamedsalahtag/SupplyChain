@@ -68,7 +68,7 @@ test('18 · build an RFQ from the shortlist, send, record a quote, release, canc
   await page.locator('.ant-select-dropdown:visible .ant-select-item-option').first().click();
   await page.locator('.ant-modal').getByRole('button', { name: 'Release' }).click();
   await expect(page.getByText('Released back to Open')).toBeVisible();
-  await expect(page.locator('.ant-table-tbody tr.ant-table-row').first()).toContainText('1,000');
+  await expect(page.locator('.ant-table', { hasText: 'Released' }).locator('.ant-table-tbody tr.ant-table-row').first()).toContainText('1,000');
 
   // It is on the RFQs list, then cancel it: everything is Open again
   await page.goto('/rfqs');

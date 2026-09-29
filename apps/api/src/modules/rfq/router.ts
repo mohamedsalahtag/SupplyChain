@@ -10,6 +10,8 @@ import { listThread } from '../workflow/threads.js';
 import { flagMissingOrigin, refreshAging } from './aging.js';
 import { raiseAddQuantity, raiseMixChange, raiseWeekShift } from '../cr/procCr.js';
 import { recordQuotes } from './quotes.js';
+import { TEAMS, whatsLeft } from '../demand/progress.js';
+import { rfqProgressFor, rfqWaitingFor } from './rfqProgress.js';
 import { builderData, getRfq, listRfqs, rfqHistory, shortlistFor } from './rfqRead.js';
 import { searchOutsideSuppliers, searchOutsideSuppliersForRfq } from './outsideSuppliers.js';
 import { inviteOptions, inviteSuppliers } from './invite.js';
@@ -42,10 +44,17 @@ const afterwards = (db: Parameters<typeof refreshAging>[0]) => void refreshAging
 export const rfqRouter = router({
   list: open.input(z.object({
     q: z.string().trim().max(60).optional(), company: z.array(z.string().max(10)).max(20).optional(), status: z.array(z.string().max(30)).max(10).optional(),
-    demandId: idOf.optional(), page: z.number().int().min(1).default(1),
+    demandId: idOf.optional(), waitingOn: z.array(z.enum(TEAMS)).max(4).optional(), page: z.number().int().min(1).default(1),
     pageSize: z.number().int().refine((n) => (TABLE_PAGE_SIZES as readonly number[]).includes(n)).default(DEFAULT_TABLE_PAGE_SIZE),
   })).query(async ({ ctx, input }) => listRfqs(ctx.db, await loadActor(ctx.db, ctx.user), input)),
   get: open.input(id).query(async ({ ctx, input }) => getRfq(ctx.db, await loadActor(ctx.db, ctx.user), input.rfqId)),
+  /** The RFQ page's bar and "Where it is": the part still in the RFQ, and per awarded supplier (demand progress). */
+  progress: open.input(id).query(async ({ ctx, input }) => {
+    await assertEntityAccess(ctx.db, await loadActor(ctx.db, ctx.user), 'RFQ', input.rfqId, false);
+    const r = await ctx.db.selectFrom('scm.Rfq').select('DemandId').where('RfqId', '=', input.rfqId).executeTakeFirstOrThrow();
+    const [left, progress, waiting] = await Promise.all([whatsLeft(ctx.db, String(r.DemandId), { rfqId: input.rfqId }), rfqProgressFor(ctx.db, [input.rfqId]), rfqWaitingFor(ctx.db, [input.rfqId])]);
+    return { ...left, progress: progress.get(input.rfqId) ?? null, waitingOn: waiting.get(input.rfqId) ?? [] };
+  }),
   history: open.input(id).query(async ({ ctx, input }) => {
     await assertEntityAccess(ctx.db, await loadActor(ctx.db, ctx.user), 'RFQ', input.rfqId, false);
     return rfqHistory(ctx.db, input.rfqId);

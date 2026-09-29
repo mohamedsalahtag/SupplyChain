@@ -12,16 +12,19 @@ import { useTablePrefs } from '../../lib/useTablePrefs';
 import { RFQ_STATUS } from './rfqLabels';
 import { StatusLegend, StatusTag } from '../../components/StatusTag';
 import { LastStep } from '../../components/StepText';
+import { Progress, TEAM_LOOK, WaitingOn } from '../../components/DemandProgress';
 
 type Row = RouterOutputs['rfq']['list']['rows'][number];
-type Filters = { q?: string; status?: string[]; company?: string[] };
+type Team = keyof typeof TEAM_LOOK;
+type Filters = { q?: string; status?: string[]; company?: string[]; waitingOn?: Team[] };
+const TEAM_BY_LABEL = Object.fromEntries(Object.entries(TEAM_LOOK).map(([k, v]) => [v.label, k as Team]));
 const statusByLabel = Object.fromEntries(Object.entries(RFQ_STATUS).map(([k, v]) => [v.label, k]));
 
 /** Purchasing → RFQs (spec 18). Quotes to record are also on My work. */
 export function RfqsListPage() {
   const navigate = useNavigate();
   const can = useCan();
-  const prefs = useTablePrefs('rfqs', []);
+  const prefs = useTablePrefs('rfqs', ['companyCode']);
   const [filters, setFilters] = useState<Filters>({});
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -34,7 +37,9 @@ export function RfqsListPage() {
     { title: 'Demand', key: 'demandNo', dataIndex: 'demandNo', width: 95 },
     { title: 'Company', key: 'companyCode', dataIndex: 'companyCode', width: 80 },
     { title: 'Status', key: 'status', width: 210, render: (_: unknown, r) => <StatusTag def={RFQ_STATUS[r.status]} /> },
-    { title: 'Weeks', key: 'weeks', dataIndex: 'weeks', width: 170 },
+    { title: 'Progress', key: 'progress', width: 200, render: (_: unknown, r) => <Progress p={r.progress} /> },
+    { title: 'Waiting on', key: 'waitingOn', width: 200, render: (_: unknown, r) => <WaitingOn w={r.waitingOn} /> },
+    { title: 'Weeks', key: 'weeks', dataIndex: 'weeks', width: 150 },
     { title: 'Suppliers', key: 'suppliers', width: 120, render: (_: unknown, r) => (r.status === 'DRAFT' ? `${r.suppliers} invited` : `${r.quoted} of ${r.suppliers} quoted`) },
     { title: 'Last step', key: 'lastStep', width: 280, render: (_: unknown, r) => <LastStep step={r.lastStep} /> },
     { title: 'Created', key: 'created', width: 200, render: (_: unknown, r) => `${r.createdBy} · ${formatDateTime(r.createdAt)}` },
@@ -63,6 +68,8 @@ export function RfqsListPage() {
               onChange={(e) => { setSearch(e.target.value); if (!e.target.value) setFilter({ q: undefined }); }} onSearch={(v) => setFilter({ q: v.trim() || undefined })} />
             <MultiFilter id="f-status" placeholder="Status" options={Object.values(RFQ_STATUS).map((s) => s.label)} value={filters.status?.map((s) => RFQ_STATUS[s].label)}
               onChange={(v) => setFilter({ status: v?.map((l) => statusByLabel[l]) })} width={170} />
+            <MultiFilter id="f-waiting" placeholder="Waiting on" options={Object.values(TEAM_LOOK).map((t) => t.label)}
+              value={filters.waitingOn?.map((t) => TEAM_LOOK[t].label)} onChange={(v) => setFilter({ waitingOn: v?.map((l) => TEAM_BY_LABEL[l]) })} width={160} />
             <MultiFilter id="f-company" placeholder="Company" options={(companies.data ?? []).map((c) => c.CompanyCode)} value={filters.company} onChange={(v) => setFilter({ company: v })} width={120} />
             <Button icon={<ReloadOutlined />} onClick={() => { setFilters({}); setSearch(''); setPage(1); }}>Reset</Button>
           </>

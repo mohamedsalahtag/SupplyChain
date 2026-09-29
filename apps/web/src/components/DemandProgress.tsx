@@ -2,7 +2,7 @@ import { Card, Space, Table, Tag, Tooltip, Typography, theme } from 'antd';
 import { Link } from 'react-router-dom';
 import type { RouterOutputs } from '../lib/format';
 
-type Stage = 'onPo' | 'onPoSimulated' | 'poPrep' | 'handedOff' | 'awarded' | 'inRfq' | 'open' | 'cancelled';
+type Stage = 'onPo' | 'onPoSimulated' | 'poPrep' | 'handedOff' | 'awarded' | 'quoted' | 'inRfq' | 'open' | 'cancelled';
 type Progress = Record<Stage, number>;
 type Waiting = RouterOutputs['demand']['list']['rows'][number]['waitingOn'][number];
 type Left = Pick<RouterOutputs['demand']['progress'], 'rows' | 'procurementDone'>;
@@ -15,7 +15,8 @@ export const STAGE_LOOK: Record<Stage, { label: string; color: string; owner: st
   poPrep: { label: 'PO preparation', color: '#13c2c2', owner: 'PO team to submit', tag: 'cyan' },
   handedOff: { label: 'handed off', color: '#1677ff', owner: 'PO team to accept', tag: 'blue' },
   awarded: { label: 'awarded', color: '#faad14', owner: 'Procurement to hand off', tag: 'gold' },
-  inRfq: { label: 'in RFQ', color: '#722ed1', owner: 'Procurement to award', tag: 'purple' },
+  quoted: { label: 'quoted', color: '#b37feb', owner: 'Procurement to compare and award', tag: 'purple' },
+  inRfq: { label: 'in RFQ', color: '#722ed1', owner: 'Procurement to record quotes', tag: 'geekblue' },
   open: { label: 'open', color: '#bfbfbf', owner: 'Procurement to put in an RFQ', tag: 'default' },
   cancelled: { label: 'cancelled', color: '#ff7875', owner: 'nobody', tag: 'red' },
 };

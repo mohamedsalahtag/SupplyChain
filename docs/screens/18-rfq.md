@@ -121,3 +121,11 @@ flowchart TD
 ## Out of scope (4b and later)
 - Procurement change requests decided by Sales: add quantity (+ extra containers), week shift, mix change — **Stage 4b**.
 - Award, shipments, un-award — Stage 5. Emailing RFQs to suppliers — plan Stage 9 (download for now).
+
+## Progress and Waiting on for RFQs (2026-09-29)
+The same derived stages as demands and awards (`modules/demand/progress.ts`, RFQ part in `modules/rfq/rfqProgress.ts`), over the RFQ's lines:
+- **RFQs list:** **Progress** bar (in RFQ · quoted · awarded · handed off · PO preparation · on PO · on PO simulated) and a **Waiting on** column and filter (`rfqWaitingSql`, shared by both). Procurement: send (draft), record quotes, compare and award, hand off a supplier, answer a Sales query · PO team: accept HO-…, validate / submit / resolve POD-… · Sales: acknowledge AB-… (optional) · Nobody: done, or cancelled.
+- **RFQ page:** the bar and **Where it is** — the part still in the RFQ (waiting for quotes, or quoted with *Compare & award*) and one row per awarded supplier (handoff, PO draft, SAP PO, who acts next). Once something is awarded, *Who has it* and *Next* come from the same rules, and the steps reach *Handed off* when nothing is left to hand off.
+- *Quoted* is now its own stage everywhere (Procurement to compare and award), separate from *in RFQ* (waiting for quotes).
+- **Company** columns start hidden in the Demands, RFQs and Awards lists (Columns → tick Company to show it).
+

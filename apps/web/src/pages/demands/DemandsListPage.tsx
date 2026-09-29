@@ -27,7 +27,7 @@ export function DemandsListPage() {
   const { message } = App.useApp();
   const can = useCan();
   const navigate = useNavigate();
-  const prefs = useTablePrefs('demands', ['acceptedAt', 'version']);
+  const prefs = useTablePrefs('demands', ['companyCode', 'acceptedAt', 'version']);
   // Everyone follows every demand of their companies; "Mine" is one click away.
   const [mine, setMine] = useState(false);
   const [filters, setFilters] = useState<Filters>({});

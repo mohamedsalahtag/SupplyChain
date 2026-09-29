@@ -18,6 +18,7 @@ import { AddQuantityModal, MixChangeDrawer, WeekShiftModal } from './ProcRequest
 import { LoadError } from '../../components/LoadError';
 import { countOf, TabLabel } from '../../components/TabLabel';
 import { InviteSuppliersModal } from './InviteSuppliersModal';
+import { Progress, WhatsLeft } from '../../components/DemandProgress';
 
 type Rfq = RouterOutputs['rfq']['get'];
 type Line = Rfq['lines'][number];
@@ -35,6 +36,7 @@ export function RfqPage() {
   const { message } = App.useApp();
   const utils = trpc.useUtils();
   const rfq = trpc.rfq.get.useQuery({ rfqId }, { retry: false });
+  const prog = trpc.rfq.progress.useQuery({ rfqId }, { retry: false }); // where its quantity is and whose turn it is
   const thread = trpc.rfq.thread.useQuery({ rfqId });
   const history = trpc.rfq.history.useQuery({ rfqId });
   const [showOld, setShowOld] = useState(false);
@@ -96,7 +98,9 @@ export function RfqPage() {
           {r.actions.cancel && <Button danger icon={<StopOutlined />} onClick={() => { openDialog(null); setCancelling(true); }}>Cancel RFQ…</Button>}
         </Space>
       </Space>
-      <RfqStatus rfq={r} />
+      <RfqStatus rfq={r} prog={prog.data} />
+      {prog.data?.progress && <div style={{ maxWidth: 520 }}><Progress p={prog.data.progress} /></div>}
+      {prog.data && prog.data.rows.length > 0 && <WhatsLeft data={prog.data} title="Where it is" note="the part still in this RFQ, and per awarded supplier" />}
       <Descriptions size="small" bordered column={{ xs: 1, md: 3 }} items={[
         { label: 'Created', children: `${r.createdBy} · ${formatDateTime(r.createdAt)}` },
         { label: 'Sent', children: r.sentAt ? `${r.sentBy} · ${formatDateTime(r.sentAt)}` : 'Not yet — download the supplier view, then Send' },
